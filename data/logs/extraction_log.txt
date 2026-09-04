@@ -1,36 +1,36 @@
-Input folder: /Users/shwetaagarwal/Downloads/corpus/github_upload/corpus
+Input folder: D:\IP_SAKTI-SAHAYAK\data\corpus\corpus
 PDFs discovered: 26
 
-[001] 01_classification/Drugs and Cosmetics Act, 1940.pdf | pdfplumber | pages=43
-[002] 01_classification/FSSAI Ayurveda Aahar Regulations, 2022.pdf | pdfplumber | pages=8
-[003] 01_classification/The_Drugs_and_Cosmetics_Rules_1945.PDF | pdfplumber | pages=589
-[004] 02_national_statutes/Biological Diversity (Amendment) Act 2023.pdf | pdfplumber | pages=15
-[005] 02_national_statutes/Patents Rules 2024.pdf | pdfplumber | pages=19
-[006] 02_national_statutes/The Biological Diversity Act, 2002.pdf | pdfplumber | pages=25
-[007] 02_national_statutes/The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
-[008] 02_national_statutes/The Copyright Act, 1957.pdf | pdfplumber | pages=50
-[009] 02_national_statutes/The Designs Act, 2000.pdf | pdfplumber | pages=18
-[010] 02_national_statutes/The Drugs and Magic Remedies (Objectionable Advertisement) Act, 1954.pdf | pdfplumber | pages=12
-[011] 02_national_statutes/The Geographical Indications of Goods (Registration and Protection) Act, 1999.pdf | pdfplumber | pages=31
-[012] 02_national_statutes/The Protection of Plant Varieties and Farmers Rights Act, 2001.pdf | pdfplumber | pages=34
-[013] 02_national_statutes/Trade Marks Act 1999.pdf | pdfplumber | pages=56
-[014] 02_national_statutes/patents act 1970.pdf | pdfplumber | pages=72
-[015] 04_registries/ABS Guidelines.pdf | pdfplumber | pages=28
-[016] 04_registries/About TKDL.pdf | pdfplumber | pages=1
-[017] 04_registries/Kandhamal Haladi.pdf | pdfplumber | pages=20
-[018] 04_registries/Lakadong Turmeric.pdf | pdfplumber | pages=11
-[019] 04_registries/MANUAL OF PATENT OFFICE PRACTICE.pdf | pdfplumber | pages=174
-[020] 04_registries/Madurai Marikolunthu.pdf | pdfplumber | pages=10
-[021] 04_registries/TKDL Access Agreement.pdf | pdfplumber | pages=3
-[022] 04_registries/TKDL Access Policy.pdf | pdfplumber | pages=19
-[023] 04_registries/The Biological Diversity (Amendment) Rules 2025.pdf | pdfplumber | pages=5
-[024] 04_registries/The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
-[025] 05_pharmacopoeia/Ayurvedic Formulary of India (AFI).pdf | pdfplumber | pages=438
-[026] 05_pharmacopoeia/Ayurvedic Pharmacopoeia of India (API)Part1 Vol1.pdf | pdfplumber | pages=183
+[001] 01_classification\Drugs and Cosmetics Act, 1940.pdf | pdfplumber | pages=43
+[002] 01_classification\FSSAI Ayurveda Aahar Regulations, 2022.pdf | pdfplumber | pages=8
+[003] 01_classification\The_Drugs_and_Cosmetics_Rules_1945.PDF | pdfplumber | pages=589
+[004] 02_national_statutes\Biological Diversity (Amendment) Act 2023.pdf | pdfplumber | pages=15
+[005] 02_national_statutes\patents act 1970.pdf | pdfplumber | pages=72
+[006] 02_national_statutes\Patents Rules 2024.pdf | pdfplumber | pages=19
+[007] 02_national_statutes\The Biological Diversity Act, 2002.pdf | pdfplumber | pages=25
+[008] 02_national_statutes\The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
+[009] 02_national_statutes\The Copyright Act, 1957.pdf | pdfplumber | pages=50
+[010] 02_national_statutes\The Designs Act, 2000.pdf | pdfplumber | pages=18
+[011] 02_national_statutes\The Drugs and Magic Remedies (Objectionable Advertisement) Act, 1954.pdf | pdfplumber | pages=12
+[012] 02_national_statutes\The Geographical Indications of Goods (Registration and Protection) Act, 1999.pdf | pdfplumber | pages=31
+[013] 02_national_statutes\The Protection of Plant Varieties and Farmers Rights Act, 2001.pdf | pdfplumber | pages=34
+[014] 02_national_statutes\Trade Marks Act 1999.pdf | pdfplumber | pages=56
+[015] 04_registries\About TKDL.pdf | pdfplumber | pages=1
+[016] 04_registries\ABS Guidelines.pdf | pdfplumber | pages=28
+[017] 04_registries\Kandhamal Haladi.pdf | pdfplumber | pages=20
+[018] 04_registries\Lakadong Turmeric.pdf | pdfplumber | pages=11
+[019] 04_registries\Madurai Marikolunthu.pdf | pdfplumber | pages=10
+[020] 04_registries\MANUAL OF PATENT OFFICE PRACTICE.pdf | pdfplumber | pages=174
+[021] 04_registries\The Biological Diversity (Amendment) Rules 2025.pdf | pdfplumber | pages=5
+[022] 04_registries\The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
+[023] 04_registries\TKDL Access Agreement.pdf | pdfplumber | pages=3
+[024] 04_registries\TKDL Access Policy.pdf | pdfplumber | pages=19
+[025] 05_pharmacopoeia\Ayurvedic Formulary of India (AFI).pdf | pdfplumber | pages=438
+[026] 05_pharmacopoeia\Ayurvedic Pharmacopoeia of India (API)Part1 Vol1.pdf | pdfplumber | pages=183
 
 SUMMARY
 PDFs processed: 26
-Chunks created: 2342
+Chunks created: 2457
 Methods: {'pdfplumber': 26}
-Chunks by regime: {'drug_regulatory_classification': 882, 'ip_statute': 738, 'registry_guideline': 384, 'pharmacopoeia_reference': 338}
+Chunks by regime: {'drug_regulatory_classification': 948, 'ip_statute': 768, 'registry_guideline': 394, 'pharmacopoeia_reference': 347}
 PDFs needing manual review: none flagged

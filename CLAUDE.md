@@ -91,7 +91,7 @@ regenerable from `data/corpus.zip` + `pipeline/`. Only the irreplaceable input
 
 ## 3. The corpus — facts you need before writing retrieval code
 
-**2,342 chunks** from **26 Indian legal/regulatory PDFs**. All extracted cleanly with
+**2,457 chunks** from **26 Indian legal/regulatory PDFs** (2,342 before the post-comparison corpus fix - see §6g). All extracted cleanly with
 pdfplumber; none needed OCR, none failed. Zero encoding corruption (no U+FFFD).
 
 Chunk sizes: median 242 tokens, max 798, none over 900. 157 chunks are under 50 tokens.
@@ -141,7 +141,7 @@ All five Part F benchmarks are answerable from real corpus text:
 
 - **Section 3(p)** (the traditional-knowledge patent bar) appears **twice**: in
   `patents act 1970` (`DOC014_chunk_011`) and in the `MANUAL OF PATENT OFFICE PRACTICE`
-  p98 (`DOC019_chunk_112`) — the latter explicitly names **TKDL** as the examiner's
+  p98 (`DOC020_chunk_116`) — the latter explicitly names **TKDL** as the examiner's
   prior-art route, which is exactly the official "wins the room" answer.
 - **Phytopharmaceutical** — D&C Rules 1945 r.122-E + Schedule Y data requirements (7 chunks).
 - **Classical / First Schedule** — D&C Act 1940 s.3(a),(h) (54 chunks).
@@ -234,7 +234,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 7 | Reasoning-trail + citation-card components | **Done** |
 | 8 | Frontend ↔ backend integration | **Done** |
 | 9 | Benchmark + robustness hardening | **Done** |
-| 10 | Polish + demo rehearsal | Next |
+| 10 | Polish + demo rehearsal | **Done** |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -285,7 +285,7 @@ Two chunks carry the traditional-knowledge patent bar:
 
 | chunk | source | dense rank |
 |---|---|---|
-| `DOC019_chunk_112` | Manual of Patent Office Practice p98 | **1** |
+| `DOC020_chunk_116` | Manual of Patent Office Practice p98 | **1** |
 | `DOC014_chunk_011` | Patents Act 1970 p11 | **27** |
 
 The Manual chunk is the better citation anyway - it states the provision *and* names TKDL as
@@ -397,7 +397,7 @@ obviously tight (`CONFIDENT_DISTANCE`). Do not replace it with a threshold.
 ### Two bugs worth remembering
 
 1. **The gate could not see the evidence.** It truncated each passage to 320 characters,
-   but in `DOC019_chunk_112` the Section 3(p) text begins around character 240 and runs
+   but in `DOC020_chunk_116` the Section 3(p) text begins around character 240 and runs
    past 450 - so the gate abstained on the official benchmark while the answer sat just
    past its cutoff. Window is now 900 chars x 6 passages. *When a gate refuses something
    it should accept, check what it can actually see before touching the prompt.*
@@ -416,7 +416,7 @@ office *procedure* ("Inspection and supply of copies of documents").
 `expand_query()` asks the model to restate the question in statutory terms, then RRF fuses
 the ranked lists from every formulation. Generated expansions for F1 included *"invention
 relating to formulation disclosed in First Schedule of Indian statute excluded from
-patentability"*. That surfaces `DOC019_chunk_112` into the evidence set.
+patentability"*. That surfaces `DOC020_chunk_116` into the evidence set.
 
 Cost: one extra LLM call per query. Worth it - without expansion the flagship demo query
 retrieves the wrong law.
@@ -444,11 +444,11 @@ than 3 times within one document cannot be a section number**, since schedules r
 on every page. This killed false citations like "Rule 5" for a Schedule M paragraph headed
 "5. Capsules." It is structural rather than a keyword list, so it adapts to new documents.
 
-Result over the full corpus: **887/2342 chunks (38%) get a verified section, 0 contaminated
+Result over the full corpus: **887/2342 chunks (38%, measured before the §6g rebuild) get a verified section, 0 contaminated
 with footnote text.** The other 62% cite act plus page, which is honest. Under-citing is
 safe; mis-citing is not.
 
-Multi-provision chunks name both: `DOC019_chunk_112` renders as
+Multi-provision chunks name both: `DOC020_chunk_116` renders as
 *"MANUAL OF PATENT OFFICE PRACTICE, Sections 3(o), 3(p), p. 98"*.
 
 ### Still true: the Patents Act's own 3(p) is unreachable
@@ -699,7 +699,7 @@ off-script suite the system was never tuned against. Citations are re-verified a
    questions separates the two cleanly.
 
 4. **The generator skipped the on-point provision.** Retrieval was measured **stable** -
-   `DOC019_chunk_112` appeared in 5/5 runs at ranks 1,1,1,3,3 - but the model sometimes cited
+   `DOC020_chunk_116` appeared in 5/5 runs at ranks 1,1,1,3,3 - but the model sometimes cited
    Section 3(c) or 3(l) instead of 3(p). Indian statutes list near-identical exclusion clauses
    side by side, and the model settled for a neighbour. Fixed by telling it the evidence is
    relevance-ordered and not to prefer a general neighbour over a directly applicable
@@ -724,6 +724,102 @@ contract rather than a plea.
   7 of 8 on some runs.
 - The answer cache means a repeated benchmark run can report 0.0s and re-use a prior answer.
   **Restart the backend for a genuinely cold benchmark.**
+
+
+---
+
+## 6g. Post-comparison hardening (after `COMPARISON_REPORT.md`)
+
+A rigorous comparison against the teammate's independent build surfaced defects in **ours**
+and in the **shared corpus**. All are fixed; the corpus fixes changed chunk ids, so read this
+before trusting any chunk id written earlier in this file.
+
+### Corpus: `About TKDL.pdf` was silently lost, and 115 chunks with it
+
+`build_chunks.py` dropped any page matching a bare `CONTENTS`. The single page of
+`About TKDL.pdf` contains the ordinary phrase *"the available **contents** of the ancient
+texts"*, so its only page was discarded and the document produced **zero chunks** - while the
+log still reported "processed" and flagged nothing. TKDL is central to the flagship answer,
+so losing the document explaining TKDL mattered.
+
+Two fixes:
+- The contents-page pattern is now **anchored to its own line** and additionally requires the
+  page to contain several headings, so prose mentioning "contents" is safe.
+- **A PDF that extracts text but yields zero chunks is now reported** as a WARNING and listed
+  in the summary. Silent data loss was the real bug; the regex was only its cause.
+
+Corpus went **2,342 -> 2,457 chunks**. Every folder gained, because the filter had been
+over-firing across several documents, not just this one.
+
+### chunk_id is no longer safe to hardcode - and the code no longer does
+
+`doc_id` was assigned by enumeration position, so `chunk_id` moved whenever the corpus
+changed. The rebuild renumbered nearly everything: `patents act 1970` DOC014 -> DOC005, the
+Manual of Patent Office Practice DOC019 -> DOC020, Section 3(p) `DOC020_chunk_116` ->
+`DOC020_chunk_116`.
+
+Worse, ordering was not even stable across machines: `sorted()` on `Path` case-folds on
+Windows but not on Linux, so the same corpus produced different ids depending on who ran it.
+
+- `build_chunks.py` now sorts on the **lowercased POSIX relative path**, which is
+  deterministic on every platform.
+- `classification.py` **resolves definition anchors by content**, not by pinned id: each
+  category names an act fragment plus a distinctive phrase, and the shortest matching chunk
+  wins. `verify_anchors()` still fails loudly at startup if a provision truly disappears.
+- `tests/probe_phase1.py` resolves the Section 3(p) chunks by content too.
+
+**Rule going forward: never hardcode a chunk_id.** Resolve it from text.
+
+### The relevance gate now fails CLOSED
+
+It previously returned "allow" when the LLM was unavailable, reasoning that citation
+validation still prevents fabrication. True, but insufficient - citation validation cannot
+tell that a question was about US law. During an outage the system would have answered a
+foreign-jurisdiction question from Indian statutes, confidently and with real citations.
+
+It now refuses with `AbstentionKind.GATE_UNAVAILABLE` and tells the user to retry. An honest
+refusal is a worse demo and a better legal tool.
+
+### Small talk is answered, not refused
+
+"hello" used to return *"That is too short for me to search on"*. `conversation.py` now
+answers greetings, capability questions and thanks deterministically, before the vagueness
+guard and before any API call. The patterns must match the **whole** message, so a real
+question - even a short one - still goes to retrieval. Idea ported from the teammate's
+`rag_engine._conversation_response`, which handled this better than we did.
+
+### Also fixed
+
+- Whitespace-only questions (`"   "`) returned HTTP 200; now rejected at validation
+  (`min_length=2` + `strip_whitespace=True`).
+- `Answer.headline` added: a one-sentence direct answer above the trail, because users were
+  getting four long paragraphs before learning whether the answer was yes or no. The free
+  model ignores word budgets, so the UI also clamps each step to ~2 sentences with a
+  "Show full reasoning" toggle.
+
+### Verified after the rebuild
+
+Backend restarted on the rebuilt index (2,457 chunks in JSON, 2,450 embedded):
+
+- `tests/benchmarks.py` **94/94 criteria, 0 failures**
+- `tests/e2e_api.py` **24/24 checks**
+- `anchor_problems: []` at startup, with anchors resolved by content
+- whitespace-only question now HTTP 422; `hello` / `what can you do` / `thanks` answered
+- **The recovered `About TKDL` document now ranks #1** for "What is the Traditional Knowledge
+  Digital Library and how does it prevent misappropriation?" - it was absent from the index
+  entirely before this fix.
+
+### Known, still open
+
+- **Duplicate ingestion — ACCEPTED, do not "fix" it casually.** `The Biological Diversity
+  Rules 2024.pdf` exists in BOTH `02_national_statutes` and `04_registries` as two different
+  files (2,470,317 vs 2,414,630 bytes), producing ~184 near-duplicate chunks, about 7.5% of
+  the index. Retrieval sometimes returns the same provision twice in one result set.
+  **Decision taken: leave it.** Removing a PDF renumbers every document after it, which
+  invalidates every chunk id in flight for a cosmetic gain. The cost is a wasted evidence
+  slot now and then; the cost of renumbering mid-project is worse. Revisit only if the corpus
+  is being rebuilt for another reason anyway.
+- `TKDL Access Agreement.pdf` still yields only 2 chunks from 3 pages - worth a manual look.
 
 
 ---
@@ -778,3 +874,119 @@ classification or generation phase will run.
 - Default model: `minimax/minimax-m3:free` (free, 1M context)
 - Upgrade path: set `IPSAKTI_MODEL=anthropic/claude-sonnet-5` once the account has
   credits ($2/M in, $10/M out, roughly $0.03 per full query). No code change needed.
+
+
+---
+
+## 6h. Phase 10 - polish and demo readiness
+
+### One process, one port
+
+`backend/app/main.py` now serves the built frontend from `frontend/dist` and exposes the
+API at **both** `/health` and `/api/health`. The browser always calls `/api/*`; Vite proxies
+that in development, and in production the same server answers it. Two servers and a proxy
+is fine while developing and a liability during a demo - one more thing to have forgotten
+to start.
+
+- Demo / deploy: `npm run build`, then run uvicorn, open **http://127.0.0.1:8000**.
+- Frontend work: keep Vite on 5173 for hot reload; it proxies to 8000 unchanged.
+- The static mount is last and the SPA fallback never shadows an API route (verified:
+  `/`, `/api/health`, `/health` and `/some/route` all behave correctly).
+- Bare paths are kept because `tests/e2e_api.py` and `tests/benchmarks.py` use them.
+
+### `tests/demo_check.py`
+
+Run ~10 minutes before demoing. It verifies health and anchor resolution, **warms the answer
+cache** with the planned questions (~15s each cold, instant afterwards), asserts the flagship
+still produces Section 3(p) and TKDL, and prints a suggested running order. Exits non-zero if
+anything is wrong, so a problem surfaces before an audience rather than during.
+
+**The cache is in-process. Warming it and then restarting the backend throws the warm-up
+away.**
+
+The running order is chosen so each question demonstrates something different: the flagship,
+a second regime (proving it is not one hardcoded answer), ABS, a refused false premise, a
+wrong-country refusal, a wrong-subject refusal, and finally a follow-up to show conversation
+memory.
+
+### Verified at the close of Phase 10
+
+`benchmarks.py` 94/94 · `e2e_api.py` 24/24 · `demo_check.py` all assertions pass ·
+python and typescript compile clean.
+
+
+---
+
+## 6i. Confidence indicator, category comparison, and the UI rebuild
+
+### Confidence - and why it is NOT a similarity score
+
+`backend/app/confidence.py`. The obvious implementation is a distance threshold, and it does
+not work on this corpus. Measured twice:
+
+    dense distance   in-corpus 0.2469-0.3598 | out-of-corpus 0.3696-0.3951
+    BM25 score       in-corpus 11.21 -31.16  | out-of-corpus 11.95 -26.29
+
+Both overlap. The teammate's build used raw distance and consequently rated a **US/FDA
+question `high` confidence** while answering it from Indian food law. A badge that is
+confident in the dangerous direction is worse than no badge.
+
+Ours is computed **after validation**, from what actually survived:
+
+| signal | weight | meaning |
+|---|---|---|
+| steps that kept a citation | 0.45 | did each substantive step stay sourced? |
+| distinct sources | 0.30 | one act corroborating itself is not corroboration |
+| dense/lexical agreement | 0.25 | did two independent retrievers pick the same passages? |
+| rejected citations | x0.80 | the model tried to cite something unverifiable |
+
+Plus a hard cap: **a single-source answer can never be "high"**, however cleanly cited.
+Observed in testing - full step coverage and perfect retrieval agreement pushed a
+single-source phytopharmaceutical answer to 0.80, which is not honest given the known corpus
+gap there.
+
+`confidence_reasons` ships with every answer and the UI shows it on click, so the score can be
+interrogated rather than trusted.
+
+### Category comparison (`/compare`)
+
+`backend/app/comparison.py`. Same product, four categories, four different IP postures, each
+cited. This is the PS's central claim - a classical formulation faces the 3(p) bar while a
+phytopharmaceutical has a real pathway - made visible instead of asserted.
+
+**Cost design:** the naive version runs the pipeline once per category, about nine model
+calls. This retrieves **once** and asks for the contrast in **one** generation call, so a
+comparison costs roughly what a single question does. Measured ~19s for four categories.
+
+Citations are validated identically to a normal answer. Where the evidence does not cover a
+category, that card says so and shows no sources - observed working: "Not addressed by the
+supplied evidence" for `new_drug` on an ashwagandha query.
+
+Models write chunk ids into prose despite being told not to; `_CHUNK_ID` strips any that slip
+through, since the cards already carry them.
+
+### `needs_clarification` no longer blocks the answer
+
+Previously an undetermined category stopped everything and asked. On a free model the
+classifier asks *inconsistently*, so the same follow-up would answer on one run and stall on
+the next - the one benchmark failure that kept recurring.
+
+Now: if retrieval succeeded, we answer what the evidence supports, tell the generator the
+category is unsettled so it names where the answer would differ, and carry the clarifying
+question **alongside** the answer. The previously flaky case went from 2/3 to **3/3
+answering**, and it is better product behaviour regardless - a question is a nudge, not a
+dead end.
+
+### UI
+
+- **Two modes** in the composer: *Ask a question* / *Compare categories*.
+- **Confidence badge** above the verdict, expandable to its reasons.
+- **End session** button (replaces the vaguer "Clear"), with a live count of the session.
+- Older consultations collapse to one line; each can be removed individually.
+- Answers can now carry an open question in a haldi panel beneath the trail.
+- Example chips are now labelled by what they demonstrate, and one of them opens
+  comparison mode.
+
+### Verified
+
+`benchmarks.py` **94/94** · `e2e_api.py` **24/24** · typecheck and build clean.

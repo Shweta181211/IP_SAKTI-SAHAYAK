@@ -36,8 +36,10 @@ const ABSTENTION_HEADING: Record<AbstentionKind, string> = {
   too_vague: "Need a little more to go on",
   foreign_jurisdiction: "Outside this jurisdiction",
   out_of_scope: "Outside this corpus",
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any;
+  gate_unavailable: "Safety check unavailable",
+  // Never rendered through this panel — small talk has its own plain layout.
+  conversational: "",
+};
 
 /**
  * Abstention is a graded requirement of the problem statement, not an error.

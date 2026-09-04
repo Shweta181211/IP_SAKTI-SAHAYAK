@@ -25,11 +25,14 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
 from .citations import citations_for, validate_ids
+from .conversation import EXAMPLE_QUESTIONS, conversational_reply
 from .classification import classify
+from .confidence import assess as assess_confidence
 from .config import settings
 from .llm import LLMUnavailable, complete_json
 from .retrieval import RetrievalResult, expand_query, is_too_vague, retrieve
 from .schemas import (
+    CONFIDENCE_LABELS,
     STEP_TITLES,
     STEPS_REQUIRING_CITATION,
     AbstentionKind,
@@ -244,6 +247,20 @@ def answer_question(
     """Classify, retrieve, generate and validate. The whole core loop."""
     top_k = top_k or settings.top_k
 
+    # Small talk is answered directly. This runs before the vagueness guard,
+    # which would otherwise tell someone who typed "hello" that their question
+    # was too short to search on.
+    small_talk = conversational_reply(question)
+    if small_talk is not None:
+        return Answer(
+            question=question,
+            abstained=False,
+            abstention_kind=AbstentionKind.CONVERSATIONAL,
+            abstention_message=small_talk,
+            example_questions=list(EXAMPLE_QUESTIONS),
+            disclaimer=settings.disclaimer,
+        )
+
     # Resolve conversational shorthand before anything else: every stage below
     # assumes a question that stands on its own.
     asked = question
@@ -289,20 +306,30 @@ def answer_question(
             classification=classification, resolved=resolved,
         )
 
-    # In scope, but one fact is missing. The PS asks for the minimum clarifying
-    # question rather than a guess.
-    if classification.category is Category.NEEDS_CLARIFICATION:
-        return _abstention_answer(
-            asked, AbstentionKind.NONE,
-            "I need one more detail before I can answer this accurately.",
-            classification=classification,
-            clarifying=classification.clarifying_question,
-            resolved=resolved,
+    # In scope, but the product's category is undetermined.
+    #
+    # This used to stop and ask, which made a real question a dead end - and on
+    # a free model the classifier asks inconsistently, so the same question
+    # would sometimes answer and sometimes stall. We have retrieved evidence at
+    # this point, so the better behaviour is to answer what the evidence
+    # supports, tell the model the category is unsettled so it can say where
+    # that changes things, and carry the clarifying question alongside the
+    # answer rather than instead of it.
+    unresolved_category = classification.category is Category.NEEDS_CLARIFICATION
+
+    classification_block = _classification_block(classification)
+    if unresolved_category:
+        classification_block = (
+            "The product's regulatory category could NOT be determined from the question.\n"
+            f"The open question is: {classification.clarifying_question}\n\n"
+            "Answer what the evidence supports regardless of category, and where the answer "
+            "WOULD differ by category, say so explicitly and briefly - name the categories "
+            "and how each is treated. Do not pick one silently."
         )
 
     prompt = ANSWER_PROMPT.format(
         evidence=_evidence_block(result),
-        classification=_classification_block(classification),
+        classification=classification_block,
         question=question,
     )
     try:
@@ -344,10 +371,19 @@ def answer_question(
 
     headline = " ".join(str(data.get("headline") or "").split()) or None
 
+    # Scored after validation, from what actually survived - see confidence.py.
+    confidence = assess_confidence(steps, cited, rejected, result)
+
     answer = Answer(
         question=asked,
         resolved_question=resolved,
         headline=headline,
+        confidence=confidence.level,
+        confidence_label=CONFIDENCE_LABELS[confidence.level],
+        confidence_score=confidence.score,
+        confidence_reasons=confidence.reasons,
+        # Surfaced with the answer, not instead of it.
+        clarifying_question=classification.clarifying_question if unresolved_category else None,
         classification=classification,
         steps=steps,
         citations=citations_for(cited),

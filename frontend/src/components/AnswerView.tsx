@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Answer } from "../types";
 import { CitationCard } from "./CitationCard";
 import { ReasoningTrail, buildCitationIndex } from "./ReasoningTrail";
+import { Confidence } from "./Confidence";
 import { AbstentionPanel, Verdict } from "./Verdict";
 
 interface Props {
@@ -29,6 +30,28 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
       ? "clarification requested"
       : "not answered"
     : `${answer.citations.length} source${answer.citations.length === 1 ? "" : "s"}`;
+
+  // Small talk is a normal reply, not a refusal - render it plainly, with no
+  // verdict banner, no citation rail and no "not answered" framing.
+  if (answer.abstention_kind === "conversational") {
+    return (
+      <article className="border-t border-rule pt-5 first:border-t-0 first:pt-0">
+        <p className="mb-3 border-l-2 border-haldi pl-3 font-serif text-[15px] italic text-ink-soft">
+          {answer.question}
+        </p>
+        <p className="prose-legal max-w-2xl">{answer.abstention_message}</p>
+        {answer.example_questions.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {answer.example_questions.map((q) => (
+              <span key={q} className="card px-2.5 py-1.5 text-[12.5px] text-ink-soft">
+                {q}
+              </span>
+            ))}
+          </div>
+        )}
+      </article>
+    );
+  }
 
   return (
     <article className="border-t border-rule pt-5 first:border-t-0 first:pt-0">
@@ -97,6 +120,14 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                     {answer.headline}
                   </p>
                 )}
+                {answer.confidence && (
+                  <Confidence
+                    level={answer.confidence}
+                    label={answer.confidence_label ?? ""}
+                    score={answer.confidence_score}
+                    reasons={answer.confidence_reasons}
+                  />
+                )}
                 {answer.classification && <Verdict classification={answer.classification} />}
                 <ReasoningTrail
                   answer={answer}
@@ -134,6 +165,19 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                   </div>
                 )}
               </aside>
+            </div>
+          )}
+
+          {/* An answer can now carry an open question with it: the category was
+              undetermined, so we answered what the evidence supports and ask
+              alongside rather than instead. */}
+          {!answer.abstained && answer.clarifying_question && (
+            <div className="mt-6 border-l-2 border-haldi bg-haldi-wash px-3 py-2.5">
+              <p className="eyebrow text-haldi">To narrow this further</p>
+              <p className="prose-legal mt-1 text-[14px]">{answer.clarifying_question}</p>
+              <p className="mt-1.5 text-[12px] text-ink-faint">
+                Answer in the box below and I will refine the response.
+              </p>
             </div>
           )}
 

@@ -14,16 +14,21 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .classification import classify, verify_anchors
-from .config import settings
+from .config import ROOT, settings
 from .corpus_index import warm_up
+from .comparison import compare_categories
 from .generation import answer_question
 from .schemas import (
     AbstentionKind,
     Answer,
+    CompareRequest,
+    ComparisonResult,
     ClassificationResult,
     HealthResponse,
     QueryRequest,
@@ -56,6 +61,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Routes live on a router so they can be served at BOTH /health and /api/health.
+# The frontend always calls /api/*; in development Vite proxies that to this
+# server, and in production this same server serves the built frontend, so one
+# origin covers both. The bare paths are kept because the test suites use them.
+api = APIRouter()
+
 # The Vite dev server. Tighten to the deployed origin before going public.
 app.add_middleware(
     CORSMiddleware,
@@ -66,7 +77,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health", response_model=HealthResponse)
+@api.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """Readiness plus corpus integrity, so a broken index is visible immediately."""
     info = _state.get("health") or warm_up()
@@ -82,7 +93,7 @@ def health() -> HealthResponse:
     )
 
 
-@app.post("/classify", response_model=ClassificationResult)
+@api.post("/classify", response_model=ClassificationResult)
 def classify_endpoint(request: QueryRequest) -> ClassificationResult:
     """Formulation classification on its own, for the UI to show early."""
     try:
@@ -92,7 +103,7 @@ def classify_endpoint(request: QueryRequest) -> ClassificationResult:
         raise HTTPException(status_code=502, detail=f"Classification failed: {exc}") from exc
 
 
-@app.post("/query", response_model=Answer)
+@api.post("/query", response_model=Answer)
 def query(request: QueryRequest) -> Answer:
     """The full core loop: classify, retrieve, generate, validate."""
     # The toggle is real plumbing, not decoration: the corpus has no treaty texts,
@@ -117,3 +128,41 @@ def query(request: QueryRequest) -> Answer:
     except Exception as exc:  # noqa: BLE001
         logger.exception("Query failed")
         raise HTTPException(status_code=502, detail=f"Query failed: {exc}") from exc
+
+
+@api.post("/compare", response_model=ComparisonResult)
+def compare(request: CompareRequest) -> ComparisonResult:
+    """Show how one product's legal position changes across categories."""
+    try:
+        return compare_categories(request.product)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Comparison failed")
+        raise HTTPException(status_code=502, detail=f"Comparison failed: {exc}") from exc
+
+
+# Mount the API twice: bare for the test suites, /api for the browser.
+app.include_router(api)
+app.include_router(api, prefix="/api")
+
+# --------------------------------------------------------------------------
+# Serve the built frontend from this same process, when it exists.
+#
+# Two servers and a proxy is fine for development and a liability during a
+# demo - one more thing to have forgotten to start. If `frontend/dist` has been
+# built, this serves it; if not, the API still runs exactly as before.
+# Mounted LAST so it can never shadow the routes above.
+# --------------------------------------------------------------------------
+FRONTEND_DIST = ROOT / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_frontend(full_path: str) -> FileResponse:
+        """Single-page app: unknown paths return index.html, not a 404."""
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
+else:
+    logger.info("No frontend build at %s - serving API only", FRONTEND_DIST)

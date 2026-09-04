@@ -18,7 +18,28 @@ export type AbstentionKind =
   | "no_evidence"
   | "too_vague"
   | "foreign_jurisdiction"
-  | "out_of_scope";
+  | "out_of_scope"
+  | "gate_unavailable"
+  | "conversational";
+
+export type ConfidenceLevel = "high" | "moderate" | "limited";
+
+export interface CategoryContrast {
+  category: Category;
+  label: string;
+  posture: string;
+  patentable: string;
+  citation_ids: string[];
+}
+
+export interface ComparisonResult {
+  product: string;
+  contrasts: CategoryContrast[];
+  citations: Citation[];
+  abstained: boolean;
+  abstention_message: string | null;
+  disclaimer: string;
+}
 
 export interface Citation {
   chunk_id: string;
@@ -52,6 +73,11 @@ export interface Answer {
   resolved_question: string | null;
   jurisdiction: string;
   headline: string | null;
+  confidence: ConfidenceLevel | null;
+  confidence_label: string | null;
+  confidence_score: number | null;
+  confidence_reasons: string[];
+  example_questions: string[];
   classification: ClassificationResult | null;
   steps: ReasoningStep[];
   citations: Citation[];

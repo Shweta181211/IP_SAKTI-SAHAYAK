@@ -282,9 +282,17 @@ def llm_relevance_gate(
 ) -> tuple[bool, str, AbstentionKind]:
     """Screen for subject matter AND jurisdiction before anything is answered.
 
-    Fails OPEN on error: if the gate itself is unavailable we let the question
-    through, because the generator downstream still refuses to answer without
-    valid citations. Failing closed would turn an outage into false refusals.
+    Fails CLOSED on error, deliberately.
+
+    The earlier behaviour let questions through when the gate was unavailable,
+    on the reasoning that citation validation downstream still prevents
+    fabrication. That is true but insufficient: citation validation cannot tell
+    that a question was about US law. During an outage the system would have
+    answered a foreign-jurisdiction question from Indian statutes, confidently
+    and with real citations - the single worst failure this tool can produce.
+
+    An honest "I could not verify this is in scope" is a worse demo and a better
+    legal tool. The user is told the check failed and can retry.
     """
     from .llm import LLMUnavailable, complete_json
 
@@ -297,8 +305,13 @@ def llm_relevance_gate(
             RELEVANCE_PROMPT.format(question=question, passages=passages), max_tokens=250
         )
     except LLMUnavailable as exc:
-        logger.warning("Relevance gate unavailable (%s); allowing through", exc)
-        return True, "Relevance gate unavailable; deferring to citation validation.", AbstentionKind.NONE
+        logger.error("Relevance gate unavailable (%s); refusing rather than guessing", exc)
+        return False, (
+            "I could not run the scope and jurisdiction check for this question, so I am "
+            "not going to answer it. This check is what stops the assistant answering a "
+            "question about another country's law from Indian sources. Please try again "
+            "in a moment."
+        ), AbstentionKind.GATE_UNAVAILABLE
 
     reason = str(data.get("reason") or "").strip()
     jurisdiction = str(data.get("jurisdiction") or "india").strip().lower()

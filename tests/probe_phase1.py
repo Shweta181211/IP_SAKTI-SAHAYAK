@@ -51,8 +51,19 @@ OFF_SCRIPT = [
     ("OUT: nonsense",        "purple bicycle quarterly tax rebate", None),
 ]
 
-# Chunks we know contain the Section 3(p) traditional-knowledge patent bar.
-SECTION_3P_CHUNKS = {"DOC014_chunk_011", "DOC019_chunk_112"}
+def section_3p_chunks() -> set[str]:
+    """Chunks carrying the Section 3(p) traditional-knowledge patent bar.
+
+    Resolved by content rather than hardcoded: chunk_id embeds a positional
+    doc_id, so re-running ingestion renumbers documents and any pinned id
+    quietly starts pointing at the wrong provision.
+    """
+    import json
+    chunks = json.loads((ROOT / "data" / "chunks" / "all_chunks.json").read_text(encoding="utf-8"))
+    return {
+        c["chunk_id"] for c in chunks
+        if "aggregation or duplication of known properties" in " ".join(c["chunk_text"].split())
+    }
 
 
 def embed_query(model, model_name: str, text: str):
@@ -115,7 +126,7 @@ def main() -> int:
     q3p = "invention which is traditional knowledge or aggregation of known properties is not patentable"
     hits = probe(collection, model, DEFAULT_MODEL, q3p, top_k=10)
     show("Section 3(p) direct probe", q3p, hits[:5], "patents act")
-    found = SECTION_3P_CHUNKS & {h["id"] for h in hits}
+    found = section_3p_chunks() & {h["id"] for h in hits}
     print(f"  -> known 3(p) chunks in top 10: {sorted(found) if found else 'NONE  <-- CHECK'}")
 
     print(f"\n\n{'#' * 78}\n# ABSTENTION THRESHOLD CALIBRATION\n{'#' * 78}")

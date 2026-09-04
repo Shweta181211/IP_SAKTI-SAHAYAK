@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints
 
 
 class Category(str, Enum):
@@ -58,6 +60,47 @@ class AbstentionKind(str, Enum):
     TOO_VAGUE = "too_vague"
     FOREIGN_JURISDICTION = "foreign_jurisdiction"
     OUT_OF_SCOPE = "out_of_scope"
+    # The safety check itself could not run (LLM outage or rate limit).
+    # Distinct from the others: the user should retry, not rephrase.
+    GATE_UNAVAILABLE = "gate_unavailable"
+    # Small talk answered without retrieval. Not a refusal - the UI should
+    # render it as a plain reply, with no "not answered" framing.
+    CONVERSATIONAL = "conversational"
+
+
+class ConfidenceLevel(str, Enum):
+    """How well-supported an answer is.
+
+    Deliberately three coarse buckets, not a percentage: a two-decimal number
+    implies a precision this cannot have. See confidence.py for why the score
+    is built on citation survival rather than vector distance.
+    """
+
+    HIGH = "high"
+    MODERATE = "moderate"
+    LIMITED = "limited"
+
+
+CONFIDENCE_LABELS: dict[ConfidenceLevel, str] = {
+    ConfidenceLevel.HIGH: "Well supported",
+    ConfidenceLevel.MODERATE: "Partly supported",
+    ConfidenceLevel.LIMITED: "Thinly supported",
+}
+
+
+class CategoryContrast(BaseModel):
+    """One category's position in a side-by-side comparison.
+
+    The problem statement's central point is that the SAME product has opposite
+    IP postures depending on its regulatory category. Answering one category at
+    a time hides that; this shows it.
+    """
+
+    category: Category
+    label: str
+    posture: str = Field(description="What this category means for the product, 2-3 sentences")
+    patentable: str = Field(description="Short verdict on patentability under this category")
+    citation_ids: list[str] = Field(default_factory=list)
 
 
 class Citation(BaseModel):
@@ -159,6 +202,10 @@ class Answer(BaseModel):
     # the reasoning underneath, not four paragraphs to read before they know
     # whether the answer was yes or no.
     headline: str | None = None
+    confidence: ConfidenceLevel | None = None
+    confidence_label: str | None = None
+    confidence_score: float | None = None
+    confidence_reasons: list[str] = Field(default_factory=list)
     classification: ClassificationResult | None = None
     steps: list[ReasoningStep] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
@@ -167,6 +214,10 @@ class Answer(BaseModel):
     abstention_kind: AbstentionKind = AbstentionKind.NONE
     abstention_message: str | None = None
     clarifying_question: str | None = None
+
+    # Suggested follow-ups, offered after small talk so a new user has somewhere
+    # to start. Empty for substantive answers.
+    example_questions: list[str] = Field(default_factory=list)
 
     # Citation ids the model produced that failed validation. Surfaced rather
     # than swallowed: it is evidence the guard is doing its job.
@@ -181,7 +232,13 @@ class Answer(BaseModel):
 class QueryRequest(BaseModel):
     """Body for POST /query and POST /classify."""
 
-    question: str = Field(min_length=1, max_length=2000)
+    # StringConstraints, not Field(strip_whitespace=...) - the latter is not a
+    # Pydantic v2 field kwarg and is silently ignored, which is why "   " was
+    # still returning HTTP 200. Stripping happens before min_length is applied,
+    # so a whitespace-only question is now rejected at the API boundary.
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)
+    ]
     # Earlier questions in this conversation, oldest first. The API stays
     # stateless - the client owns the transcript - but a follow-up like "what
     # about trademarking it?" is meaningless alone, so the server rewrites it
@@ -202,3 +259,25 @@ class HealthResponse(BaseModel):
     embed_model: str
     generation_model: str
     anchor_problems: list[str] = Field(default_factory=list)
+
+
+class CompareRequest(BaseModel):
+    """Body for POST /compare."""
+
+    product: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=3, max_length=1000)
+    ]
+
+
+class ComparisonResult(BaseModel):
+    """Side-by-side regulatory postures for one product."""
+
+    product: str
+    contrasts: list[CategoryContrast] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)
+    abstained: bool = False
+    abstention_message: str | None = None
+    disclaimer: str = (
+        "This is information, not legal advice. It cites primary legal sources "
+        "but is not a substitute for a qualified IP practitioner."
+    )

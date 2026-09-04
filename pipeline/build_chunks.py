@@ -161,7 +161,16 @@ def split_into_pieces(pages: list[str]) -> list[Piece]:
         # Contents pages repeat every section title but contain no operative text.
         # Keep them in the raw-text export, not in the retrieval index.
         heading_lines = sum(bool(heading_for(line)) for line in page_text.splitlines())
-        if (re.search(r"\b(?:ARRANGEMENT\s+OF\s+SECTIONS|TABLE\s+OF\s+CONTENTS|CONTENTS)\b", page_text, re.I)
+        # A contents page announces itself on its OWN line, and lists many
+        # headings. Matching a bare "contents" anywhere in the body was too
+        # greedy: it discarded the single page of About TKDL.pdf over the
+        # ordinary phrase "the available contents of the ancient texts",
+        # losing that whole document from the index.
+        toc_heading = re.search(
+            r"^\s*(?:ARRANGEMENT\s+OF\s+SECTIONS|TABLE\s+OF\s+CONTENTS|CONTENTS)\s*$",
+            page_text, re.I | re.M,
+        )
+        if ((toc_heading and heading_lines >= 5)
                 or (re.search(r"^\s*SECTIONS\s*$", page_text, re.I | re.M) and heading_lines >= 8)):
             flush()
             continue
@@ -304,10 +313,18 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    pdfs = sorted(p for p in source.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf")
+    # Explicit, platform-independent ordering. Path.__lt__ case-folds on Windows
+    # but not on Linux, so the same corpus produced different doc_id assignments
+    # on different machines - and doc_id is half of chunk_id, which is our
+    # citation key. Sorting on the lowercased POSIX relative path pins it.
+    pdfs = sorted(
+        (p for p in source.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf"),
+        key=lambda p: p.relative_to(source).as_posix().lower(),
+    )
     all_chunks: list[dict[str, object]] = []
     log_lines = [f"Input folder: {source}", f"PDFs discovered: {len(pdfs)}", ""]
     methods, regime_counts, ocr_or_fail = Counter(), Counter(), []
+    zero_chunk_docs: list[str] = []
 
     for doc_number, pdf in enumerate(pdfs, start=1):
         relative = pdf.relative_to(source)
@@ -326,6 +343,7 @@ def main() -> int:
         regime, subtype, year = classify(pdf.name, folder)
         act_name = pdf.stem.replace("_", " ").strip()
         doc_id = f"DOC{doc_number:03d}"
+        chunks_before = len(all_chunks)
         for number, piece in enumerate(chunk_pieces(split_into_pieces(pages)), start=1):
             text = clean_text(piece.text)
             if not text:
@@ -351,7 +369,18 @@ def main() -> int:
             row["page_numbers"] = ", ".join(map(str, row["page_numbers"]))
             writer.writerow(row)
 
+        # A PDF that extracted text but produced no chunks is silent data loss.
+        # The old log called that "processed" and flagged nothing, which is how
+        # About TKDL.pdf went missing without anyone noticing.
+        if len(all_chunks) == chunks_before:
+            log_lines.append(
+                f"  WARNING: {relative} extracted {len(pages)} page(s) but produced ZERO chunks"
+            )
+            zero_chunk_docs.append(str(relative))
+
     log_lines.extend(["", "SUMMARY", f"PDFs processed: {len(pdfs)}", f"Chunks created: {len(all_chunks)}", f"Methods: {dict(methods)}", f"Chunks by regime: {dict(regime_counts)}"])
+    if zero_chunk_docs:
+        log_lines.append("PDFs that produced NO chunks (investigate): " + "; ".join(zero_chunk_docs))
     if ocr_or_fail:
         log_lines.append("PDFs needing manual review (warnings/OCR/failure): " + "; ".join(ocr_or_fail))
     else:

@@ -57,7 +57,7 @@ phase status. Read it before contributing; it is kept current with every phase.
 
 ## The corpus
 
-**2,342 chunks** extracted from **26 Indian legal and regulatory PDFs**, spanning:
+**2,457 chunks** extracted from **26 Indian legal and regulatory PDFs**, spanning:
 
 - **Classification** — Drugs & Cosmetics Act 1940 + Rules 1945, FSSAI Ayurveda Aahar Regulations
 - **National IP statutes** — Patents Act 1970 + Rules 2024, GI Act 1999, Trade Marks Act 1999,
@@ -107,6 +107,19 @@ Citation accuracy is the graded criterion, so it is enforced structurally rather
    with an explicit statement of insufficient evidence rather than shipped unsourced.
 
 ---
+
+## Testing
+
+| Command | What it covers |
+|---|---|
+| `tests\demo_check.py` | Pre-demo readiness + cache warm-up |
+| `testsenchmarks.py` | Part F benchmarks scored on the brief's 4 criteria, plus an off-script robustness suite (**94/94**) |
+| `tests\e2e_api.py` | Every UI state over HTTP: answers, each abstention kind, validation, citation integrity (**24/24**) |
+| `tests\probe_phase1.py` | Raw retrieval quality and abstention-threshold calibration |
+| `tests\stress_phase3.py` | 19 adversarial cases — corpus boundaries, false premises, other languages, injection |
+
+Benchmarks and e2e need the backend running. Restart it first for a genuinely cold
+run — otherwise the answer cache will serve prior results.
 
 ## Team
 

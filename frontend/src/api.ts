@@ -1,4 +1,4 @@
-import type { Answer, Health } from "./types";
+import type { Answer, ComparisonResult, Health } from "./types";
 
 // Vite proxies /api to the backend in dev; in production both sit behind one
 // origin. Either way the frontend never hardcodes a host.
@@ -35,6 +35,10 @@ export function askQuestion(
   // questions lets the server resolve follow-ups like "what about trademarking
   // it?" into standalone questions before retrieving.
   return post<Answer>("/query", { question, jurisdiction, history });
+}
+
+export function compareCategories(product: string): Promise<ComparisonResult> {
+  return post<ComparisonResult>("/compare", { product });
 }
 
 export async function fetchHealth(): Promise<Health | null> {

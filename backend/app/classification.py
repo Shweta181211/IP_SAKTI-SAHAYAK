@@ -22,47 +22,80 @@ from __future__ import annotations
 
 import logging
 
-from .corpus_index import chunk_exists, excerpt, get_chunk
+from functools import lru_cache
+
+from .corpus_index import all_chunks, chunk_exists, excerpt, get_chunk
 from .llm import LLMUnavailable, complete_json
 from .schemas import CATEGORY_LABELS, Category, ClassificationResult
 
 logger = logging.getLogger(__name__)
 
-# Category -> (chunk_id, marker that must appear in that chunk).
-# The marker is a tripwire: if the corpus is ever rebuilt and ids shift, the
-# startup check fails loudly instead of silently quoting the wrong provision.
+# Category -> (act-name fragment, distinctive phrase from the defining provision).
+#
+# These used to be pinned chunk_ids. That was fragile: chunk_id embeds a
+# positional doc_id, so re-running the ingestion pipeline renumbered documents
+# and every anchor silently pointed at the wrong provision. Anchors are now
+# resolved by CONTENT at load time, which survives any rebuild, and
+# verify_anchors() still fails loudly if a provision genuinely disappears.
 DEFINITION_ANCHORS: dict[Category, tuple[str, str]] = {
-    Category.CLASSICAL_GENERIC: ("DOC001_chunk_004", "First Schedule"),
-    Category.PATENT_PROPRIETARY: ("DOC001_chunk_006", "patent or proprietary medicine"),
-    Category.NEW_DRUG: ("DOC003_chunk_167", "new drug shall mean"),
-    Category.PHYTOPHARMACEUTICAL: ("DOC003_chunk_752", "phytopharmaceutical"),
-    Category.AYURVEDA_AAHAR: ("DOC002_chunk_001", "Ayurveda Aahara"),
-    Category.COSMETIC: ("DOC001_chunk_004", "cosmetic"),
+    Category.CLASSICAL_GENERIC: ("Drugs and Cosmetics Act", "authoritative books of"),
+    Category.PATENT_PROPRIETARY: ("Drugs and Cosmetics Act", "patent or proprietary medicine"),
+    Category.NEW_DRUG: ("Drugs and Cosmetics Rules", "new drug shall mean"),
+    Category.PHYTOPHARMACEUTICAL: ("Drugs and Cosmetics Rules", "phytopharmaceutical drug"),
+    Category.AYURVEDA_AAHAR: ("FSSAI", "Ayurveda Aahara"),
+    Category.COSMETIC: ("Drugs and Cosmetics Act", "cleansing, beautifying"),
 }
 
 
-def verify_anchors() -> list[str]:
-    """Check every anchor resolves and still contains its marker.
+@lru_cache(maxsize=1)
+def resolved_anchors() -> dict[Category, str]:
+    """Find the chunk that defines each category, by searching the corpus.
 
-    Returns a list of problems; empty means healthy. Called at API startup so a
-    corpus rebuild can never silently degrade classification.
+    Picks the shortest matching chunk, which is reliably the definition itself
+    rather than a long passage that merely mentions the phrase.
     """
+    found: dict[Category, str] = {}
+    for category, (act_fragment, phrase) in DEFINITION_ANCHORS.items():
+        best: tuple[int, str] | None = None
+        for chunk in all_chunks():
+            if act_fragment.lower() not in str(chunk.get("act_name", "")).lower():
+                continue
+            text = " ".join(str(chunk["chunk_text"]).split())
+            if phrase.lower() in text.lower():
+                if best is None or len(text) < best[0]:
+                    best = (len(text), chunk["chunk_id"])
+        if best:
+            found[category] = best[1]
+    return found
+
+
+def anchor_for(category: Category) -> str | None:
+    return resolved_anchors().get(category)
+
+
+def verify_anchors() -> list[str]:
+    """Check every category still resolves to a real defining provision.
+
+    Called at API startup so a corpus rebuild fails visibly instead of quietly
+    quoting the wrong law.
+    """
+    resolved = resolved_anchors()
     problems: list[str] = []
-    for category, (chunk_id, marker) in DEFINITION_ANCHORS.items():
-        chunk = get_chunk(chunk_id)
-        if chunk is None:
-            problems.append(f"{category.value}: chunk {chunk_id} missing from corpus")
-        elif marker.lower() not in " ".join(str(chunk["chunk_text"]).split()).lower():
+    for category, (act_fragment, phrase) in DEFINITION_ANCHORS.items():
+        chunk_id = resolved.get(category)
+        if not chunk_id:
             problems.append(
-                f"{category.value}: chunk {chunk_id} no longer contains '{marker}'"
+                f"{category.value}: no chunk in '{act_fragment}' contains '{phrase}'"
             )
+        elif get_chunk(chunk_id) is None:
+            problems.append(f"{category.value}: resolved chunk {chunk_id} missing")
     return problems
 
 
 def _definitions_block() -> str:
     """Render the statutory definitions the model classifies against."""
     parts = []
-    for category, (chunk_id, _) in DEFINITION_ANCHORS.items():
+    for category, chunk_id in resolved_anchors().items():
         chunk = get_chunk(chunk_id)
         source = chunk["act_name"] if chunk else "unknown"
         parts.append(
@@ -197,8 +230,8 @@ def classify(question: str) -> ClassificationResult:
     if source_id and not chunk_exists(source_id):
         logger.warning("Model cited non-existent chunk %r; dropping", source_id)
         source_id = None
-    if source_id is None and category in DEFINITION_ANCHORS:
-        source_id = DEFINITION_ANCHORS[category][0]
+    if source_id is None:
+        source_id = anchor_for(category)
 
     chunk = get_chunk(source_id) if source_id else None
 
