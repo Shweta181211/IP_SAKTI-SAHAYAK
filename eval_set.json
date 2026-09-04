@@ -1,0 +1,86 @@
+[
+  {
+    "id": "eval-01",
+    "question": "Can I patent a new extraction process for Ashwagandha?",
+    "expect_act_contains": ["patent"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-02",
+    "question": "Do I need NBA approval to export a herbal cosmetic made from Indian plants?",
+    "expect_act_contains": ["biological diversity"],
+    "expect_abs_flag": true,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-03",
+    "question": "What protects a traditional Ayurvedic formulation from being patented by someone else?",
+    "expect_act_contains": ["patent"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-04",
+    "question": "Is a herbal sunscreen classified as a cosmetic or an Ayurvedic drug in India?",
+    "expect_act_contains": ["drugs and cosmetics"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-05",
+    "question": "मुझे अपने आयुर्वेदिक उत्पाद का ट्रेडमार्क कैसे कराना है?",
+    "expect_act_contains": ["trade marks"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-06",
+    "question": "मुझे जड़ी-बूटी के निर्यात के लिए जैव विविधता प्राधिकरण से अनुमति चाहिए क्या?",
+    "expect_act_contains": ["biological diversity"],
+    "expect_abs_flag": true,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-07",
+    "question": "How do I register a geographical indication for a regional turmeric variety?",
+    "expect_act_contains": ["geographical indications"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-08",
+    "question": "क्या क्लासिकल आयुर्वेदिक फॉर्मूलेशन पर कॉपीराइट मिल सकता है?",
+    "expect_act_contains": ["copyright"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-09",
+    "question": "What does the FSSAI Ayurveda-Aahar framework require for a health-claim label?",
+    "expect_act_contains": ["fssai"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-10",
+    "question": "Can a new plant variety used in an Ayurvedic formulation be registered under farmers' rights law?",
+    "expect_act_contains": ["plant varieties"],
+    "expect_abs_flag": false,
+    "expect_no_match": false
+  },
+  {
+    "id": "eval-11",
+    "question": "What is the maximum speed limit for e-scooters on Mumbai highways?",
+    "expect_act_contains": [],
+    "expect_abs_flag": false,
+    "expect_no_match": true
+  },
+  {
+    "id": "eval-12",
+    "question": "मुझे बताओ कि चंद्रमा पर कितने गड्ढे हैं?",
+    "expect_act_contains": [],
+    "expect_abs_flag": false,
+    "expect_no_match": true
+  }
+]

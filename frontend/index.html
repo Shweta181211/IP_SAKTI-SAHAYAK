@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP Sakti Sahayak — Ayurveda IP &amp; Regulatory Research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============================= LEFT RAIL ============================= -->
+  <aside class="rail">
+    <div class="rail-brand">
+      <svg class="brand-motif" viewBox="0 0 120 40" aria-hidden="true">
+        <path class="motif-path" d="M2 34 C 20 10, 40 10, 58 22 C 76 34, 96 34, 118 8"
+              fill="none" stroke="currentColor" stroke-width="1" />
+        <path class="motif-leaf" d="M20 24 C 24 16, 30 14, 34 18 C 30 22, 24 24, 20 24 Z" fill="currentColor" />
+        <path class="motif-leaf" d="M64 26 C 68 18, 74 16, 78 20 C 74 24, 68 26, 64 26 Z" fill="currentColor" />
+        <path class="motif-leaf" d="M92 18 C 96 10, 102 8, 106 12 C 102 16, 96 18, 92 18 Z" fill="currentColor" />
+      </svg>
+      <h1>IP Sakti<br>Sahayak</h1>
+      <p class="rail-tagline">Ayurveda IP &amp; regulatory research — grounded in cited statute text.</p>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-section-head">
+        <span class="rail-index">1</span>
+        <span>What are you working with?</span>
+      </div>
+      <p class="rail-hint">Choosing a category focuses retrieval and shows the IP posture that applies to it.</p>
+      <div id="category-list" class="category-list" role="listbox" aria-label="Formulation category"></div>
+      <div id="category-detail" class="category-detail" hidden></div>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-section-head">
+        <span class="rail-index">2</span>
+        <span>Narrow the source type</span>
+      </div>
+      <select id="regime-select" class="regime-select" aria-label="Regime type filter"></select>
+    </div>
+
+    <div class="rail-section rail-section--llm">
+      <label class="llm-toggle">
+        <input type="checkbox" id="llm-toggle" />
+        <span>Synthesise a summary (LLM)</span>
+      </label>
+      <p class="rail-hint" id="llm-hint">Off by default. Every claim is still tied to a cited excerpt below.</p>
+    </div>
+
+    <div class="rail-section rail-section--llm">
+      <label class="llm-toggle">
+        <input type="checkbox" id="consent-toggle" checked />
+        <span>Log my questions locally (for quality review)</span>
+      </label>
+      <p class="rail-hint">Stored only on this machine in <code>audit_log.jsonl</code> — no account, no third-party sharing. Off = nothing is written for that question.</p>
+    </div>
+
+    <div class="rail-footer">
+      <div class="jurisdiction-badge">National · India</div>
+      <p class="disclaimer">This is an informational research tool, not legal advice. Verify against the official source before relying on it. International treaties and full multilingual delivery are not yet covered — national-law sources and English/Hindi only for now.</p>
+    </div>
+  </aside>
+
+  <!-- ============================= MAIN PANE ============================= -->
+  <main class="main">
+    <header class="statusbar">
+      <span id="status-dot" class="status-dot status-dot--pending"></span>
+      <span id="status-text">Connecting to the corpus…</span>
+    </header>
+
+    <div id="setup-banner" class="setup-banner" hidden>
+      <h2>Vector database not found</h2>
+      <p>Run the following once in this project folder, then reload this page:</p>
+      <pre>python3 -m pip install -r requirements.txt
+python3 build_vector_db.py --chunks all_chunks.json
+uvicorn backend.main:app --reload</pre>
+    </div>
+
+    <div id="transcript" class="transcript" aria-live="polite">
+      <div class="empty-state">
+        <div class="empty-hero">
+          <span class="hero-eyebrow">National · India</span>
+          <h2>Ask a question, get the exact clause it comes from.</h2>
+          <p>Every reply is traced to a statute, rule, or pharmacopoeial record — nothing is answered from a guess.</p>
+        </div>
+        <div class="feature-strip">
+          <div class="feature-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 4h9l3 3v13H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>
+            <span>Cited to Act &amp; section</span>
+          </div>
+          <div class="feature-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+            <span>Confidence-scored</span>
+          </div>
+          <div class="feature-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 5h9M4 9h6M4 19c4-1 6-4 6-8"/><path d="M14 19l4-9 4 9M15.5 16h5"/></svg>
+            <span>English &amp; Hindi</span>
+          </div>
+          <div class="feature-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3l7 4v5c0 5-3 8-7 9-4-1-7-4-7-9V7z"/></svg>
+            <span>ABS &amp; TKDL aware</span>
+          </div>
+        </div>
+        <p class="empty-state-examples-label">Try asking</p>
+        <p class="empty-state-examples">
+          <button class="example-chip" data-example="Can I patent a new extraction process for Ashwagandha?">Can I patent a new extraction process for Ashwagandha?</button>
+          <button class="example-chip" data-example="Is a herbal sunscreen a cosmetic or an Ayurvedic drug?">Is a herbal sunscreen a cosmetic or an Ayurvedic drug?</button>
+          <button class="example-chip" data-example="मुझे अपने आयुर्वेदिक उत्पाद का ट्रेडमार्क कैसे कराना है?">मुझे अपने आयुर्वेदिक उत्पाद का ट्रेडमार्क कैसे कराना है?</button>
+        </p>
+      </div>
+    </div>
+
+    <form id="composer" class="composer">
+      <textarea id="question-input" rows="1" placeholder="Ask in English or हिंदी में लिखें…" aria-label="Your question"></textarea>
+      <button type="button" id="mic-btn" class="mic-btn" hidden aria-label="Voice input" title="Voice input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0M12 19v3"/></svg>
+      </button>
+      <button type="button" id="mic-lang-btn" class="mic-lang-btn" hidden aria-label="Voice input language" title="Voice input language">EN</button>
+      <button type="submit" id="send-btn">Ask</button>
+    </form>
+  </main>
+
+</div>
+
+<template id="tpl-user-message">
+  <div class="msg msg--user">
+    <div class="msg-bubble"></div>
+  </div>
+</template>
+
+<template id="tpl-assistant-message">
+  <div class="msg msg--assistant">
+    <div class="msg-meta">
+      <span class="confidence-pill"></span>
+      <span class="category-tag" hidden></span>
+    </div>
+    <div class="msg-body"></div>
+    <div class="abs-alert" hidden>
+      <strong>Biological resource / traditional-knowledge angle detected</strong>
+      <ul>
+        <li>Search the Traditional Knowledge Digital Library (TKDL) for prior art before filing.</li>
+        <li>If accessing or exporting biological material, confirm whether National Biodiversity Authority / State Biodiversity Board approval applies.</li>
+        <li>Keep a record of any Access-and-Benefit-Sharing (ABS) consent obtained.</li>
+      </ul>
+    </div>
+    <div class="escalate-row" hidden>
+      <a class="escalate-link" href="#">Request human IP facilitator review</a>
+    </div>
+    <details class="sources">
+      <summary>Sources <span class="sources-count"></span></summary>
+      <ol class="sources-list"></ol>
+    </details>
+    <details class="sources related-sources" hidden>
+      <summary>Related provisions (same Act, nearby pages) <span class="related-count"></span></summary>
+      <p class="related-note">Metadata-based cross-reference, not a full knowledge graph yet — worth a look, not a substitute for the cited sources above.</p>
+      <ol class="related-list"></ol>
+    </details>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Local Python environments and caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime / generated artifacts
+vector_db/
+audit_log.jsonl
+eval_report.json
+# The raw PDF bundle is only needed to re-run extraction. The indexed chunk
+# artifact is enough to run the app and keeps the GitHub repository lean.
+corpus.zip
+# Release archives are distributed separately; do not commit the ZIP into the
+# source repository.
+IP_SAKTI-SAHAYAK-GitHub-Ready.zip
+
+# Secrets and operating-system files
+.env
+.DS_Store
