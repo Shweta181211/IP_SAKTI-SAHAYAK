@@ -1,0 +1,28 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# --- Secrets ---
+.env
+.env.local
+
+# --- Generated data ---
+# All three are rebuildable from data/corpus.zip via pipeline/.
+# NOTE: .gitignore has no inline comments - keep patterns on their own lines.
+data/corpus/
+data/raw_text/
+data/vector_db/
+
+# --- Frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- Editors / OS ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

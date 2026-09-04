@@ -12,6 +12,9 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+# Repo root is the parent of pipeline/, so defaults resolve from any cwd.
+ROOT = Path(__file__).resolve().parent.parent
+
 COLLECTION_NAME = "ip_sakti_corpus"
 # bge-m3 is the preferred model. E5 base is used here by default because its
 # download/runtime footprint is much more practical on a laptop while still
@@ -35,8 +38,8 @@ def embedding_inputs(texts: list[str], model_name: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--chunks", type=Path, default=Path("all_chunks.json"))
-    parser.add_argument("--db-dir", type=Path, default=Path("vector_db"))
+    parser.add_argument("--chunks", type=Path, default=ROOT / "data" / "chunks" / "all_chunks.json")
+    parser.add_argument("--db-dir", type=Path, default=ROOT / "data" / "vector_db")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face SentenceTransformer model")
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--rebuild", action="store_true", help="Delete and recreate an existing database")

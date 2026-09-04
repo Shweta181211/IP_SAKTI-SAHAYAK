@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  IP-SAKTI Sahayak — visual identity.
+
+  The concept is a printed legal opinion sheet, not a chat window. Ayurveda
+  (warm, botanical, traditional) crossed with regulatory work (ruled, precise,
+  documentary). Deliberately NOT the dark/violet/glowing-orb AI aesthetic.
+
+  Colour is semantic. Each hue means exactly one thing:
+    ink      — text and structure
+    haldi    — the classification verdict (turmeric)
+    indigo   — citations and sources (the dye, not Tailwind's indigo-500)
+    neem     — verified / grounded states
+    clay     — abstention and scope limits
+*/
+
+:root {
+  --paper: #faf7f0;
+  --paper-deep: #f3ede0;
+  --rule: #e0d7c4;
+  --ink: #24211c;
+  --ink-soft: #5c554a;
+  --ink-faint: #8a8175;
+
+  --haldi: #b8860b;
+  --haldi-wash: #fdf4dd;
+  --indigo: #2f4a63;
+  --indigo-wash: #eaf0f5;
+  --neem: #4f6b3a;
+  --neem-wash: #eef3e7;
+  --clay: #9c4a2f;
+  --clay-wash: #faece5;
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+  }
+  body {
+    background:
+      /* Faint horizontal ruling, like a ledger or a printed statute page. */
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 31px,
+        rgba(224, 215, 196, 0.32) 31px,
+        rgba(224, 215, 196, 0.32) 32px
+      ),
+      var(--paper);
+    color: var(--ink);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--haldi-wash);
+    color: var(--ink);
+  }
+}
+
+@layer components {
+  /* Small caps label used for metadata and section eyebrows. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em];
+    color: var(--ink-faint);
+  }
+
+  .prose-legal {
+    font-family: "Spectral", ui-serif, Georgia, "Times New Roman", serif;
+    @apply text-[15.5px] leading-[1.72];
+    color: var(--ink);
+  }
+
+  /* Statute references read as records, not prose. */
+  .ref {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    @apply text-[12.5px] tracking-tight;
+  }
+
+  .card {
+    background: #fffdf8;
+    border: 1px solid var(--rule);
+    @apply rounded-[3px];
+  }
+
+  .focus-ring {
+    @apply outline-none ring-2 ring-offset-2;
+    --tw-ring-color: var(--indigo);
+    --tw-ring-offset-color: var(--paper);
+  }
+}
+
+/* The reasoning trail's connecting rule. Drawn as a border so it survives
+   printing and high-contrast modes, rather than a decorative gradient. */
+.trail-line::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 34px;
+  bottom: -22px;
+  width: 1px;
+  background: var(--rule);
+}
+.trail-line:last-child::before {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

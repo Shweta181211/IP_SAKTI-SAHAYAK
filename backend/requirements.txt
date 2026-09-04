@@ -1,0 +1,19 @@
+# Backend service dependencies.
+# Corpus-ingestion deps live separately in pipeline/requirements.txt.
+
+# --- API ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+python-dotenv>=1.0.0
+
+# --- Retrieval ---
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+rank-bm25>=0.2.2          # lexical half of hybrid retrieval (Part 2 stack decision)
+
+# --- Generation ---
+# We call Claude through OpenRouter, which exposes an OpenAI-compatible
+# /chat/completions endpoint - hence the openai client, not the anthropic one.
+openai>=1.60.0

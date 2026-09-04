@@ -283,13 +283,16 @@ def write_raw_text(path: Path, pages: list[str]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent, help="Project folder")
-    parser.add_argument("--input-dir", default="corpus", help="Extracted PDF corpus directory")
-    parser.add_argument("--zip-path", default="corpus.zip", help="Archive to extract when present")
+    # Repo root is the parent of pipeline/, so the script works from any cwd.
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent, help="Project folder")
+    parser.add_argument("--input-dir", default="data/corpus", help="Extracted PDF corpus directory")
+    parser.add_argument("--zip-path", default="data/corpus.zip", help="Archive to extract when present")
     args = parser.parse_args()
     root = args.root.resolve()
-    output = root / "output"
-    raw_dir, chunks_dir, logs_dir = output / "01_raw_text", output / "02_chunks", output / "03_logs"
+    # These three are wiped and regenerated on every run, so they must stay
+    # inside data/ -- never point them at a folder that holds source code.
+    output = root / "data"
+    raw_dir, chunks_dir, logs_dir = output / "raw_text", output / "chunks", output / "logs"
     # Idempotency: replace generated data but retain the reusable script and README.
     for folder in (raw_dir, chunks_dir, logs_dir):
         if folder.exists():

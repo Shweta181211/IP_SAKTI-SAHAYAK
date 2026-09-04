@@ -66,7 +66,7 @@ def print_results(label: str, results: list[dict]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db-dir", type=Path, default=Path("vector_db"))
+    parser.add_argument("--db-dir", type=Path, default=Path(__file__).resolve().parent.parent / "data" / "vector_db")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
     collection = chromadb.PersistentClient(path=str(args.db_dir)).get_collection(COLLECTION_NAME)
