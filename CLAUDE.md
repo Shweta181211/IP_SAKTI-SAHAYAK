@@ -100,19 +100,19 @@ Chunk sizes: median 242 tokens, max 798, none over 900. 157 chunks are under 50 
 
 | Field | Notes |
 |---|---|
-| `chunk_id` | e.g. `DOC014_chunk_011` — **this is the citation key** |
+| `chunk_id` | e.g. `DOC005_chunk_011` — **this is the citation key**. Never hardcode one; resolve by content (§6g) |
 | `doc_id`, `file_name`, `folder` | provenance |
 | `act_name` | 24 distinct values — use this for display citations |
 | `regime_type` | 4 values: `drug_regulatory_classification`, `ip_statute`, `registry_guideline`, `pharmacopoeia_reference` |
-| `act_subtype` | 12 values: `patent`, `trademark`, `copyright`, `design`, `geographical_indication`, `plant_varieties`, `biodiversity_abs`, `traditional_knowledge`, `drug_regulatory`, `food_regulatory`, `pharmacopoeia`, `other` |
-| `jurisdiction` | **currently `national` for all 2,342 chunks** |
+| `act_subtype` | 11 values: `patent`, `trademark`, `copyright`, `design`, `geographical_indication`, `plant_varieties`, `biodiversity_abs`, `traditional_knowledge`, `drug_regulatory`, `food_regulatory`, `pharmacopoeia`. **`other` is now empty** — derived from document content, not the filename (§6j) |
+| `jurisdiction` | **currently `national` for all 2,457 chunks** |
 | `year`, `page_number`, `page_numbers`, `token_count` | |
 | `section_or_clause` | **noisy — see below** |
 
 ### Coverage by regime
 
-`01_classification` 882 · `02_national_statutes` 738 · `04_registries` 384 ·
-`05_pharmacopoeia` 338 · `03_international` **empty (deferred, correct)**
+`01_classification` 948 · `02_national_statutes` 768 · `04_registries` 394 ·
+`05_pharmacopoeia` 347 · `03_international` **empty (deferred, correct)**
 
 Largest sources: Drugs & Cosmetics Rules 1945 (795), Ayurvedic Formulary of India (220),
 Manual of Patent Office Practice (197), Biological Diversity Rules 2024 (182),
@@ -235,6 +235,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 8 | Frontend ↔ backend integration | **Done** |
 | 9 | Benchmark + robustness hardening | **Done** |
 | 10 | Polish + demo rehearsal | **Done** |
+| 11 | Post-audit hardening (security, robustness, coverage) | **Done** — §6j |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -243,10 +244,10 @@ output, and an update to this file. No starting a phase whose dependency is not 
 
 ## 6a. Phase 1 findings - read this before writing `retrieval.py`
 
-The vector DB is built: **2,335 chunks** in `data/vector_db/` (48 MB), collection
+The vector DB is built: **2,450 chunks** in `data/vector_db/` (48 MB), collection
 `ip_sakti_corpus`, model `intfloat/multilingual-e5-base`. Build took ~28 min on CPU.
 
-7 of the 2,342 chunks were skipped as too short (<3 words). All 7 are bare Schedule M
+7 of the 2,457 chunks were skipped as too short (<3 words). All 7 are bare Schedule M
 headings from the D&C Rules ("5. Garments", "12. Documentation") with no legal content.
 Nothing of substance was lost.
 
@@ -444,7 +445,7 @@ than 3 times within one document cannot be a section number**, since schedules r
 on every page. This killed false citations like "Rule 5" for a Schedule M paragraph headed
 "5. Capsules." It is structural rather than a keyword list, so it adapts to new documents.
 
-Result over the full corpus: **887/2342 chunks (38%, measured before the §6g rebuild) get a verified section, 0 contaminated
+Result over the full corpus: **946/2457 chunks (38.5%) get a verified section, 0 contaminated
 with footnote text.** The other 62% cite act plus page, which is honest. Under-citing is
 safe; mis-citing is not.
 
@@ -990,3 +991,171 @@ dead end.
 ### Verified
 
 `benchmarks.py` **94/94** · `e2e_api.py` **24/24** · typecheck and build clean.
+
+
+---
+
+## 6j. Post-audit hardening — the fixes from `COMPARISON_REPORT.md` §6
+
+Revision 2 of the comparison report audited **our own** build and found nine defects the
+earlier round had not looked for. This section records what was fixed and, more usefully,
+what each one teaches.
+
+### The one that mattered: arbitrary file read, and the API key with it
+
+`main.py`'s SPA catch-all joined an attacker-controlled URL path onto a directory and served
+whatever came out. Starlette percent-decodes the path, so `GET /..%2f..%2f.env` returned
+`.env` — the live OpenRouter key — in plaintext over HTTP. Every source file was readable the
+same way. It existed **only in the one-process demo/deploy mode** we intend to present from.
+
+`resolve_static()` now resolves the candidate and checks `is_relative_to(DIST_ROOT)`.
+
+Two things worth carrying forward:
+
+1. **Containment must be checked after resolution, never by pattern-matching the string.**
+   There are two escapes, not one. Traversal (`../../.env`) is the obvious one. The other is
+   **anchor replacement**: `Path("dist") / "C:/Windows/win.ini"` *discards the left operand*
+   and returns the absolute path. No amount of `..` filtering catches that; a containment
+   check catches both. `tests/test_security.py` covers both classes.
+2. **Checking for a secret at rest is not checking for a route that reads files.** Revision 1
+   verified the key was gitignored and absent from the bundle — both still true, both
+   irrelevant to this bug.
+
+### Failure modes must be distinguishable, not merely safe
+
+Three separate defects were the same mistake: a degraded state that looked identical to a
+healthy one.
+
+- **`expand_query()` failed soft** and returned `[question]`, indistinguishable from a
+  question needing no rephrasing. Measured: with expansion off, the flagship benchmark does
+  **not retrieve `DOC020_chunk_116` (Section 3(p)) at all** — it returns patent-office
+  *procedure* — yet still answered confidently with real citations. It now returns an
+  `Expansion` carrying `ok`, and the answer carries `search_degraded` + `degraded_reason`,
+  rendered above the answer. Expansion stays soft (its absence costs recall, not
+  correctness); the jurisdiction gate stays fail-closed. **That asymmetry is deliberate —
+  document it rather than "fixing" it.**
+- **A generation outage reported `NO_EVIDENCE`**, which the UI renders as "nothing here
+  covers that", telling users to rephrase a perfectly good question. Now `GATE_UNAVAILABLE`.
+- **Unknown `/api/` routes returned `200 text/html`** from the SPA fallback, so `response.ok`
+  was true and the client parsed `index.html` as JSON. Now 404 JSON. `/docs` and
+  `/openapi.json` are opt-in via `IPSAKTI_ENABLE_DOCS`.
+
+### The headline was the hole in the citation guard
+
+`Answer.headline` — the sentence users actually read — was the only model prose reaching them
+unvalidated. Steps get their content *replaced* when no citation survives; the headline was
+passed through verbatim. It now carries `headline_citation_ids`, validated against the same
+allowed set, and `headline_unsourced` when nothing backs it. It is **not** dropped when
+unsupported: a correct one-line answer is still useful, it just must not *look* sourced.
+
+*The general lesson: when you add a field to a validated response, ask what validates it.*
+
+### A confidence badge that always said "high" was not a badge
+
+Measured across every substantive answer in the audit: **5 of 5 scored `high`.** Three causes,
+all fixed:
+
+- The agreement component tested "did each retriever see this chunk anywhere in its 40-deep
+  candidate list" — which nearly everything in the final top-12 satisfies. Every answer
+  emitted the identical reason string. A 0.25-weighted component was a **constant**. It now
+  requires both retrievers to have ranked the passage inside `AGREEMENT_RANK_CUTOFF`.
+- The rejection penalty was multiplicative (×0.80) and could not change the outcome in the
+  case that mattered: a perfect 1.0 became exactly 0.80, still above `HIGH_THRESHOLD`. Now
+  subtractive per rejection, **plus** a hard cap — an answer that cited something
+  unverifiable cannot be "well supported".
+- **It is still not calibrated.** No labelled data exists. The construction is defensible;
+  the mapping to correctness is unmeasured. Do not claim otherwise to a judge.
+
+### `act_subtype` was wrong for 39% of the corpus, and the bug was masked
+
+`build_chunks.py::classify()` matched subtype against the **filename**.
+`The_Drugs_and_Cosmetics_Rules_1945.PDF` matched nothing — the underscores meant the
+"drugs and cosmetics" marker never appeared — so 854 chunks (35% of the corpus), including
+**Rule 122-E and Schedule Y**, were labelled `other`.
+
+The damage was in retrieval: `CATEGORY_REGIME_HINTS` maps `PHYTOPHARMACEUTICAL` to
+`drug_regulatory`, so the hint boosted the 82-chunk *Act* and demoted the 854-chunk *Rules*
+that actually govern it. **The hint pointed away from the right law** — harmless only because
+`REGIME_BOOST` is 0.0. Anyone who "improved" retrieval by raising that constant would have
+made phytopharmaceutical and new-drug answers worse.
+
+Now: filename first (normalising `_`/`-` to spaces), then `infer_subtype()` over the
+document's own text by **marker frequency**. Frequency, not first-match, because position is
+meaningless here — `ABS Guidelines.pdf` is a bilingual Gazette whose first ~47,000 characters
+are Devanagari, so its first English marker sits halfway through the file.
+
+Result: **`other` went from 951 chunks to 0.** All 26 documents are correctly typed. Chunk
+ids and chunk text are **byte-identical** to the previous build, so the vector DB only needed
+a metadata update — not a 28-minute re-embed.
+
+*Two lessons: filenames are not metadata; and a masked bug is still a bug — it just waits.*
+
+### The gate had drifted back to judging completeness
+
+Measured: *"Cite the exact section that ALLOWS patenting a classical churna"* abstained
+`out_of_scope` on **2 of 4 runs**. The gate was reasoning "no such section exists, so these
+passages don't answer it" — the completeness-vs-scope confusion §6c was written to prevent.
+
+`RELEVANCE_PROMPT` now states explicitly that **passages contradicting the question are
+relevant**: "there is no such provision, and here is the one that governs instead" is an
+answer, not a refusal. After the change: **3/3 on two different false-premise phrasings**,
+with off-topic and foreign-jurisdiction refusals unchanged at 3/3.
+
+### Everything else
+
+| Fix | Note |
+|---|---|
+| History capped at 8 and **rejected** longer with a 422 | Every session broke on its 9th question. Server now truncates via a validator; client also slices. Neither side should depend on the other's limit. |
+| History entries had no length cap | Same ceiling as `question` (`MAX_QUESTION_CHARS`). They land in an LLM prompt too. |
+| No rate limiting on endpoints costing 3-4 LLM calls | `ratelimit.py`, per-client fixed window, `settings.rate_limit_*`. Set to 0 to disable — the suites do, since a warm cache fires faster than any human. |
+| Raw exception text returned to clients | Logged server-side, generic message out. |
+| Frontend `fetch` had no timeout or cancel | `AbortController`, 90s deadline, visible **Stop** button. `CancelledError` vs `TimeoutError` so a deliberate stop is not shown as an error. |
+| `retrieve()` searched `queries[0]` twice | Once for thresholds, once in the fusion loop. Now computed once. |
+| Suites reported cache hits as fast answers | `e2e_api.py` flags any sub-second answer as CACHED. **Restart the backend before quoting latency.** |
+| Doc chunk-count drift | Corrected; `docs/Corpus_Pipeline.md` now carries a standing note to update counts on every pipeline run. |
+
+### Free-model reality — measured, and it constrains everything
+
+Probing all 19 free OpenRouter models on our key: **only `minimax/minimax-m3:free` and
+`minimax-m2.7:free` are reachable.** The other 17 return 429 `openrouter_free_tier_daily` —
+the account's free cap is **50 requests/day and it is exhausted**. MiniMax is exempt
+(sponsored), which is why it still answers.
+
+So `fallback_models` is currently **decorative**, and naively populating it made things worse:
+4 retries × 3 unreachable models ≈ 48s of dead air before failing. `llm.py` now detects a
+daily-cap 429 (waiting cannot help) and skips to the next model immediately, and the OpenAI
+SDK's own `max_retries` is set to 0 because it was stacking a second retry layer inside ours.
+**Failover: ~48s → 5.4s.** M2.7 is not a viable fallback either — it truncated mid-JSON at 250
+tokens on one trial and returned empty content on the next.
+
+$10 of credits unlocks 1000 free-model requests/day and makes the fallback list real.
+
+### Verified at the close of Phase 11
+
+Cold backend, rate limiting disabled, frontend rebuilt:
+
+```
+tests/test_security.py    25/25      (new - traversal, anchor replacement, no regression)
+tests/test_units.py       48/48      (new - confidence, conversation, validation, limiter)
+tests/e2e_api.py          37/37      (was 24 - added /compare, headline, routing)
+tests/benchmarks.py       93/94
+frontend tsc --noEmit     clean      npm run build clean
+```
+
+The one benchmark miss was **F1 not naming TKDL on that run**. Re-measured immediately after
+with the cache cleared: **4/4 runs cite 3(p), name TKDL, and classify `classical_generic`.**
+Free-model variance, not a regression — which is exactly why §6f's warning stands: **re-run
+the suites before the demo rather than trusting a past green.**
+
+### Known still open
+
+- **The OpenRouter key has not been rotated.** The key in `.env` is byte-identical to the one
+  read out through the traversal exploit. The hole is closed; the key is still compromised.
+- Confidence remains uncalibrated (no labelled data).
+- Duplicate Biological Diversity Rules 2024 (~184 chunks) — decision to leave it stands (§6g).
+- Patents Act s.3(p) still unreachable by search (margin bleed, §6g).
+- Hindi: BM25 tokenises Devanagari to `[]`; answers come back in English only. Query
+  expansion masks the recall loss, which means Hindi depends on the same call that §6.3 made
+  visible.
+- Audit log and human-escalation (PS "expected solution", Version B has both) — **not built**;
+  deferred to the next-level pass along with the UI work.

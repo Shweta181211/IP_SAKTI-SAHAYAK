@@ -38,8 +38,17 @@ W_BREADTH = 0.30
 W_AGREEMENT = 0.25
 
 # A model that cited something unverifiable was guessing, even if other
-# citations survived. Multiplicative so it damps an otherwise good score.
-REJECTION_PENALTY = 0.80
+# citations survived.
+#
+# This was multiplicative (x0.80), and it could not change the outcome in the
+# case that mattered. Measured: the flagship answer scored a perfect 1.0, was
+# multiplied to exactly 0.80 - still above HIGH_THRESHOLD - and a model that had
+# just tried to cite a chunk it was never shown still produced a "Well
+# supported" badge. Subtractive, per rejection, so it actually bites, and the
+# level is capped outright as well: guessing at a source is a statement about
+# the answer's reliability that no amount of other evidence cancels.
+REJECTION_PENALTY_PER_ID = 0.15
+MAX_REJECTION_PENALTY = 0.45
 
 HIGH_THRESHOLD = 0.75
 MODERATE_THRESHOLD = 0.45
@@ -48,6 +57,10 @@ MODERATE_THRESHOLD = 0.45
 BREADTH_TARGET = 3
 # Agreement is measured over at most this many top evidence items.
 AGREEMENT_WINDOW = 5
+# A passage counts as "both retrievers agreed" only if BOTH ranked it this high
+# among their own candidates. Mere presence in a 40-deep candidate list is not
+# agreement - see the comment in assess().
+AGREEMENT_RANK_CUTOFF = 12
 
 
 @dataclass
@@ -94,13 +107,28 @@ def assess(
         reasons.append("rests on a single source")
 
     # 3. Did two independent retrieval methods agree on this evidence?
+    #
+    # This used to test `dense_rank is not None and lexical_rank is not None`,
+    # i.e. "did each retriever see this chunk anywhere in its 40-deep candidate
+    # list". Nearly everything that survives into the final top-12 satisfies
+    # that, so the component was saturated: every answer measured in testing
+    # emitted the identical reason "5 of the top 5 passages were found by both",
+    # making a 0.25-weighted component a constant that could not discriminate.
+    #
+    # Requiring both retrievers to have ranked the passage highly makes it a
+    # real signal again: corroboration means they independently agreed it was
+    # among the best matches, not merely that neither excluded it.
     window = result.evidence[:AGREEMENT_WINDOW]
-    both = sum(1 for e in window if e.dense_rank is not None and e.lexical_rank is not None)
+    both = sum(
+        1 for e in window
+        if e.dense_rank is not None and e.dense_rank < AGREEMENT_RANK_CUTOFF
+        and e.lexical_rank is not None and e.lexical_rank < AGREEMENT_RANK_CUTOFF
+    )
     agreement_score = both / len(window) if window else 0.0
     if both and window:
         reasons.append(
-            f"{both} of the top {len(window)} passages were found by both semantic "
-            "and keyword search"
+            f"{both} of the top {len(window)} passages were independently ranked highly "
+            "by both semantic and keyword search"
         )
     elif window:
         reasons.append("semantic and keyword search did not agree on any top passage")
@@ -112,13 +140,21 @@ def assess(
     )
 
     if rejected_ids:
-        score *= REJECTION_PENALTY
+        penalty = min(len(rejected_ids) * REJECTION_PENALTY_PER_ID, MAX_REJECTION_PENALTY)
+        score = max(0.0, score - penalty)
         reasons.append(
             f"{len(rejected_ids)} citation(s) the model produced could not be verified "
             "and were rejected"
         )
 
-    if score >= HIGH_THRESHOLD and len(acts) < 2:
+    if rejected_ids and score >= HIGH_THRESHOLD:
+        # Belt and braces alongside the subtractive penalty. An answer whose
+        # author reached for a source that does not exist has demonstrated
+        # exactly the failure mode this badge is supposed to warn about, so it
+        # does not get the top label however well the rest held together.
+        level = ConfidenceLevel.MODERATE
+        reasons.append("capped: the model cited at least one source that failed verification")
+    elif score >= HIGH_THRESHOLD and len(acts) < 2:
         # Full step coverage and tight retrieval agreement can push a
         # single-source answer over the line. One act corroborating itself is
         # not "well supported", however cleanly the steps were cited - so this

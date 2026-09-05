@@ -35,7 +35,26 @@ class Settings(BaseSettings):
     # anthropic/claude-sonnet-5 via IPSAKTI_MODEL once it does.
     model: str = "minimax/minimax-m3:free"
     # Free-model capacity is shared and flaky; 429s are routine, not exceptional.
-    fallback_models: tuple[str, ...] = ("minimax/minimax-m3:free",)
+    #
+    # These were previously a single entry equal to `model`, which meant the
+    # fallback list did nothing at all: `complete()` de-duplicates it against the
+    # primary, so a 429 storm exhausted four retries and gave up. Real fallbacks
+    # matter more now that a failed query expansion is a detectable degraded
+    # state rather than a silent one (see retrieval.expand_query).
+    #
+    # Ordered by measured suitability, not by size. MiniMax M3 stays primary
+    # because it is the one model head-to-head testing showed abstains correctly
+    # and fabricates no chunk ids (CLAUDE.md 4a); the rest are here to keep the
+    # service answering when it is rate-limited, and every one of them is still
+    # policed by the same citation validator.
+    #
+    # NOTE: slugs are exact OpenRouter ids, verified against /api/v1/models.
+    # "z.ai/glm-5.2:free" does not exist - the vendor prefix is "z-ai".
+    fallback_models: tuple[str, ...] = (
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "z-ai/glm-5.2:free",
+        "google/gemma-4-31b-it:free",
+    )
     temperature: float = 0.0
     max_tokens: int = 1500
     request_timeout_s: float = 120.0
@@ -46,6 +65,14 @@ class Settings(BaseSettings):
     # produces, so a window of 8 buried it on some runs. 12 costs ~3.5k extra
     # prompt tokens against a 1M context - cheap insurance for recall.
     top_k: int = 12
+
+    # --- Rate limiting -----------------------------------------------------
+    # Requests per minute per client, for the endpoints that cost upstream LLM
+    # calls. Generous for a person demonstrating the tool, restrictive for a
+    # script. Set either to 0 to disable - which the test suites do, since a
+    # warm answer cache lets them fire far faster than any human would.
+    rate_limit_query: int = 12
+    rate_limit_compare: int = 6
 
     # --- Behaviour ---------------------------------------------------------
     disclaimer: str = (

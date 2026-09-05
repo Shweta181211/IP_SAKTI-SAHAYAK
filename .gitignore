@@ -9,6 +9,12 @@ venv/
 .env
 .env.local
 
+# --- Audit trail ---
+# Operational records are safe, but with consent this file also holds the
+# questions people asked. That is user data; it does not belong in git.
+data/logs/audit_log.jsonl
+data/logs/audit_log.jsonl.1
+
 # --- Generated data ---
 # All three are rebuildable from data/corpus.zip via pipeline/.
 # NOTE: .gitignore has no inline comments - keep patterns on their own lines.

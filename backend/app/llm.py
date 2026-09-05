@@ -36,12 +36,37 @@ def client() -> OpenAI:
             api_key=api_key(),
             base_url=settings.openrouter_base_url,
             timeout=settings.request_timeout_s,
+            # We run our own backoff-and-fallback loop below. Leaving the SDK's
+            # default retries on stacks a second, invisible retry layer inside
+            # each of ours - which quietly multiplies the time it takes to give
+            # up on a model that is out of daily quota and can never succeed.
+            max_retries=0,
         )
     return _client
 
 
 class LLMUnavailable(RuntimeError):
     """Every model and retry was exhausted. Callers must abstain, not invent."""
+
+
+# OpenRouter returns 429 for two completely different situations, and retrying
+# is right for only one of them:
+#
+#   * a transient per-minute/per-provider limit - backing off works;
+#   * the account's free-tier DAILY allowance ("free-models-per-day", 50/day on
+#     an account with no credits) - no amount of backoff helps until midnight.
+#
+# Measured on this account: with the daily allowance exhausted, 17 of 19 free
+# models 429 instantly. Retrying each one four times with exponential backoff
+# costs ~16s per model and cannot succeed, so a three-model fallback list added
+# ~48s of dead air to every request before failing anyway. Detecting the daily
+# cap and moving straight to the next model turns that into well under a second.
+_DAILY_CAP_MARKERS = ("free-models-per-day", "openrouter_free_tier_daily")
+
+
+def _is_daily_cap(exc: Exception) -> bool:
+    """True when a 429 means 'out of quota until reset', not 'slow down'."""
+    return any(marker in str(exc) for marker in _DAILY_CAP_MARKERS)
 
 
 def complete(prompt: str, *, max_tokens: int | None = None) -> str:
@@ -68,13 +93,18 @@ def complete(prompt: str, *, max_tokens: int | None = None) -> str:
                 last_error = LLMUnavailable(f"{model} returned empty content")
             except (RateLimitError, APITimeoutError, APIError) as exc:
                 last_error = exc
+                if _is_daily_cap(exc):
+                    # Out of daily quota. Waiting cannot help; try another model.
+                    logger.warning("%s is out of daily free quota; skipping to next model", model)
+                    break
                 # Jittered exponential backoff: free capacity frees up in seconds,
                 # and synchronised retries from parallel calls would collide.
                 delay = (2**attempt) + random.uniform(0, 1)
                 logger.warning("%s attempt %d failed (%s); retrying in %.1fs",
                                model, attempt + 1, type(exc).__name__, delay)
                 time.sleep(delay)
-        logger.warning("Model %s exhausted; trying next fallback", model)
+        else:
+            logger.warning("Model %s exhausted; trying next fallback", model)
 
     raise LLMUnavailable(f"All models failed. Last error: {last_error}")
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Answer, Citation, ReasoningStep } from "../types";
+import { StepIcon } from "./Icons";
 
 interface Props {
   answer: Answer;
@@ -16,11 +17,13 @@ const CLAMP_CHARS = 210;
 
 function Step({
   step,
+  index,
   citationIndex,
   hovered,
   onHoverStep,
 }: {
   step: ReasoningStep;
+  index: number;
   citationIndex: Map<string, number>;
   hovered: string | null;
   onHoverStep: (ids: string[] | null) => void;
@@ -28,16 +31,23 @@ function Step({
   const [expanded, setExpanded] = useState(false);
   const isLinked = hovered !== null && step.citation_ids.includes(hovered);
   const isLong = step.content.length > CLAMP_CHARS;
-  const shown =
-    expanded || !isLong
-      ? step.content
-      : `${step.content.slice(0, CLAMP_CHARS).replace(/\s+\S*$/, "")}…`;
+  // Split once, at a word boundary. The head always renders; the tail lives in
+  // the animated reveal below it, so expanding is a height change rather than a
+  // text swap. The trailing ellipsis belongs to the collapsed state only - it
+  // would otherwise sit stranded mid-sentence once the rest is showing.
+  const head = step.content.slice(0, CLAMP_CHARS).replace(/\s+\S*$/, "");
+  const tail = step.content.slice(head.length).trimStart();
 
   return (
     <li
-      className="trail-line relative pl-11"
+      className="trail-line station-in relative pl-11"
+      // Each station arrives just after the one above it, walking the eye down
+      // the reasoning in the order the argument is actually made.
+      style={{ "--i": index } as React.CSSProperties}
       onMouseEnter={() => onHoverStep(step.citation_ids)}
       onMouseLeave={() => onHoverStep(null)}
+      onFocus={() => onHoverStep(step.citation_ids)}
+      onBlur={() => onHoverStep(null)}
     >
       <span
         className={`absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full border text-[13px] font-semibold transition-colors ${
@@ -48,23 +58,52 @@ function Step({
               : "border-rule bg-paper text-ink-soft"
         }`}
       >
-        {step.step}
+        {/* The number is the anchor; the icon appears when the step is linked
+            to a source under the cursor. Both are present in the DOM and
+            cross-faded, so nothing reflows on hover. */}
+        <span className={`transition-opacity duration-200 ${isLinked ? "opacity-0" : "opacity-100"}`}>
+          {step.step}
+        </span>
+        <span
+          className={`absolute h-4 w-4 transition-opacity duration-200 ${
+            isLinked ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <StepIcon step={step.step} />
+        </span>
       </span>
 
-      <h3 className="eyebrow pt-1.5">{step.title}</h3>
+      <h3 className="eyebrow flex items-center gap-1.5 pt-1.5">
+        <span className="h-3.5 w-3.5 text-ink-faint">
+          <StepIcon step={step.step} />
+        </span>
+        {step.title}
+      </h3>
 
       <p className={`prose-legal mt-1.5 ${step.abstained ? "italic text-clay" : ""}`}>
-        {shown}
+        {isLong && !expanded ? `${head}…` : isLong ? head : step.content}
       </p>
 
+      {/* The remainder animates open on a grid-rows transition rather than
+          appearing instantly, so a long provision does not shove the citation
+          rail down the page under the reader's eye. */}
       {isLong && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="eyebrow mt-1 hover:text-indigo-dye"
-          aria-expanded={expanded}
-        >
-          {expanded ? "Show less" : "Show full reasoning"}
-        </button>
+        <>
+          <div className="reveal" data-open={expanded} aria-hidden={!expanded}>
+            <div>
+              <p className={`prose-legal pt-1.5 ${step.abstained ? "italic text-clay" : ""}`}>
+                {tail}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="eyebrow mt-1 transition-colors hover:text-indigo-dye"
+            aria-expanded={expanded}
+          >
+            {expanded ? "Show less" : "Show full reasoning"}
+          </button>
+        </>
       )}
 
       {step.citation_ids.length > 0 && (
@@ -101,10 +140,11 @@ function Step({
 export function ReasoningTrail({ answer, citationIndex, hovered, onHoverStep }: Props) {
   return (
     <ol className="space-y-6">
-      {answer.steps.map((step) => (
+      {answer.steps.map((step, i) => (
         <Step
           key={step.step}
           step={step}
+          index={i}
           citationIndex={citationIndex}
           hovered={hovered}
           onHoverStep={onHoverStep}

@@ -194,6 +194,30 @@ def validate_ids(
     return kept, rejected
 
 
+# Any doc/chunk-id-shaped token, however many digits, optionally bracketed.
+#
+# This was `DOC\d{3}_chunk_\d{3}` and lived only in comparison.py. Both facts
+# were wrong. The fixed digit counts silently half-matched anything outside that
+# shape - leaving "DOC3_chunk_45" or a four-digit index partly in the prose -
+# and generation.py had no stripping at all, so the same model habit reached
+# users through the reasoning steps.
+_CHUNK_ID_IN_PROSE = re.compile(r"[\[\(]?DOC\d+_chunk_\d+[\]\)]?", re.IGNORECASE)
+
+
+def strip_chunk_ids(text: str) -> str:
+    """Remove chunk ids the model wrote into prose.
+
+    Models mention ids despite being told not to. The citation cards already
+    carry them, and "DOC003_chunk_234 shows..." is noise to a reader who cannot
+    look an id up. Stripping is display-only: `citation_ids` are untouched, so
+    nothing about traceability changes.
+    """
+    cleaned = _CHUNK_ID_IN_PROSE.sub("the cited source", text or "")
+    # Collapse the whitespace and stray punctuation a removal can leave behind.
+    cleaned = re.sub(r"\s+([,.;:])", r"", cleaned)
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
 def citations_for(chunk_ids: Iterable[str]) -> list[Citation]:
     """Build citations for ids already validated. Unresolvable ids are skipped."""
     return [c for c in (build_citation(cid) for cid in chunk_ids) if c is not None]

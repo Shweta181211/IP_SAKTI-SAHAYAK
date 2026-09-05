@@ -249,21 +249,94 @@ def chunk_pieces(pieces: list[Piece]) -> list[Piece]:
     return chunks
 
 
-def classify(file_name: str, folder: str) -> tuple[str, str, str]:
-    lower = file_name.lower()
-    subtype_map = [
-        ("geographical indication", "geographical_indication"), ("gi ", "geographical_indication"),
-        ("biological diversity", "biodiversity_abs"), ("biodiversity", "biodiversity_abs"),
-        ("patent", "patent"), ("trade mark", "trademark"), ("trademark", "trademark"),
-        ("copyright", "copyright"), ("design", "design"), ("plant variet", "plant_varieties"),
-        ("drugs and cosmetics", "drug_regulatory"), ("fssai", "food_regulatory"),
-        ("tkdl", "traditional_knowledge"), ("pharmacopoeia", "pharmacopoeia"), ("formulary", "pharmacopoeia"),
-    ]
-    subtype = next((value for key, value in subtype_map if key in lower), "other")
+# Ordered most-specific first: "geographical indication" must be tested before
+# the bare "design", and "drugs and cosmetics" before "drug".
+SUBTYPE_MAP: list[tuple[str, str]] = [
+    ("geographical indication", "geographical_indication"), ("gi ", "geographical_indication"),
+    ("biological diversity", "biodiversity_abs"), ("biodiversity", "biodiversity_abs"),
+    ("access and benefit", "biodiversity_abs"), ("benefit sharing", "biodiversity_abs"),
+    ("patent", "patent"), ("trade mark", "trademark"), ("trademark", "trademark"),
+    ("copyright", "copyright"), ("design", "design"), ("plant variet", "plant_varieties"),
+    ("drugs and cosmetics", "drug_regulatory"), ("drugs & cosmetics", "drug_regulatory"),
+    ("magic remedies", "drug_regulatory"),
+    ("fssai", "food_regulatory"), ("food safety", "food_regulatory"),
+    ("ayurveda aahar", "food_regulatory"),
+    ("tkdl", "traditional_knowledge"), ("traditional knowledge", "traditional_knowledge"),
+    ("pharmacopoeia", "pharmacopoeia"), ("formulary", "pharmacopoeia"),
+]
+
+# A subtype inferred from body text needs this many marker hits to be trusted,
+# so that one passing cross-reference cannot capture a document.
+SUBTYPE_MIN_HITS = 3
+
+
+def match_subtype(text: str) -> str | None:
+    """First subtype whose marker appears in `text`, or None.
+
+    Order-sensitive by design: used for filenames, where the earliest match in
+    SUBTYPE_MAP is the most specific one.
+    """
+    lower = text.lower()
+    return next((value for key, value in SUBTYPE_MAP if key in lower), None)
+
+
+def infer_subtype(text: str) -> str | None:
+    """Infer a subtype from a document's own text, by marker frequency.
+
+    Deliberately NOT first-match-wins like `match_subtype`. Position is
+    meaningless in these documents: `ABS Guidelines.pdf` is a bilingual Gazette
+    whose first ~47,000 characters are Devanagari, so the first English marker
+    appears halfway through the file. Any head-window scan either misses it or
+    has to read half the corpus to find it.
+
+    Frequency is the robust signal instead - the subject a document actually
+    concerns is the one it keeps naming. A threshold keeps a single incidental
+    cross-reference (the Patents Act mentioning "biological material") from
+    outvoting nothing at all.
+
+    Only ever consulted when the FILENAME matched nothing, so it cannot override
+    a confident name-based classification.
+    """
+    lower = " ".join(text.lower().split())
+    totals: Counter[str] = Counter()
+    for marker, subtype in SUBTYPE_MAP:
+        hits = lower.count(marker)
+        if hits:
+            totals[subtype] += hits
+    if not totals:
+        return None
+    subtype, hits = totals.most_common(1)[0]
+    return subtype if hits >= SUBTYPE_MIN_HITS else None
+
+
+def classify(file_name: str, folder: str, body_text: str = "") -> tuple[str, str, str]:
+    """Derive regime, subtype and year for one document.
+
+    Subtype is matched against the filename FIRST and the document's own opening
+    text second. It used to be filename-only, and filenames are not reliable
+    metadata: `The_Drugs_and_Cosmetics_Rules_1945.PDF` matched nothing, because
+    the underscores meant the "drugs and cosmetics" marker never appeared. That
+    one miss mislabelled 854 chunks - 35% of the whole corpus, including Rule
+    122-E and Schedule Y, the provisions that decide the `new_drug` and
+    `phytopharmaceutical` categories - as `act_subtype: "other"`.
+
+    The practical damage was in retrieval: `CATEGORY_REGIME_HINTS` maps
+    PHYTOPHARMACEUTICAL to `drug_regulatory`, so the hint boosted the 82-chunk
+    *Act* and demoted the 854-chunk *Rules* that actually govern it. The hint
+    pointed away from the right law, masked only because `REGIME_BOOST` is 0.0.
+
+    Reading the document's own first pages is the fix: a statute states what it
+    is in its own title, whatever the file was named on disk.
+    """
+    # Separators are meaningless here - underscores, hyphens and runs of spaces
+    # all just join words - so normalise them away before matching.
+    normalised_name = re.sub(r"[_\-\s]+", " ", file_name.lower())
+    subtype = match_subtype(normalised_name)
+    if subtype is None and body_text:
+        subtype = infer_subtype(body_text)
     regime = FOLDER_TO_REGIME.get(folder, "other")
-    jurisdiction = "international" if regime == "international_treaty" else "national"
     year_match = re.search(r"(?:18|19|20)\d{2}", file_name)
-    return regime, subtype, year_match.group(0) if year_match else ""
+    return regime, subtype or "other", year_match.group(0) if year_match else ""
 
 
 def resolve_input(root: Path, input_dir: str, zip_path: str) -> Path:
@@ -340,7 +413,11 @@ def main() -> int:
             continue
         # Mirror folders to prevent same-name PDFs in separate regimes overwriting each other.
         write_raw_text(raw_dir / relative.with_suffix(".txt"), pages)
-        regime, subtype, year = classify(pdf.name, folder)
+        # Pass the document's full text so one whose filename says nothing
+        # useful can still be classified from what it actually talks about.
+        regime, subtype, year = classify(
+            pdf.name, folder, body_text=" ".join(pages)
+        )
         act_name = pdf.stem.replace("_", " ").strip()
         doc_id = f"DOC{doc_number:03d}"
         chunks_before = len(all_chunks)

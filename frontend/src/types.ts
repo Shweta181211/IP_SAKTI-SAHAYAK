@@ -38,6 +38,8 @@ export interface ComparisonResult {
   citations: Citation[];
   abstained: boolean;
   abstention_message: string | null;
+  search_degraded: boolean;
+  degraded_reason: string | null;
   disclaimer: string;
 }
 
@@ -73,6 +75,11 @@ export interface Answer {
   resolved_question: string | null;
   jurisdiction: string;
   headline: string | null;
+  /** Sources backing the headline itself. Empty when it could not be tied
+   *  to verified evidence — see `headline_unsourced`. */
+  headline_citation_ids: string[];
+  /** The headline is a summary, not a sourced finding. The UI must say so. */
+  headline_unsourced: boolean;
   confidence: ConfidenceLevel | null;
   confidence_label: string | null;
   confidence_score: number | null;
@@ -86,6 +93,14 @@ export interface Answer {
   abstention_message: string | null;
   clarifying_question: string | null;
   rejected_citation_ids: string[];
+  /** Offer a human IP facilitator. Set only for a real legal need this system
+   *  cannot meet — never for a vague, off-topic, or transiently failed one. */
+  escalate: boolean;
+  escalation_reason: string | null;
+  /** Retrieval ran without query expansion (upstream hiccup), so recall was
+   *  narrowed. Shown to the user — it used to fail silently. */
+  search_degraded: boolean;
+  degraded_reason: string | null;
   disclaimer: string;
 }
 
@@ -97,6 +112,15 @@ export interface Health {
   embed_model: string;
   generation_model: string;
   anchor_problems: string[];
+  /** Aggregate of the server's local audit trail — counts only, never text. */
+  audit?: {
+    entries: number;
+    answered?: number;
+    abstained?: number;
+    escalated?: number;
+    citations_rejected?: number;
+    path?: string;
+  };
 }
 
 /** Display citation line. Mirrors Citation.display on the backend. */

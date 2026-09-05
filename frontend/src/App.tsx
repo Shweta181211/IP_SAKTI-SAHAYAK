@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { askQuestion, compareCategories, fetchHealth } from "./api";
+import {
+  CancelledError,
+  askQuestion,
+  compareCategories,
+  fetchHealth,
+} from "./api";
 import { AnswerView } from "./components/AnswerView";
 import { ComparisonView } from "./components/ComparisonView";
 import type { Answer, ComparisonResult, Health } from "./types";
@@ -27,12 +32,24 @@ const EXAMPLES: { label: string; question: string; mode: Mode }[] = [
 ];
 
 const STORAGE_KEY = "ipsakti.turns.v2";
+const CONSENT_KEY = "ipsakti.logconsent.v1";
 const MAX_STORED = 20;
 
 export default function App() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("ask");
   const [jurisdiction, setJurisdiction] = useState<Jurisdiction>("india");
+  // Consent to retain the QUESTION TEXT in the server's audit log. Off by
+  // default and remembered per browser: the operational record that makes the
+  // system auditable holds no user content either way, so this is a genuine
+  // choice rather than a formality. See backend/app/audit.py.
+  const [logConsent, setLogConsent] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(CONSENT_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [turns, setTurns] = useState<Turn[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -46,10 +63,22 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Held so the Stop button can abort the in-flight request. A ref, not state:
+  // changing it must not re-render, and `submit` needs the current value
+  // without taking it as a dependency.
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetchHealth().then(setHealth);
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CONSENT_KEY, String(logConsent));
+    } catch {
+      /* a remembered preference is a convenience, never a requirement */
+    }
+  }, [logConsent]);
 
   useEffect(() => {
     try {
@@ -79,29 +108,44 @@ export default function App() {
       setInput("");
       setLoading(true);
       setError(null);
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         if (activeMode === "compare") {
-          const comparison = await compareCategories(typed);
+          const comparison = await compareCategories(typed, controller.signal, logConsent);
           setTurns((prev) => [...prev, { id: Date.now(), kind: "comparison", comparison }]);
         } else {
           const history = answerTurns.map(
             (t) => t.answer!.resolved_question ?? t.answer!.question,
           );
-          const answer = await askQuestion(typed, jurisdiction, history);
+          const answer = await askQuestion(
+            typed, jurisdiction, history, controller.signal, logConsent,
+          );
           setTurns((prev) => [...prev, { id: Date.now(), kind: "answer", answer }]);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Something went wrong.");
-        setInput(typed); // give their typing back rather than losing it
+        // A cancel is something the user asked for, not a failure to report.
+        if (e instanceof CancelledError) {
+          setInput(typed);
+        } else {
+          setError(e instanceof Error ? e.message : "Something went wrong.");
+          setInput(typed); // give their typing back rather than losing it
+        }
       } finally {
+        abortRef.current = null;
         setLoading(false);
         inputRef.current?.focus();
       }
     },
-    [answerTurns, jurisdiction, loading, mode],
+    [answerTurns, jurisdiction, loading, logConsent, mode],
   );
 
+  function cancelRequest() {
+    abortRef.current?.abort();
+  }
+
   function endSession() {
+    abortRef.current?.abort();
     setTurns([]);
     setInput("");
     setError(null);
@@ -145,7 +189,7 @@ export default function App() {
                 <button
                   onClick={endSession}
                   title="Clear the transcript and start a fresh consultation"
-                  className="rounded-[3px] border border-rule px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-clay hover:text-clay"
+                  className="rounded-[3px] border border-rule px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors duration-150 hover:border-clay hover:bg-clay-wash hover:text-clay focus-visible:focus-ring"
                 >
                   End session
                 </button>
@@ -186,7 +230,7 @@ export default function App() {
                     setMode(ex.mode);
                     submit(ex.question, ex.mode);
                   }}
-                  className="card px-3 py-2.5 text-left transition-colors hover:border-indigo-dye"
+                  className="card lift px-3 py-2.5 text-left hover:border-indigo-dye focus-visible:focus-ring"
                 >
                   <span className="eyebrow block text-haldi">{ex.label}</span>
                   <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
@@ -229,21 +273,43 @@ export default function App() {
 
         {loading && (
           <section className="mt-8 max-w-3xl border-t border-rule pt-6">
-            <div className="space-y-5">
+            {/* The skeleton is the shape of the answer that is coming: four
+                stations on the same rule, pulsing down the trail in order. A
+                generic spinner would tell the user nothing; this previews the
+                structure and makes a 15-second wait legible. */}
+            <ol className="space-y-5">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="relative pl-11">
-                  <span className="absolute left-0 top-0 h-8 w-8 animate-pulse rounded-full border border-rule bg-paper-deep" />
-                  <div className="h-2.5 w-24 animate-pulse rounded bg-paper-deep" />
-                  <div className="mt-2 h-2.5 w-full animate-pulse rounded bg-paper-deep" />
-                  <div className="mt-1.5 h-2.5 w-4/5 animate-pulse rounded bg-paper-deep" />
-                </div>
+                <li
+                  key={i}
+                  className="trail-line trail-sweep relative pl-11"
+                  style={{ "--i": i } as React.CSSProperties}
+                >
+                  <span className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full border border-rule bg-paper text-[13px] font-semibold text-ink-faint/50">
+                    {i + 1}
+                  </span>
+                  <div className="h-2.5 w-24 rounded-[2px] bg-paper-deep" />
+                  <div className="mt-2.5 h-2.5 w-full rounded-[2px] bg-paper-deep" />
+                  <div className="mt-1.5 h-2.5 w-4/5 rounded-[2px] bg-paper-deep" />
+                </li>
               ))}
+            </ol>
+            <div className="mt-6 flex items-center justify-between gap-4">
+              <p className="eyebrow">
+                {mode === "compare"
+                  ? "Retrieving provisions, contrasting each category…"
+                  : "Classifying, retrieving provisions, verifying citations…"}
+              </p>
+              {/* A cold answer takes 15-30s on the free endpoint. Without this,
+                  a stalled request could only be escaped by reloading the page,
+                  which also loses the transcript. */}
+              <button
+                type="button"
+                onClick={cancelRequest}
+                className="shrink-0 rounded-[3px] border border-rule px-2.5 py-1 text-[12px] text-ink-soft transition-colors duration-150 hover:border-clay/60 hover:bg-clay-wash hover:text-clay focus-visible:focus-ring"
+              >
+                Stop
+              </button>
             </div>
-            <p className="eyebrow mt-6">
-              {mode === "compare"
-                ? "Retrieving provisions, contrasting each category…"
-                : "Classifying, retrieving provisions, verifying citations…"}
-            </p>
           </section>
         )}
 
@@ -298,21 +364,50 @@ export default function App() {
 
             {mode === "ask" && (
               <div role="radiogroup" aria-label="Jurisdiction" className="flex overflow-hidden rounded-[3px] border border-rule">
-                {(["india", "international"] as const).map((j) => (
-                  <button
-                    key={j}
-                    role="radio"
-                    aria-checked={jurisdiction === j}
-                    onClick={() => setJurisdiction(j)}
-                    className={`px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-                      jurisdiction === j
-                        ? "bg-indigo-dye text-paper"
-                        : "bg-paper text-ink-faint hover:text-ink"
-                    }`}
-                  >
-                    {j === "india" ? "India" : "International"}
-                  </button>
-                ))}
+                {(["india", "international"] as const).map((j) => {
+                  // International is real plumbing with an empty corpus: the
+                  // request is validated, routed and honestly refused. Showing
+                  // it as ordinarily selectable invites a click that can only
+                  // disappoint, so it is visibly unavailable — hatched, not
+                  // merely greyed — and says why on hover. Still keyboard
+                  // reachable and still announced, because a disabled control
+                  // the user cannot discover is worse than one they can.
+                  const unavailable = j === "international";
+                  const selected = jurisdiction === j;
+                  return (
+                    <button
+                      key={j}
+                      role="radio"
+                      aria-checked={selected}
+                      aria-disabled={unavailable}
+                      title={
+                        unavailable
+                          ? "International coverage is not available yet — the corpus holds Indian law only."
+                          : "Answer from Indian law"
+                      }
+                      onClick={() => {
+                        if (!unavailable) setJurisdiction(j);
+                      }}
+                      className={`relative px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+                        selected
+                          ? "bg-indigo-dye text-paper"
+                          : unavailable
+                            ? "cursor-not-allowed bg-paper-deep text-ink-faint/60"
+                            : "bg-paper text-ink-faint hover:text-ink"
+                      }`}
+                      style={
+                        unavailable && !selected
+                          ? {
+                              backgroundImage:
+                                "repeating-linear-gradient(135deg, transparent 0 5px, rgba(138,129,117,0.16) 5px 6px)",
+                            }
+                          : undefined
+                      }
+                    >
+                      {j === "india" ? "India" : "International"}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -344,13 +439,31 @@ export default function App() {
               className="min-h-[2.75rem] w-full resize-none bg-transparent px-3 py-2 font-serif text-[15px] leading-relaxed text-ink placeholder:text-ink-faint/70 focus:outline-none"
             />
             <div className="flex items-center justify-between gap-3 border-t border-rule px-3 py-1.5">
-              <span className="eyebrow normal-case tracking-normal">
-                Information, not legal advice
-              </span>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="eyebrow normal-case tracking-normal">
+                  Information, not legal advice
+                </span>
+                {/* The system records what it DECIDED either way — that is what
+                    makes it auditable. This governs only whether the question
+                    text itself is kept, which is the one field that is personal
+                    data. Off by default. */}
+                <label
+                  className="hidden cursor-pointer select-none items-center gap-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink-soft sm:flex"
+                  title="Keep the text of your question in this machine's local audit log. The system always records what it decided, without your question text."
+                >
+                  <input
+                    type="checkbox"
+                    checked={logConsent}
+                    onChange={(e) => setLogConsent(e.target.checked)}
+                    className="h-3 w-3 accent-indigo-dye"
+                  />
+                  Save my question text
+                </label>
+              </div>
               <button
                 onClick={() => submit(input)}
                 disabled={loading || !input.trim()}
-                className="rounded-[3px] bg-ink px-4 py-1.5 text-[13px] font-medium text-paper transition-opacity disabled:opacity-35"
+                className="rounded-[3px] bg-ink px-4 py-1.5 text-[13px] font-medium text-paper transition-all duration-150 hover:bg-ink/90 focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-ink"
               >
                 {loading ? "Consulting…" : mode === "compare" ? "Compare" : "Ask"}
               </button>

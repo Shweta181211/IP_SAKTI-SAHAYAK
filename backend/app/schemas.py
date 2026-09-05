@@ -9,7 +9,14 @@ from enum import Enum
 
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+
+# Input bounds, shared by the request models and their validators.
+# History entries are user text heading for an LLM prompt, exactly like
+# `question`, so they get the same per-item ceiling.
+MAX_QUESTION_CHARS = 2000
+HISTORY_TURNS = 8
 
 
 class Category(str, Enum):
@@ -202,6 +209,16 @@ class Answer(BaseModel):
     # the reasoning underneath, not four paragraphs to read before they know
     # whether the answer was yes or no.
     headline: str | None = None
+    # Citations backing the headline specifically. The headline is the sentence
+    # users actually read, and it used to be the ONE piece of model prose that
+    # bypassed the citation guard entirely - steps get their content replaced
+    # when nothing survives validation, the headline was passed through verbatim.
+    # It is now validated on the same allowed set as the steps.
+    headline_citation_ids: list[str] = Field(default_factory=list)
+    # True when the headline could not be tied to any verified source. The UI
+    # marks it as an unsourced summary rather than dropping it, because a
+    # correct one-line answer is still useful - it just must not LOOK sourced.
+    headline_unsourced: bool = False
     confidence: ConfidenceLevel | None = None
     confidence_label: str | None = None
     confidence_score: float | None = None
@@ -223,6 +240,23 @@ class Answer(BaseModel):
     # than swallowed: it is evidence the guard is doing its job.
     rejected_citation_ids: list[str] = Field(default_factory=list)
 
+    # Set when a supporting step ran in a degraded mode - today, when query
+    # expansion could not run. Expansion is what bridges "can my churna be
+    # patented?" to the statute's own wording, and without it the flagship
+    # benchmark does not retrieve Section 3(p) at all. It used to fail silently,
+    # so a rate-limited request answered from the wrong provisions while looking
+    # completely normal. Now it is visible in the response and on screen.
+    search_degraded: bool = False
+    degraded_reason: str | None = None
+
+    # A path to a human IP facilitator, offered only when the user has a real
+    # legal need this system cannot meet - see escalation.py for why the
+    # negative cases (too_vague, out_of_scope, gate_unavailable) matter as much
+    # as the positive ones. An offer on every answer is noise people learn to
+    # ignore.
+    escalate: bool = False
+    escalation_reason: str | None = None
+
     disclaimer: str = (
         "This is information, not legal advice. It cites primary legal sources "
         "but is not a substitute for a qualified IP practitioner."
@@ -237,18 +271,50 @@ class QueryRequest(BaseModel):
     # still returning HTTP 200. Stripping happens before min_length is applied,
     # so a whitespace-only question is now rejected at the API boundary.
     question: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=MAX_QUESTION_CHARS)
     ]
     # Earlier questions in this conversation, oldest first. The API stays
     # stateless - the client owns the transcript - but a follow-up like "what
     # about trademarking it?" is meaningless alone, so the server rewrites it
-    # into a standalone question before retrieving. See generation.contextualize.
-    history: list[str] = Field(default_factory=list, max_length=8)
+    # into a standalone question before retrieving. See generation.contextualise.
+    #
+    # This was `max_length=8`, which REJECTED a longer transcript with a 422.
+    # The client sends every prior turn, so any session that ran past eight
+    # questions - or resumed a stored one - started failing outright, showing
+    # the user a raw Pydantic validation string. Surplus history is not a client
+    # error: it is context we simply do not need. So it is truncated instead.
+    history: list[str] = Field(default_factory=list)
     # Present and validated from day one so the frontend toggle is real plumbing.
     # Only "india" is served today; "international" returns a clear 501-style
     # abstention rather than pretending, because the corpus has no treaty texts.
     jurisdiction: str = Field(default="india", pattern="^(india|international)$")
     top_k: int = Field(default=12, ge=1, le=20)
+    # Consent to retain the QUESTION TEXT in the audit log. Defaults to False:
+    # the operational record that makes the system auditable carries no user
+    # content at all, so keeping the text is a separate choice the user makes,
+    # not a side effect of asking. See audit.py.
+    log_consent: bool = False
+
+    @field_validator("history")
+    @classmethod
+    def _bound_history(cls, value: list[str]) -> list[str]:
+        """Keep the most recent turns, and bound each one, without rejecting.
+
+        Two separate limits, for two separate reasons:
+
+        * `HISTORY_TURNS` - only the last few turns carry usable context, and
+          the contextualisation prompt already reads just the final four. Older
+          turns cost prompt tokens and add stale subject matter.
+        * `MAX_QUESTION_CHARS` - each entry is user-controlled text that lands
+          in an LLM prompt. The `question` field has always been capped; history
+          entries were not capped at all, so a client could send unbounded text
+          through the same path.
+
+        Blank entries are dropped: they contribute nothing and would waste a
+        numbered slot in the prompt.
+        """
+        cleaned = [" ".join(str(item).split())[:MAX_QUESTION_CHARS] for item in value]
+        return [item for item in cleaned if item][-HISTORY_TURNS:]
 
 
 class HealthResponse(BaseModel):
@@ -259,6 +325,9 @@ class HealthResponse(BaseModel):
     embed_model: str
     generation_model: str
     anchor_problems: list[str] = Field(default_factory=list)
+    # Aggregate of the local audit trail, so auditability is demonstrable rather
+    # than asserted. Counts only - never question text.
+    audit: dict = Field(default_factory=dict)
 
 
 class CompareRequest(BaseModel):
@@ -267,6 +336,7 @@ class CompareRequest(BaseModel):
     product: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=3, max_length=1000)
     ]
+    log_consent: bool = False
 
 
 class ComparisonResult(BaseModel):
@@ -277,6 +347,11 @@ class ComparisonResult(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     abstained: bool = False
     abstention_message: str | None = None
+    # Same meaning as on Answer. Carried here too because a guard that exists on
+    # one path and not the other is how inconsistencies become bugs - the raw
+    # chunk-id stripping lived only in comparison.py for exactly that reason.
+    search_degraded: bool = False
+    degraded_reason: str | None = None
     disclaimer: str = (
         "This is information, not legal advice. It cites primary legal sources "
         "but is not a substitute for a qualified IP practitioner."

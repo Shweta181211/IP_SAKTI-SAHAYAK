@@ -11,11 +11,13 @@ interface Props {
 // Three states, three meanings — mapped onto the palette's existing semantics
 // rather than a traffic light. Neem already means "verified"; clay already
 // means "limits". Reusing them keeps the colour vocabulary honest.
-const STYLES: Record<ConfidenceLevel, { dot: string; text: string; bg: string }> = {
-  high: { dot: "bg-neem", text: "text-neem", bg: "bg-neem-wash" },
-  moderate: { dot: "bg-haldi", text: "text-haldi", bg: "bg-haldi-wash" },
-  limited: { dot: "bg-clay", text: "text-clay", bg: "bg-clay-wash" },
+const STYLES: Record<ConfidenceLevel, { dot: string; text: string; bg: string; filled: number }> = {
+  high: { dot: "bg-neem", text: "text-neem", bg: "bg-neem-wash", filled: 3 },
+  moderate: { dot: "bg-haldi", text: "text-haldi", bg: "bg-haldi-wash", filled: 2 },
+  limited: { dot: "bg-clay", text: "text-clay", bg: "bg-clay-wash", filled: 1 },
 };
+
+const METER_SEGMENTS = 3;
 
 /**
  * How well-supported the answer is — and, on click, exactly why.
@@ -38,13 +40,34 @@ export function Confidence({ level, label, score, reasons }: Props) {
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden />
         <span className={`eyebrow ${style.text}`}>{label}</span>
-        {score !== null && (
-          <span className="ref text-ink-faint">{Math.round(score * 100)}%</span>
-        )}
+        <span className="sr-only">
+          {label}
+          {score !== null ? ` (internal score ${score.toFixed(2)}, uncalibrated)` : ""}
+        </span>
+        {/* An ordinal meter, NOT a percentage.
+            This used to render `Math.round(score * 100)%` - "95%" - which is
+            precisely the false precision schemas.py rejects when it calls these
+            "three coarse buckets, not a percentage". The underlying score is a
+            weighted blend of citation survival, source breadth and retriever
+            agreement, and it has never been calibrated against labelled data.
+            "95%" invites a reader to hear "95% likely correct", which is a
+            claim we cannot support. Three segments say "more than moderate,
+            less than certain" and claim nothing further. */}
+        <span className="flex items-center gap-[3px]" aria-hidden>
+          {Array.from({ length: METER_SEGMENTS }, (_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-3 rounded-[1px] transition-colors duration-200 ${
+                i < style.filled ? style.dot : "bg-rule"
+              }`}
+            />
+          ))}
+        </span>
         <span className="eyebrow ml-auto text-ink-faint">{open ? "hide" : "why?"}</span>
       </button>
 
-      {open && (
+      <div className="reveal" data-open={open} aria-hidden={!open}>
+        <div>
         <ul className="mt-2 space-y-1 border-t border-rule/60 pt-2">
           {reasons.map((reason) => (
             <li key={reason} className="flex gap-1.5 text-[12px] leading-relaxed text-ink-soft">
@@ -58,7 +81,8 @@ export function Confidence({ level, label, score, reasons }: Props) {
             out-of-scope questions.
           </li>
         </ul>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

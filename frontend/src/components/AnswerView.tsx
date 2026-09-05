@@ -4,6 +4,7 @@ import { CitationCard } from "./CitationCard";
 import { ReasoningTrail, buildCitationIndex } from "./ReasoningTrail";
 import { Confidence } from "./Confidence";
 import { AbstentionPanel, Verdict } from "./Verdict";
+import { Escalate } from "./Escalate";
 
 interface Props {
   answer: Answer;
@@ -109,16 +110,43 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                 message={answer.abstention_message}
                 clarifying={answer.clarifying_question}
               />
+              {answer.escalate && <Escalate reason={answer.escalation_reason} />}
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
               <div className="space-y-6">
+                {/* Retrieval ran narrowed. Said plainly and above the answer,
+                    because the risk is precisely that the answer looks normal:
+                    without query expansion the flagship benchmark does not
+                    retrieve Section 3(p) at all, yet still answers confidently
+                    from neighbouring provisions. */}
+                {answer.search_degraded && answer.degraded_reason && (
+                  <div className="border-l-[3px] border-clay bg-clay-wash px-4 py-3">
+                    <p className="eyebrow text-clay">Search was narrowed</p>
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                      {answer.degraded_reason}
+                    </p>
+                  </div>
+                )}
+
                 {/* Conclusion first. The trail below is the working, for anyone
                     who wants to check it. */}
                 {answer.headline && (
-                  <p className="font-serif text-[19px] font-medium leading-snug text-ink">
-                    {answer.headline}
-                  </p>
+                  <div>
+                    <p className="font-serif text-[19px] font-medium leading-snug text-ink">
+                      {answer.headline}
+                    </p>
+                    {/* The headline is the sentence most people read, and it
+                        used to be the only model output that reached them with
+                        no citation check. It is now validated like a step; when
+                        nothing backs it, it stays (a correct summary is still
+                        useful) but must not read as sourced. */}
+                    {answer.headline_unsourced && (
+                      <p className="eyebrow mt-1.5 text-ink-faint">
+                        Summary — the cited findings are in the steps below
+                      </p>
+                    )}
+                  </div>
                 )}
                 {answer.confidence && (
                   <Confidence
@@ -165,6 +193,16 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                   </div>
                 )}
               </aside>
+            </div>
+          )}
+
+          {/* An answered question can still warrant a human: `escalate` is set
+              when confidence came out limited, i.e. the answer stands and is
+              cited but rests on thin support. Placed below the trail so it
+              reads as a next step, not as a warning about what you just read. */}
+          {!answer.abstained && answer.escalate && (
+            <div className="max-w-3xl">
+              <Escalate reason={answer.escalation_reason} />
             </div>
           )}
 

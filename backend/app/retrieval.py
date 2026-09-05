@@ -103,6 +103,10 @@ class RetrievalResult:
     dense_best_distance: float | None
     lexical_best_score: float | None
     abstention: AbstentionKind = AbstentionKind.NONE
+    # Carried through from Expansion so the caller can surface it on the answer
+    # without needing to know how retrieval was assembled.
+    degraded: bool = False
+    degraded_reason: str | None = None
 
     @property
     def allowed_ids(self) -> list[str]:
@@ -121,26 +125,61 @@ QUESTION: {question}
 Return ONLY JSON: {{"queries": ["...", "...", "..."]}}"""
 
 
-def expand_query(question: str) -> list[str]:
+@dataclass
+class Expansion:
+    """Query formulations, plus whether producing them actually worked.
+
+    The `ok` flag is the point of this type. Expansion used to fail soft and
+    return `[question]`, indistinguishable from a question that simply needed no
+    rephrasing - so a rate-limited request quietly searched with half the recall
+    it was designed for.
+
+    That is not a cosmetic degradation. Measured on the official benchmark with
+    expansion disabled, `DOC020_chunk_116` - the Section 3(p) chunk the whole
+    flagship answer rests on - does not appear in the top 12 at all; retrieval
+    returns patent-office *procedure* instead. The system still answered, with
+    real citations and a confident badge, from the wrong provisions.
+
+    The relevance gate already fails closed for exactly this reason. Expansion
+    stays soft, because unlike the jurisdiction check its absence degrades
+    recall rather than correctness - but it must be *visible*, so the caller can
+    tell the user the search was narrowed.
+    """
+
+    queries: list[str]
+    ok: bool = True
+    reason: str | None = None
+
+
+def expand_query(question: str) -> Expansion:
     """Restate the question in statutory vocabulary to bridge the wording gap.
 
-    Returns the original question first, then any expansions. Failure is
-    non-fatal: we simply search with what the user typed.
+    Returns the original question first, then any expansions, and reports
+    whether the expansion step succeeded.
     """
     from .llm import LLMUnavailable, complete_json
 
     try:
         data = complete_json(EXPANSION_PROMPT.format(question=question), max_tokens=300)
     except LLMUnavailable as exc:
-        logger.warning("Query expansion unavailable (%s); using original only", exc)
-        return [question]
+        logger.warning("Query expansion unavailable (%s); searching on the question alone", exc)
+        return Expansion(
+            queries=[question],
+            ok=False,
+            reason=(
+                "The search-expansion step was temporarily unavailable, so this answer was "
+                "found using your wording alone. Statutory wording often differs from "
+                "everyday wording, so a more directly applicable provision may exist. "
+                "Please re-ask in a moment to get the full search."
+            ),
+        )
 
     queries = [question]
     for item in (data.get("queries") or [])[:3]:
         text = str(item).strip()
         if text and text.lower() != question.lower():
             queries.append(text)
-    return queries
+    return Expansion(queries=queries)
 
 
 def _dense_candidates(question: str, jurisdiction: str) -> list[tuple[str, float]]:
@@ -167,7 +206,7 @@ def retrieve(
     jurisdiction: str = "national",
     use_llm_gate: bool = True,
     expand: bool = True,
-    queries: list[str] | None = None,
+    expansion: Expansion | None = None,
 ) -> RetrievalResult:
     """Retrieve evidence for a question, and judge whether it is enough."""
     # Cheapest guard first: a fragment cannot be retrieved against, and bailing
@@ -180,10 +219,14 @@ def retrieve(
             None, None, AbstentionKind.TOO_VAGUE,
         )
 
+    dense: list[tuple[str, float]] = []
+    lexical: list[tuple[str, float]] = []
+
     # Callers may pass precomputed expansions (see generation.py, which runs
     # expansion concurrently with classification to save a round trip).
-    if queries is None:
-        queries = expand_query(question) if expand else [question]
+    if expansion is None:
+        expansion = expand_query(question) if expand else Expansion([question])
+    queries = expansion.queries
     if len(queries) > 1:
         logger.info("Expanded query into %d formulations", len(queries))
 
@@ -194,14 +237,20 @@ def retrieve(
     lexical_rank: dict[str, int] = {}
     fused: dict[str, float] = {}
 
-    dense = _dense_candidates(question, jurisdiction)
-    lexical = _lexical_candidates(question)
+    # queries[0] IS the user's question, so searching it separately for the
+    # threshold reading and then again inside the loop ran one redundant
+    # sentence-transformer encode and one redundant BM25 scan on every request.
+    # Compute each formulation once and reuse the first for the thresholds.
+    for position, q in enumerate(queries):
+        dense_hits = _dense_candidates(q, jurisdiction)
+        lexical_hits = _lexical_candidates(q)
+        if position == 0:
+            dense, lexical = dense_hits, lexical_hits
 
-    for q in queries:
-        for cid, rank in ((c, i) for i, (c, _) in enumerate(_dense_candidates(q, jurisdiction))):
+        for rank, (cid, _) in enumerate(dense_hits):
             fused[cid] = fused.get(cid, 0.0) + 1.0 / (RRF_K + rank + 1)
             dense_rank[cid] = min(dense_rank.get(cid, rank), rank)
-        for cid, rank in ((c, i) for i, (c, _) in enumerate(_lexical_candidates(q))):
+        for rank, (cid, _) in enumerate(lexical_hits):
             fused[cid] = fused.get(cid, 0.0) + 1.0 / (RRF_K + rank + 1)
             lexical_rank[cid] = min(lexical_rank.get(cid, rank), rank)
 
@@ -236,7 +285,10 @@ def retrieve(
     sufficient, reason, kind = assess_sufficiency(
         question, dense_best, lexical_best, evidence, use_llm_gate=use_llm_gate
     )
-    return RetrievalResult(evidence, sufficient, reason, dense_best, lexical_best, kind)
+    return RetrievalResult(
+        evidence, sufficient, reason, dense_best, lexical_best, kind,
+        degraded=not expansion.ok, degraded_reason=expansion.reason,
+    )
 
 
 # Measured in tests/probe_phase3.py. Both signals were tested as abstention
@@ -264,6 +316,8 @@ The corpus contains ONLY **Indian** law on Ayurveda: intellectual property (pate
 - "none" - not a legal question at all (a recipe, business advice, small talk). Jurisdiction does not apply.
 
 **2. Subject matter.** Do the passages bear on the question at all? This is a scope check, not a completeness check: answer true if any provision is relevant even partially, since a later stage refuses any claim it cannot cite. Answer false only when the question falls outside the corpus's subject matter entirely.
+
+**Passages that CONTRADICT the question are relevant.** A question can assume something the law does not provide - "cite the section that ALLOWS patenting a classical formulation", "which rule exempts me from NBA approval". The correct response is to state what the law actually says and cite it, so `relevant` is **true** whenever the passages settle the point, including when they settle it against the questioner. "There is no such provision, and here is the one that governs instead" is an answer, not a refusal. Answering false here would abstain on precisely the questions where correcting the user matters most.
 
 QUESTION: {question}
 

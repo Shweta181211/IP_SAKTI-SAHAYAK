@@ -12,6 +12,17 @@ testing. Every UI state the app can render has a case here:
 
 Run the backend first:
     .venv\\Scripts\\python.exe -m uvicorn app.main:app --port 8000   (from backend/)
+
+LATENCY NUMBERS ARE ONLY MEANINGFUL AGAINST A FRESHLY RESTARTED BACKEND.
+The answer cache is in-process, so a question anyone asked earlier - including a
+previous run of this suite - comes back in ~0.0s and the timing says nothing at
+all. Any sub-second answer below is flagged as cached rather than reported as
+fast, because a suite that quietly congratulates itself on cache hits is worse
+than one that does not time anything.
+
+These suites also assume rate limiting is off, since a warm cache lets them fire
+far faster than any person would:
+    IPSAKTI_RATE_LIMIT_QUERY=0 IPSAKTI_RATE_LIMIT_COMPARE=0
 """
 
 from __future__ import annotations
@@ -101,7 +112,10 @@ def main() -> int:
            "in prose" if "3(p)" in texts else "on citation card")
     record("names TKDL as defensive route", "tkdl" in texts or "traditional knowledge digital" in texts)
     record("states Indian-law-only jurisdiction", "india" in answer["steps"][3]["content"].lower())
-    print(f"  (latency {elapsed:.1f}s)")
+    # A cold answer is 10-30s on the free endpoint. Anything near zero came from
+    # the cache and must not be read as a performance result.
+    cached = " - CACHED, restart the backend to time this honestly" if elapsed < 1.0 else ""
+    print(f"  (latency {elapsed:.1f}s{cached})")
 
     print("\n" + "=" * 74 + "\n ABSTENTION PATHS (each renders a different UI state)\n" + "=" * 74)
     for label, question, expected_kind in [
@@ -145,6 +159,64 @@ def main() -> int:
         print(f"  {len(a['citations'])} sources in {secs:.1f}s — {q[:52]}…")
     record("all citations carry act name + verbatim excerpt", all_valid,
            f"{total_citations} checked")
+
+    # ---------------------------------------------------------------- headline
+    # The headline used to be the one piece of model prose that reached the user
+    # with no citation check. It is now validated on the same allowed set as the
+    # steps, and flagged when nothing backs it.
+    print("\n" + "=" * 74 + "\n HEADLINE IS CITATION-CHECKED\n" + "=" * 74)
+    answer, _ = ask("Can a classical churna from a First Schedule text be patented?")
+    cited = {c["chunk_id"] for c in answer["citations"]}
+    head_ids = set(answer.get("headline_citation_ids") or [])
+    record("headline citations resolve to citation cards", head_ids <= cited,
+           f"orphans: {head_ids - cited or 'none'}")
+    record("headline_unsourced agrees with its citation list",
+           answer.get("headline_unsourced") == (not head_ids),
+           f"unsourced={answer.get('headline_unsourced')}, ids={len(head_ids)}")
+    record("a healthy run is not marked degraded",
+           answer.get("search_degraded") is False)
+
+    # ---------------------------------------------------------------- /compare
+    # Added because nothing tested this endpoint at all - see
+    # COMPARISON_REPORT.md 6.9. It is user-facing and validates citations
+    # exactly like /query, so the same guarantees must hold.
+    print("\n" + "=" * 74 + "\n CATEGORY COMPARISON (/compare)\n" + "=" * 74)
+    status, comparison = call("/compare", {
+        "product": "An ashwagandha churna made to a First Schedule formula, "
+                   "but standardised for withanolide content",
+    })
+    record("POST /compare returns 200", status == 200, str(status))
+    if status == 200 and not comparison.get("abstained"):
+        contrasts = comparison.get("contrasts") or []
+        record("compares four categories", len(contrasts) == 4, f"{len(contrasts)} returned")
+        record("every category carries a patentability verdict",
+               all(c.get("patentable") for c in contrasts))
+        record("every category carries a posture", all(c.get("posture") for c in contrasts))
+        compare_cited = {c["chunk_id"] for c in comparison.get("citations") or []}
+        contrast_ids = {i for c in contrasts for i in c.get("citation_ids") or []}
+        record("every contrast citation resolves to a card",
+               contrast_ids <= compare_cited,
+               f"orphans: {contrast_ids - compare_cited or 'none'}")
+        # Models write chunk ids into prose despite being told not to; the cards
+        # already carry them, so they are stripped before display.
+        record("no raw chunk ids leak into the prose",
+               not any("_chunk_" in c["posture"] for c in contrasts))
+        record("comparison carries the disclaimer",
+               "not legal advice" in (comparison.get("disclaimer") or ""))
+    else:
+        record("compare abstained", True, str(comparison.get("abstention_message"))[:60])
+
+    record("compare rejects a too-short product",
+           call("/compare", {"product": "ab"})[0] == 422)
+
+    # ------------------------------------------------------- routing behaviour
+    # The SPA catch-all used to swallow these and answer 200 text/html, so a
+    # mistyped endpoint looked like a success to the client.
+    print("\n" + "=" * 74 + "\n API ROUTING\n" + "=" * 74)
+    record("unknown /api path returns 404", call("/api/nonexistent")[0] == 404)
+    record("long history is truncated, not rejected",
+           call("/query", {"question": "What is ABS and when do I need NBA approval?",
+                           "history": [f"earlier question {i}" for i in range(20)]})[0] == 200)
 
     print("\n" + "=" * 74)
     failed = [r for r in results if r[0] == FAIL]

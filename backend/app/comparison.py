@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .citations import citations_for, validate_ids
+from .citations import citations_for, strip_chunk_ids, validate_ids
 from .config import settings
 from .llm import LLMUnavailable, complete_json
 from .retrieval import expand_query, is_too_vague, retrieve
@@ -110,8 +110,8 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
     # A comparison is inherently about patentability and regulatory pathway, so
     # bias the search toward the provisions that decide those, using the product
     # description the user actually gave.
-    queries = expand_query(product)
-    result = retrieve(product, top_k=top_k, queries=queries)
+    expansion = expand_query(product)
+    result = retrieve(product, top_k=top_k, expansion=expansion)
 
     if not result.sufficient:
         return ComparisonResult(
@@ -161,8 +161,7 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
             logger.warning("Comparison rejected unverifiable ids: %s", rejected)
         # Models mention ids in prose despite being told not to; the citation
         # cards already carry them, and "DOC003_chunk_234 shows..." is noise.
-        posture = _CHUNK_ID.sub("the cited source", str(raw.get("posture") or "")).strip()
-        posture = re.sub(r"\s{2,}", " ", posture)
+        posture = strip_chunk_ids(str(raw.get("posture") or ""))
         if not posture:
             posture = "The retrieved sources do not say enough about this category to compare it."
             kept = []
@@ -181,5 +180,7 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
         product=product,
         contrasts=contrasts,
         citations=citations_for(all_cited),
+        search_degraded=result.degraded,
+        degraded_reason=result.degraded_reason,
         disclaimer=settings.disclaimer,
     )
