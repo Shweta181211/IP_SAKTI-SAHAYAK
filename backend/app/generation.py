@@ -103,16 +103,39 @@ _CACHE_LOCK = threading.Lock()
 CACHE_SIZE = 64
 
 
-def _cache_key(question: str, top_k: int) -> tuple[str, int]:
-    return (" ".join(question.lower().split()), top_k)
+def _cache_key(question: str, top_k: int, jurisdiction: str) -> tuple[str, int, str]:
+    """Cache identity for an answer.
+
+    `jurisdiction` is part of the key, and leaving it out was a real bug: the
+    same question asked nationally and then internationally returned the FIRST
+    answer both times, so the International toggle would have looked like it was
+    working while silently serving Indian law under an international label -
+    exactly the conflation the problem statement forbids. The jurisdiction
+    suites did not catch it because they clear the cache between runs; the
+    comparison feature, which asks both within one request, would have.
+    """
+    return (" ".join(question.lower().split()), top_k, jurisdiction)
 
 
 def clear_cache() -> None:
     with _CACHE_LOCK:
         _CACHE.clear()
 
-ANSWER_PROMPT = """You are an assistant for Indian law on Ayurveda: intellectual property, \
-drug regulation, biodiversity/ABS and pharmacopoeial standards. You give information, never \
+# The corpus that answers changes with the toggle, and step 4 is a statement
+# ABOUT that corpus - hard-coding "Indian law only" there made it false in
+# international mode, which is exactly the conflation the problem statement
+# forbids. Both the framing and the jurisdiction note are parameters.
+NATIONAL_FRAMING = """You are an assistant for **Indian** law on Ayurveda: intellectual property, drug regulation, biodiversity/ABS and pharmacopoeial standards. Every passage below is Indian law."""
+
+INTERNATIONAL_FRAMING = """You are an assistant for the **international** instruments bearing on Ayurveda and traditional knowledge: the WTO TRIPS Agreement, the Convention on Biological Diversity and its Nagoya Protocol, and WIPO treaties (GRATK, PCT, Madrid, Hague, Budapest). Every passage below is international instrument text, NOT Indian law.
+
+You have no Indian statute in front of you. Do not state the Indian position, do not name Indian provisions such as Section 3(p) of the Patents Act, and do not say what India specifically requires - even if you happen to know it. Where the honest answer is that these instruments set a framework each state implements in its own law, say exactly that."""
+
+NATIONAL_JURISDICTION_STEP = """state that this answers the position under **Indian law only**, and that the international instruments are a separate corpus the user can switch to"""
+
+INTERNATIONAL_JURISDICTION_STEP = """state that this answers the position under the **international instruments only**, that such instruments bind states rather than applying to a product directly, and that the Indian domestic position is a separate corpus the user can switch to"""
+
+ANSWER_PROMPT = """{framing} You give information, never \
 legal advice.
 
 Answer STRICTLY from the numbered evidence below. You have no other knowledge of the law. \
@@ -149,8 +172,7 @@ mechanism, name it and say how it applies here. "The evidence provides no route"
 when the evidence genuinely names none; it is not a way to restate step 2. A bar on one route \
 usually implies that a different one is the answer - that different route is what this step is \
 for.
-4. **Jurisdiction note** - state that this answers the position under **Indian law only**, \
-and that international regimes are outside this corpus.
+4. **Jurisdiction note** - {jurisdiction_step}.
 
 ## Rules that are not negotiable
 
@@ -282,9 +304,21 @@ def _build_steps(
 
 
 def answer_question(
-    question: str, top_k: int | None = None, history: list[str] | None = None
+    question: str,
+    top_k: int | None = None,
+    history: list[str] | None = None,
+    jurisdiction: str = "national",
 ) -> Answer:
-    """Classify, retrieve, generate and validate. The whole core loop."""
+    """Classify, retrieve, generate and validate. The whole core loop.
+
+    `jurisdiction` selects which corpus answers, and the two are kept strictly
+    apart: retrieval filters both its dense and lexical halves on it, and the
+    classification anchor is withheld outside the national corpus (see below).
+    The problem statement requires the two answer-sets to be "visibly separate"
+    and "never conflated", and the enforcement point is the evidence set - once
+    a chunk from the wrong system is in the prompt, no amount of careful wording
+    downstream keeps it out of the answer.
+    """
     top_k = top_k or settings.top_k
 
     # Small talk is answered directly. This runs before the vagueness guard,
@@ -307,7 +341,7 @@ def answer_question(
     question = contextualise(question, history or [])
     resolved = question if question != asked else None
 
-    key = _cache_key(question, top_k)
+    key = _cache_key(question, top_k, jurisdiction)
     with _CACHE_LOCK:
         cached = _CACHE.get(key)
         if cached is not None:
@@ -329,7 +363,7 @@ def answer_question(
     # On a free model that is several seconds of visible demo latency.
     with ThreadPoolExecutor(max_workers=2) as pool:
         classification_future = pool.submit(classify, question)
-        expansion_future = pool.submit(expand_query, question)
+        expansion_future = pool.submit(expand_query, question, jurisdiction)
         classification = classification_future.result()
         expansion = expansion_future.result()
 
@@ -338,7 +372,8 @@ def answer_question(
     # question governed by US law wastes the user's turn on a question we were
     # never going to answer. Establish that we can answer at all, then refine.
     category = classification.category if classification.is_formulation else None
-    result = retrieve(question, category=category, top_k=top_k, expansion=expansion)
+    result = retrieve(question, category=category, top_k=top_k, expansion=expansion,
+                      jurisdiction=jurisdiction)
 
     if not result.sufficient:
         return _abstention_answer(
@@ -367,7 +402,11 @@ def answer_question(
             "and how each is treated. Do not pick one silently."
         )
 
+    international = jurisdiction == "international"
     prompt = ANSWER_PROMPT.format(
+        framing=INTERNATIONAL_FRAMING if international else NATIONAL_FRAMING,
+        jurisdiction_step=(INTERNATIONAL_JURISDICTION_STEP if international
+                           else NATIONAL_JURISDICTION_STEP),
         evidence=_evidence_block(result),
         classification=classification_block,
         question=question,
@@ -392,7 +431,17 @@ def answer_question(
     # was previously rejected as unverifiable purely because it came from the
     # classifier rather than from retrieval.
     allowed = list(result.allowed_ids)
-    if classification.defining_source_id and classification.defining_source_id not in allowed:
+    # The classifier's defining source is a chunk of the INDIAN Drugs and
+    # Cosmetics Act - that is what the six categories are defined by. Adding it
+    # to the allowed set is right for a national answer and is conflation in an
+    # international one: it would let a treaty answer cite Indian statute as
+    # authority. The category is still used to steer retrieval; only its source
+    # chunk is withheld.
+    if (
+        jurisdiction == "national"
+        and classification.defining_source_id
+        and classification.defining_source_id not in allowed
+    ):
         allowed.append(classification.defining_source_id)
 
     steps, rejected, unsupported_provisions = _build_steps(data.get("steps") or [], allowed)
@@ -459,6 +508,7 @@ def answer_question(
     answer = Answer(
         question=asked,
         resolved_question=resolved,
+        jurisdiction=jurisdiction,
         headline=headline,
         headline_citation_ids=headline_ids,
         headline_unsourced=bool(headline) and not headline_ids,

@@ -1,50 +1,71 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
   CancelledError,
   askQuestion,
   compareCategories,
-  fetchHealth,
+  compareJurisdictions,
+  fetchNextSteps,
 } from "./api";
 import { AnswerView } from "./components/AnswerView";
 import { ComparisonView } from "./components/ComparisonView";
+import { JurisdictionCompareView } from "./components/JurisdictionCompareView";
+import { NextStepsPanel } from "./components/NextStepsPanel";
+import { JurisdictionExpander } from "./components/JurisdictionExpander";
 import { useVoiceInput } from "./useVoiceInput";
 import { SessionList } from "./components/SessionList";
-import { useSessions } from "./useSessions";
-import { EXAMPLES, FEATURE_CHIPS, STRINGS, type UiLang } from "./i18n";
-import type { Health } from "./types";
+import { useSessions, type Turn } from "./useSessions";
+import { printBriefing, rememberAnswer } from "./printBriefing";
+import { useShell } from "./Shell";
+import { EXAMPLES, FEATURE_CHIPS, STRINGS } from "./i18n";
+import type { NextSteps, ResponseStyle } from "./types";
 
 type Jurisdiction = "india" | "international";
+// The standalone "compare jurisdictions" mode is gone: the same comparison is
+// now reached progressively from an ordinary answer, which costs less and
+// reads better. Two routes to one feature is worse than one good route.
 type Mode = "ask" | "compare";
 
 // `Turn` and transcript persistence now live in useSessions.ts, which keeps one
 // transcript per named consultation rather than a single anonymous blob that
 // "End session" destroyed.
-const CONSENT_KEY = "ipsakti.logconsent.v1";
-const UI_LANG_KEY = "ipsakti.uilang.v1";
+const STYLE_KEY = "ipsakti.style.v1";
 
-export default function App() {
+/** `lockedMode` is the mode this route opens in. It is a starting point, not a
+ *  lock: the rail can still switch, because a user who lands on /compare and
+ *  then wants to ask a question should not have to find the right URL. */
+export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<Mode>("ask");
+  const [mode, setMode] = useState<Mode>(lockedMode);
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  // Language, log consent and health are session-wide and owned by Root, so
+  // the header and this page cannot disagree about them. `setUiLang` is not
+  // taken: the language switch lives in the Shell header and nowhere else, so
+  // there is exactly one control for it on screen.
+  const { uiLang, logConsent, setLogConsent, health, healthChecked } = useShell();
   const [jurisdiction, setJurisdiction] = useState<Jurisdiction>("india");
-  const [uiLang, setUiLang] = useState<UiLang>(() => {
-    try {
-      return (localStorage.getItem(UI_LANG_KEY) as UiLang) || "en";
-    } catch {
-      return "en";
-    }
-  });
-  const [railOpen, setRailOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // Consent to retain the QUESTION TEXT in the server's audit log. Off by
   // default and remembered per browser: the operational record that makes the
   // system auditable holds no user content either way, so this is a genuine
   // choice rather than a formality. See backend/app/audit.py.
-  const [logConsent, setLogConsent] = useState<boolean>(() => {
+  // Phrasing only. Kept per browser because it is a reading preference, not a
+  // property of any one answer.
+  const [style, setStyle] = useState<ResponseStyle>(() => {
     try {
-      return localStorage.getItem(CONSENT_KEY) === "true";
+      return (localStorage.getItem(STYLE_KEY) as ResponseStyle) || "legal";
     } catch {
-      return false;
+      return "legal";
     }
   });
+  // Next steps are fetched per turn, on request. Keyed by turn id so each
+  // answer keeps its own, and nothing is fetched for turns nobody asked about.
+  const [nextSteps, setNextSteps] = useState<Record<number, NextSteps>>({});
+  const [stepsLoading, setStepsLoading] = useState<number | null>(null);
+  const [busySide, setBusySide] = useState<number | null>(null);
+  const [busyCompare, setBusyCompare] = useState<number | null>(null);
+
   const {
     sessions,
     activeId,
@@ -56,8 +77,6 @@ export default function App() {
   } = useSessions();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [health, setHealth] = useState<Health | null>(null);
-  const [healthChecked, setHealthChecked] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Held so the Stop button can abort the in-flight request. A ref, not state:
@@ -75,27 +94,21 @@ export default function App() {
   });
 
   useEffect(() => {
-    fetchHealth().then((h) => {
-      setHealth(h);
-      setHealthChecked(true);
-    });
-  }, []);
-
-  useEffect(() => {
     try {
-      localStorage.setItem(CONSENT_KEY, String(logConsent));
-    } catch {
-      /* a remembered preference is a convenience, never a requirement */
-    }
-  }, [logConsent]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(UI_LANG_KEY, uiLang);
+      localStorage.setItem(STYLE_KEY, style);
     } catch {
       /* same */
     }
-  }, [uiLang]);
+  }, [style]);
+
+  useEffect(() => {
+    setMode(lockedMode);
+  }, [lockedMode]);
+
+  useEffect(() => {
+    const j = searchParams.get("j");
+    if (j === "india" || j === "international") setJurisdiction(j);
+  }, [searchParams]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -109,10 +122,11 @@ export default function App() {
   const pendingClarification = last?.clarifying_question ?? null;
 
   const submit = useCallback(
-    async (text: string, forceMode?: Mode) => {
+    async (text: string, forceMode?: Mode, forceJurisdiction?: Jurisdiction) => {
       const typed = text.trim();
       if (!typed || loading) return;
       const activeMode = forceMode ?? mode;
+      const activeJurisdiction = forceJurisdiction ?? jurisdiction;
 
       setInput("");
       setLoading(true);
@@ -128,8 +142,9 @@ export default function App() {
             (tn) => tn.answer!.resolved_question ?? tn.answer!.question,
           );
           const answer = await askQuestion(
-            typed, jurisdiction, history, controller.signal, logConsent,
+            typed, activeJurisdiction, history, controller.signal, logConsent, style,
           );
+          rememberAnswer(answer);
           setTurns((prev) => [...prev, { id: Date.now(), kind: "answer", answer }]);
         }
       } catch (e) {
@@ -146,8 +161,23 @@ export default function App() {
         inputRef.current?.focus();
       }
     },
-    [answerTurns, jurisdiction, loading, logConsent, mode],
+    [answerTurns, jurisdiction, loading, logConsent, mode, style],
   );
+
+  useEffect(() => {
+    const fromState = (location.state as { question?: string } | null)?.question;
+    const q = searchParams.get("q") || fromState;
+    if (!q || loading) return;
+    const token = `boot:${lockedMode}:${q}`;
+    try {
+      if (sessionStorage.getItem(token)) return;
+      sessionStorage.setItem(token, "1");
+    } catch {
+      /* a private window just means the question may repeat on reload */
+    }
+    const j = searchParams.get("j");
+    void submit(q, lockedMode, j === "international" ? "international" : undefined);
+  }, [searchParams, location.state, lockedMode, loading, submit]);
 
   function cancelRequest() {
     abortRef.current?.abort();
@@ -177,219 +207,135 @@ export default function App() {
     openSession(id);
   }
 
+  /** Fetch suggestions for one turn, on demand. The ANSWER is posted back, not
+   *  the question: this step must not retrieve, or it could introduce
+   *  obligations the answer never established. */
+  const requestNextSteps = useCallback(
+    async (turn: Turn) => {
+      if (nextSteps[turn.id] || stepsLoading === turn.id) return;
+      setStepsLoading(turn.id);
+      try {
+        const payload = turn.jurisdictionComparison
+          ? { comparison: turn.jurisdictionComparison }
+          : turn.kind === "jurisdictions"
+            ? { comparison: turn.jurisdictions }
+            : { answer: turn.answer };
+        const data = await fetchNextSteps(payload, style);
+        setNextSteps((prev) => ({ ...prev, [turn.id]: data }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not fetch suggestions.");
+      } finally {
+        setStepsLoading(null);
+      }
+    },
+    [nextSteps, stepsLoading, style],
+  );
+
+  /** Reveal the OTHER jurisdiction for a turn already answered.
+   *  A second generation, asked for explicitly — nobody pays for a side they
+   *  did not want to see. */
+  const revealOther = useCallback(
+    async (turn: Turn) => {
+      if (!turn.answer || turn.international || busySide === turn.id) return;
+      setBusySide(turn.id);
+      try {
+        const asked = turn.answer.resolved_question ?? turn.answer.question;
+        const other =
+          turn.answer.jurisdiction === "international" ? "india" : "international";
+        const otherAnswer = await askQuestion(
+          asked, other, [], undefined, logConsent, style,
+        );
+        setTurns((prev) =>
+          prev.map((tn) =>
+            tn.id === turn.id ? { ...tn, international: otherAnswer } : tn,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not fetch the other jurisdiction.");
+      } finally {
+        setBusySide(null);
+      }
+    },
+    [busySide, logConsent, setTurns, style],
+  );
+
+  /** Compare the two answers already on screen. Both are POSTed back, so this
+   *  is one synthesis call and it describes exactly what the reader can see —
+   *  not two freshly generated answers that might differ. */
+  const compareSides = useCallback(
+    async (turn: Turn) => {
+      if (!turn.answer || !turn.international || busyCompare === turn.id) return;
+      setBusyCompare(turn.id);
+      try {
+        const asked = turn.answer.resolved_question ?? turn.answer.question;
+        const isPrimaryNational = turn.answer.jurisdiction !== "international";
+        const comparison = await compareJurisdictions(asked, undefined, logConsent, {
+          national: isPrimaryNational ? turn.answer : turn.international,
+          international: isPrimaryNational ? turn.international : turn.answer,
+        });
+        setTurns((prev) =>
+          prev.map((tn) =>
+            tn.id === turn.id ? { ...tn, jurisdictionComparison: comparison } : tn,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not build the comparison.");
+      } finally {
+        setBusyCompare(null);
+      }
+    },
+    [busyCompare, logConsent, setTurns],
+  );
+
   function removeTurn(id: number) {
     setTurns((prev) => prev.filter((tn) => tn.id !== id));
   }
 
+  // Whether the treaty corpus is actually loaded, straight from /health.
+  const internationalChunks = health?.chunks_by_jurisdiction?.international ?? 0;
+  const internationalReady = internationalChunks > 0;
+
+  // If the corpus goes away between sessions (a rebuild, a fresh clone) a
+  // jurisdiction of "international" could otherwise persist in component state
+  // and send every question to an endpoint that will refuse it.
+  useEffect(() => {
+    if (healthChecked && !internationalReady && jurisdiction === "international") {
+      setJurisdiction("india");
+    }
+  }, [healthChecked, internationalReady, jurisdiction]);
+
   const askPlaceholder = pendingClarification ? t.placeholderClarify : t.placeholderAsk;
-  const statusReady = healthChecked && !!health;
-  const statusError = healthChecked && !health;
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[300px_1fr]">
-      {/* ==================== LEFT RAIL ==================== */}
-      <aside className="rail flex flex-col text-paper/90 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
-        <div className="flex items-center justify-between px-6 pt-6 lg:hidden">
-          <span className="font-serif text-[16px] font-semibold text-paper">
-            IP-SAKTI <span className="text-haldi">Sahayak</span>
-          </span>
-          <button
-            onClick={() => setRailOpen((v) => !v)}
-            className="rounded-[3px] border border-paper/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-paper/80"
-          >
-            {t.menu} {railOpen ? "▴" : "▾"}
-          </button>
-        </div>
-
-        <div className={`${railOpen ? "block" : "hidden"} px-6 pb-6 pt-6 lg:block lg:pt-7`}>
-          {/* ---- brand ---- */}
-          <div className="mb-7 hidden lg:block">
-            <svg className="brand-motif mb-2.5 h-8 w-28" viewBox="0 0 120 40" aria-hidden="true">
-              <path
-                className="motif-path"
-                d="M2 34 C 20 10, 40 10, 58 22 C 76 34, 96 34, 118 8"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-              <path className="motif-leaf" d="M20 24 C 24 16, 30 14, 34 18 C 30 22, 24 24, 20 24 Z" fill="currentColor" />
-              <path className="motif-leaf" d="M64 26 C 68 18, 74 16, 78 20 C 74 24, 68 26, 64 26 Z" fill="currentColor" />
-              <path className="motif-leaf" d="M92 18 C 96 10, 102 8, 106 12 C 102 16, 96 18, 92 18 Z" fill="currentColor" />
-            </svg>
-            <h1 className="font-serif text-[21px] font-medium leading-tight text-paper">
-              IP-SAKTI<br />Sahayak
-            </h1>
-            <p className="mt-2 max-w-[26ch] text-[12.5px] leading-relaxed text-paper/55">
-              {t.tagline}
-            </p>
-          </div>
-
-          {/* ---- consultations ---- */}
-          <SessionList
-            sessions={sessions}
-            activeId={activeId}
-            lang={uiLang}
-            labels={{
-              newConsultation: t.newConsultation,
-              consultations: t.consultations,
-              questionsCount: t.questionsCount,
-              questionCount: t.questionCount,
-              untitledSession: t.untitledSession,
-              deleteSession: t.deleteSession,
-            }}
-            onNew={newConsultation}
-            onOpen={switchSession}
-            onRemove={removeSession}
-          />
-
-          {/* ---- 1. mode ---- */}
-          <div className="border-t border-paper/10 py-4">
-            <div className="mb-2 flex items-baseline gap-2 text-[13px] font-medium text-paper">
-              <span className="font-serif text-haldi">1</span>
-              <span>{t.sectionMode}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                ["ask", t.modeAsk],
-                ["compare", t.modeCompare],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === value}
-                  onClick={() => setMode(value)}
-                  className="rail-card rounded-[3px] border border-paper/15 bg-white/[0.04] px-2.5 py-3 text-left text-[12px] leading-snug text-paper/65"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ---- 2. jurisdiction (ask mode only) ---- */}
-          {mode === "ask" && (
-            <div className="border-t border-paper/10 py-4">
-              <div className="mb-2 flex items-baseline gap-2 text-[13px] font-medium text-paper">
-                <span className="font-serif text-haldi">2</span>
-                <span>{t.sectionJurisdiction}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {(["india", "international"] as const).map((j) => {
-                  const unavailable = j === "international";
-                  const selected = jurisdiction === j;
-                  return (
-                    <button
-                      key={j}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      aria-disabled={unavailable}
-                      title={unavailable ? t.jurisdictionIntlNote : t.jurisdictionIndiaNote}
-                      onClick={() => {
-                        if (!unavailable) setJurisdiction(j);
-                      }}
-                      className={`rail-card rounded-[3px] border px-2.5 py-3 text-left text-[12px] leading-snug ${
-                        unavailable
-                          ? "cursor-not-allowed border-paper/10 text-paper/30"
-                          : "border-paper/15 bg-white/[0.04] text-paper/65"
-                      }`}
-                      style={
-                        unavailable
-                          ? {
-                              backgroundImage:
-                                "repeating-linear-gradient(135deg, transparent 0 5px, rgba(245,238,221,0.06) 5px 6px)",
-                            }
-                          : undefined
-                      }
-                    >
-                      {j === "india" ? t.jurisdictionIndia : t.jurisdictionIntl}
-                    </button>
-                  );
-                })}
-              </div>
-              {jurisdiction === "international" && (
-                <p className="mt-2 text-[11px] leading-relaxed text-paper/45">
-                  {t.jurisdictionIntlNote}
-                </p>
-              )}
-            </div>
+    <div className="min-h-[calc(100vh-56px)]">
+      {/* One column, no rail.
+          The controls that lived in a permanent sidebar now sit where the
+          decision is actually made - mode, jurisdiction and wording as pills
+          directly above the composer - and the things set once per session
+          (history, privacy) are behind the header menu. The interface language
+          toggle is not reproduced here at all: Shell already owns it, and two
+          copies of one preference is two sources of truth. */}
+      {/* ==================== MAIN PANE ==================== */}
+      <div className="ruled flex min-h-[calc(100vh-56px)] flex-col">
+        <header className="sticky top-[56px] z-10 flex items-center justify-between gap-3 border-b border-rule bg-paper/95 px-6 py-3 backdrop-blur">
+          {last && !last.abstained ? (
+            <button
+              type="button"
+              onClick={() => printBriefing(last)}
+              title={t.exportBriefingHint}
+              className="rounded-[3px] border border-rule px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors duration-150 hover:border-indigo-dye hover:bg-indigo-wash hover:text-indigo-dye focus-visible:focus-ring"
+            >
+              {t.exportBriefing}
+            </button>
+          ) : turns.length === 0 ? (
+            /* The hero below already prints the tagline as its kicker; two
+               copies a centimetre apart read as a rendering fault. */
+            <span />
+          ) : (
+            <span className="eyebrow">{t.tagline}</span>
           )}
 
-          {/* ---- privacy ---- */}
-          <div className="border-t border-paper/10 py-4">
-            <p className="mb-2 text-[13px] font-medium text-paper">{t.sectionPrivacy}</p>
-            <label className="flex cursor-pointer items-start gap-2 text-[13px] text-paper/75">
-              <input
-                type="checkbox"
-                checked={logConsent}
-                onChange={(e) => setLogConsent(e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 accent-haldi"
-              />
-              <span>{t.saveQuestion}</span>
-            </label>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
-          </div>
-
-          {/* ---- interface language ---- */}
-          <div className="border-t border-paper/10 py-4">
-            <p className="mb-2 text-[13px] font-medium text-paper">{t.sectionLang}</p>
-            <div role="radiogroup" aria-label={t.sectionLang} className="flex overflow-hidden rounded-[3px] border border-paper/20">
-              {([
-                ["en", "English"],
-                ["hi", "हिंदी"],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={uiLang === value}
-                  onClick={() => setUiLang(value)}
-                  className={`flex-1 px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
-                    uiLang === value ? "bg-haldi text-ink" : "bg-transparent text-paper/60 hover:text-paper"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {voice.supported && (
-              <p className="mt-1.5 text-[11px] leading-relaxed text-paper/45">
-                🎙 {t.micTooltip}: EN / हिंदी — {t.micLangTooltip.toLowerCase()}.
-              </p>
-            )}
-          </div>
-
-          {/* ---- footer ---- */}
-          <div className="mt-auto border-t border-paper/10 pt-4">
-            <span className="mb-3 inline-block rounded-[2px] border border-paper/20 px-2.5 py-1 text-[11px] tracking-wide text-neem-wash/80">
-              {t.jurisdictionBadge}
-            </span>
-            <p className="text-[11px] leading-relaxed text-paper/45">{t.disclaimer}</p>
-          </div>
-        </div>
-      </aside>
-
-      {/* ==================== MAIN PANE ==================== */}
-      <div className="flex min-h-screen flex-col bg-paper">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-rule bg-paper/95 px-6 py-3 backdrop-blur">
-          <span className="flex items-center gap-1.5" title={statusReady ? "Backend connected" : "Backend unreachable"}>
-            <span
-              className={`h-1.5 w-1.5 rounded-full status-dot ${
-                statusReady ? "bg-neem" : statusError ? "bg-clay status-dot--pending" : "bg-haldi status-dot--pending"
-              }`}
-              aria-hidden
-            />
-            <span className="eyebrow">
-              {statusReady
-                ? `${health!.chunks_in_vector_db.toLocaleString()} ${t.statusOnline}`
-                : statusError
-                  ? t.statusOffline
-                  : t.statusConnecting}
-            </span>
-          </span>
-
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
             {turns.length > 0 && (
               <>
                 <span className="eyebrow hidden sm:inline">
@@ -408,20 +354,114 @@ export default function App() {
                 </button>
               </>
             )}
+
+            {/* Everything that used to be permanently open in the rail but is
+                set once per session rather than per question. Kept behind one
+                control so the page reads as a chat, not a settings form. */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-expanded={menuOpen}
+              aria-haspopup="true"
+              title={t.menu}
+              className="consult-menu-btn"
+            >
+              <span aria-hidden>⋯</span>
+            </button>
+
+            {menuOpen && (
+              <>
+                <div className="consult-scrim" onClick={() => setMenuOpen(false)} aria-hidden />
+                <div className="consult-menu" role="dialog" aria-label={t.menu}>
+                  <SessionList
+                    sessions={sessions}
+                    activeId={activeId}
+                    lang={uiLang}
+                    labels={{
+                      newConsultation: t.newConsultation,
+                      consultations: t.consultations,
+                      questionsCount: t.questionsCount,
+                      questionCount: t.questionCount,
+                      untitledSession: t.untitledSession,
+                      deleteSession: t.deleteSession,
+                    }}
+                    onNew={() => {
+                      newConsultation();
+                      setMenuOpen(false);
+                    }}
+                    onOpen={(id) => {
+                      switchSession(id);
+                      setMenuOpen(false);
+                    }}
+                    onRemove={removeSession}
+                  />
+
+                  {/* Cream on the dark panel, matching SessionList above it -
+                      this menu deliberately keeps the old rail's ground. */}
+                  <div className="mt-3 border-t border-paper/10 pt-3">
+                    <p className="mb-1.5 text-[12.5px] font-medium text-paper">{t.sectionPrivacy}</p>
+                    <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-paper/75">
+                      <input
+                        type="checkbox"
+                        checked={logConsent}
+                        onChange={(e) => setLogConsent(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-haldi"
+                      />
+                      <span>{t.saveQuestion}</span>
+                    </label>
+                    <p className="mt-1 text-[11px] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
+                  </div>
+
+                  <p className="mt-3 border-t border-paper/10 pt-3 text-[11px] leading-relaxed text-paper/45">
+                    {t.disclaimer}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
         <main className="mx-auto w-full max-w-sheet flex-1 px-6 py-8">
           {turns.length === 0 && !loading && (
-            <section className="mx-auto max-w-2xl pt-6 text-center">
-              <h2 className="font-serif text-[23px] leading-snug text-ink">{t.emptyTitle}</h2>
-              <p className="mt-2.5 text-[13.5px] leading-relaxed text-ink-soft">{t.emptySubtitle}</p>
+            /* Back on paper, at the landing page's SCALE.
+               Two dark treatments were tried here and both were rejected: one
+               reproduced the home page's hero verbatim, the other cramped a
+               dark ledger above the composer in small type. What was actually
+               wanted was the home page's generosity - big, clear, plenty of
+               air - not its ground and not its ornament. So this is the
+               original paper empty state with the type scaled up and the
+               spacing opened out. */
+            <section className="mx-auto max-w-3xl pb-4 pt-0 text-center">
+              {/* Leaf BESIDE the headline, the pair centred as one unit.
+                  Stacked above it the leaf cost ~80px of vertical room, which
+                  is the room the fourth card row needs - so both had to stay
+                  small. Beside it the mark occupies width the centred headline
+                  was not using, and that height comes back as size: the leaf
+                  goes 74px -> 118px and the headline 2.55rem -> 3.05rem while
+                  everything still clears the composer. */}
+              {/* Side by side only where there is width for it. At 390px the
+                  leaf leaves ~270px for the headline, which sets it in six
+                  cramped lines - so below `sm` it stacks and the heading
+                  centres, the way it did before the leaf moved. */}
+              <div className="mx-auto flex max-w-4xl flex-col items-center justify-center gap-3 sm:flex-row sm:gap-9">
+                <svg className="consult-leaf" viewBox="0 0 200 240" aria-hidden>
+                  <ellipse cx="100" cy="128" rx="54" ry="78" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.45" />
+                  <path d="M100 28 C70 88 70 148 100 212 C130 148 130 88 100 28 Z" fill="currentColor" />
+                  <path d="M100 28 V212" fill="none" stroke="#fdfaf2" strokeWidth="2" opacity="0.5" />
+                </svg>
+                <h2 className="max-w-[24ch] text-center font-display sm:max-w-[20ch] sm:text-left text-[clamp(1.95rem,4.4vw,3.4rem)] font-medium leading-[1.06] tracking-[-0.024em] text-ink">
+                  {t.emptyTitle}
+                </h2>
+              </div>
+              <p className="mx-auto mt-3 max-w-[66ch] text-[15.5px] leading-[1.65] text-ink-soft">
+                {t.emptySubtitle}
+              </p>
 
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2.5">
                 {FEATURE_CHIPS.map((chip) => (
                   <span
                     key={chip.en}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-white/60 px-3 py-1 text-[11.5px] text-ink-soft"
+                    className="inline-flex items-center gap-2 rounded-full border border-rule bg-white/60 px-3.5 py-1.5 text-[12.5px] text-ink-soft"
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-neem" aria-hidden />
                     {uiLang === "hi" ? chip.hi : chip.en}
@@ -429,7 +469,7 @@ export default function App() {
                 ))}
               </div>
 
-              <p className="eyebrow mt-6">{t.tryAsking}</p>
+              <p className="eyebrow mt-4">{t.tryAsking}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {EXAMPLES.map((ex) => (
                   <button
@@ -438,12 +478,12 @@ export default function App() {
                       setMode(ex.mode);
                       submit(uiLang === "hi" ? ex.questionHi : ex.questionEn, ex.mode);
                     }}
-                    className="card example-chip lift px-3 py-2.5 text-left hover:border-indigo-dye focus-visible:focus-ring"
+                    className="card example-chip lift px-4 py-3.5 text-left hover:border-indigo-dye focus-visible:focus-ring"
                   >
                     <span className="eyebrow block text-haldi">
                       {uiLang === "hi" ? ex.labelHi : ex.labelEn}
                     </span>
-                    <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
+                    <span className="mt-1.5 block text-[14px] leading-snug text-ink-soft">
                       {uiLang === "hi" ? ex.questionHi : ex.questionEn}
                     </span>
                   </button>
@@ -470,6 +510,34 @@ export default function App() {
                   </div>
                   <ComparisonView result={turn.comparison} />
                 </div>
+              ) : turn.kind === "jurisdictions" && turn.jurisdictions ? (
+                <div key={turn.id} className="msg-in">
+                  <JurisdictionCompareView
+                    comparison={turn.jurisdictions}
+                    labels={{
+                      national: t.sideNational,
+                      international: t.sideInternational,
+                      comparison: t.compareJurisdictionsHint,
+                      silent: t.sideSilent,
+                      guard: t.comparisonGuard,
+                      unavailable: t.comparisonUnavailable,
+                    }}
+                  />
+                  <NextStepsPanel
+                    data={nextSteps[turn.id] ?? null}
+                    loading={stepsLoading === turn.id}
+                    onRequest={() => requestNextSteps(turn)}
+                    labels={{
+                      title: t.nextStepsTitle,
+                      ask: t.nextStepsAsk,
+                      thinking: t.nextStepsThinking,
+                      none: t.nextStepsNone,
+                      guard: t.nextStepsGuard,
+                      india: t.sideNational,
+                      international: t.sideInternational,
+                    }}
+                  />
+                </div>
               ) : turn.answer ? (
                 <div key={turn.id} className="msg-in">
                   <AnswerView
@@ -477,6 +545,54 @@ export default function App() {
                     defaultOpen={i === turns.length - 1}
                     onRemove={() => removeTurn(turn.id)}
                   />
+                  {!turn.answer.abstained && internationalReady && (
+                    <JurisdictionExpander
+                      primary={
+                        turn.answer.jurisdiction === "international"
+                          ? "international"
+                          : "national"
+                      }
+                      other={
+                        turn.answer.jurisdiction === "international"
+                          ? "national"
+                          : "international"
+                      }
+                      otherAnswer={turn.international}
+                      comparison={turn.jurisdictionComparison}
+                      loadingOther={busySide === turn.id}
+                      loadingComparison={busyCompare === turn.id}
+                      onReveal={() => revealOther(turn)}
+                      onCompare={() => compareSides(turn)}
+                      labels={{
+                        india: t.sideNational,
+                        international: t.sideInternational,
+                        reveal: t.revealOther,
+                        revealing: t.revealingOther,
+                        compare: t.compareBoth,
+                        comparing: t.comparingBoth,
+                        comparisonHeading: t.comparisonHeading,
+                        silent: t.sideSilent,
+                        guard: t.comparisonGuard,
+                        unavailable: t.comparisonUnavailable,
+                      }}
+                    />
+                  )}
+                  {!turn.answer.abstained && (
+                    <NextStepsPanel
+                      data={nextSteps[turn.id] ?? null}
+                      loading={stepsLoading === turn.id}
+                      onRequest={() => requestNextSteps(turn)}
+                      labels={{
+                        title: t.nextStepsTitle,
+                        ask: t.nextStepsAsk,
+                        thinking: t.nextStepsThinking,
+                        none: t.nextStepsNone,
+                        guard: t.nextStepsGuard,
+                        india: t.sideNational,
+                        international: t.sideInternational,
+                      }}
+                    />
+                  )}
                 </div>
               ) : null,
             )}
@@ -506,7 +622,9 @@ export default function App() {
               </ol>
               <div className="mt-6 flex items-center justify-between gap-4">
                 <p className="eyebrow">
-                  {mode === "compare" ? t.comparingStage : t.classifyingStage}
+                  {mode === "compare"
+                    ? t.comparingStage
+                    : t.classifyingStage}
                 </p>
                 <button
                   type="button"
@@ -541,6 +659,56 @@ export default function App() {
                 <p className="text-[12.5px] leading-snug text-ink-soft">{pendingClarification}</p>
               </div>
             )}
+
+            {/* The three decisions that change what comes back, sitting where
+                they are made rather than in a sidebar you stop looking at.
+                Jurisdiction appears only in ask mode, because a category
+                comparison is an Indian-law view by construction. */}
+            <div className="consult-pills">
+              <PillGroup
+                label={t.sectionMode}
+                value={mode}
+                options={[
+                  { value: "ask", label: t.modeAsk },
+                  { value: "compare", label: t.modeCompare },
+                ]}
+                onChange={(v) => {
+                  setError(null);
+                  setMode(v as typeof mode);
+                }}
+              />
+              {mode === "ask" && (
+                <PillGroup
+                  label={t.sectionJurisdiction}
+                  value={jurisdiction}
+                  options={[
+                    { value: "india", label: t.jurisdictionIndia },
+                    {
+                      value: "international",
+                      label: t.jurisdictionIntl,
+                      disabled: !internationalReady,
+                    },
+                  ]}
+                  onChange={(v) => {
+                    if (v === "international" && !internationalReady) {
+                      setError(t.jurisdictionIntlUnavailable);
+                      return;
+                    }
+                    setError(null);
+                    setJurisdiction(v as typeof jurisdiction);
+                  }}
+                />
+              )}
+              <PillGroup
+                label={t.sectionStyle}
+                value={style}
+                options={[
+                  { value: "legal", label: t.styleLegal },
+                  { value: "plain", label: t.stylePlain },
+                ]}
+                onChange={(v) => setStyle(v as typeof style)}
+              />
+            </div>
 
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="eyebrow normal-case tracking-normal">{t.infoNotAdvice}</span>
@@ -604,6 +772,48 @@ export default function App() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+/** One labelled segmented control.
+ *
+ * A shared component rather than three hand-rolled button rows: the rail's
+ * three groups had drifted into three slightly different markups, and the
+ * jurisdiction one carried a disabled state the others had to reimplement.
+ */
+function PillGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string; disabled?: boolean }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="consult-pill-group">
+      <span className="consult-pill-label">{label}</span>
+      <div className="consult-pill-track" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={value === o.value}
+            aria-disabled={o.disabled}
+            onClick={() => onChange(o.value)}
+            className={`consult-pill ${value === o.value ? "is-on" : ""} ${
+              o.disabled ? "is-off" : ""
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   );

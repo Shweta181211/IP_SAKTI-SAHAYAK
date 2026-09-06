@@ -26,7 +26,7 @@ import re
 from .citations import citations_for, strip_chunk_ids, validate_ids
 from .config import settings
 from .llm import LLMUnavailable, complete_json
-from .retrieval import expand_query, is_too_vague, retrieve
+from .retrieval import Expansion, expand_query, is_too_vague, retrieve
 from .schemas import (
     CATEGORY_LABELS,
     CategoryContrast,
@@ -57,6 +57,43 @@ COMPARED = (
     Category.NEW_DRUG,
     Category.PHYTOPHARMACEUTICAL,
 )
+
+# One statutory probe per category being compared.
+#
+# Anchored to the fixed COMPARED set above - a structural property of this
+# feature, which always contrasts the same four regimes - and NOT to anything
+# scanned out of the user's wording, so this does not reintroduce the keyword
+# special-casing 5 rules out.
+#
+# Why they are needed. `expand_query` restates the PRODUCT, and a product
+# description expands into product vocabulary. Measured on "ashwagandha root
+# extract capsule standardised to 5% withanolides": all twelve retrieved chunks
+# came from the Drugs and Cosmetics Rules 1945, `patentable` read "Not covered
+# in evidence" for all four categories, and new_drug and phytopharmaceutical
+# retrieved nothing at all. The one contrast this module exists to draw - a
+# classical formulation barred by 3(p) against a new drug with a real pathway -
+# was the single thing it could not show. The module docstring and the comment
+# at the retrieval call both claimed this bias already existed. Neither did.
+CATEGORY_PROBES: dict[Category, str] = {
+    Category.CLASSICAL_GENERIC: (
+        "invention which in effect is traditional knowledge or an aggregation or "
+        "duplication of known properties of traditionally known components is not "
+        "an invention"
+    ),
+    Category.PATENT_PROPRIETARY: (
+        "patent or proprietary medicine under section 3(h) formulated with "
+        "ingredients of the authoritative books, conditions of manufacturing licence"
+    ),
+    Category.NEW_DRUG: (
+        "new drug permission under rule 122-E and the clinical data required "
+        "before it may be manufactured or marketed"
+    ),
+    Category.PHYTOPHARMACEUTICAL: (
+        "phytopharmaceutical drug as a purified fraction with defined bio-active "
+        "markers and the Schedule Y data requirements for it"
+    ),
+}
+
 
 COMPARE_PROMPT = """A user described a product. Show how its legal position CHANGES depending \
 on which Indian regulatory category it falls into.
@@ -104,7 +141,9 @@ Return ONLY a JSON object, no markdown fence and no commentary:
 
 def compare_categories(product: str, top_k: int | None = None) -> ComparisonResult:
     """Retrieve once, then contrast the regulatory categories in one call."""
-    top_k = top_k or settings.top_k
+    # A wider evidence set than a single question gets, because this one prompt
+    # must cover four regimes rather than answer one question.
+    top_k = top_k or settings.compare_top_k
 
     if is_too_vague(product):
         return ComparisonResult(
@@ -121,6 +160,14 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
     # bias the search toward the provisions that decide those, using the product
     # description the user actually gave.
     expansion = expand_query(product)
+    # RRF fuses each formulation's ranked list independently, so a probe that
+    # finds nothing relevant costs a rank slot rather than displacing a good hit
+    # from the product's own formulations.
+    expansion = Expansion(
+        queries=[*expansion.queries, *CATEGORY_PROBES.values()],
+        ok=expansion.ok,
+        reason=expansion.reason,
+    )
     result = retrieve(product, top_k=top_k, expansion=expansion)
 
     if not result.sufficient:
@@ -131,9 +178,37 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
             disclaimer=settings.disclaimer,
         )
 
+    # RRF rewards CONSENSUS across formulations, which is the opposite of what
+    # a comparison needs. The product's own vocabulary appears in every ranked
+    # list and accumulates score, while the provision that governs exactly one
+    # category appears in a single list and is out-scored by it. Measured after
+    # merely adding the probes to the fused query set: `patentable` filled in
+    # for classical_generic and patent_proprietary, but new_drug and
+    # phytopharmaceutical still retrieved nothing - Schedule Y's
+    # phytopharmaceutical chunks never entered the top 24, despite being the
+    # only chunks in the corpus that use the word.
+    #
+    # So each category also gets a small RESERVED allocation from its own probe.
+    # This costs no LLM call: the gate has already run on the product retrieval
+    # above and settled scope, and a fixed probe needs no expansion. One gated
+    # retrieval and one generation call, as the module docstring promises.
+    evidence_items = list(result.evidence)
+    seen = {item.chunk_id for item in evidence_items}
+    for probe in CATEGORY_PROBES.values():
+        probe_result = retrieve(
+            probe, top_k=settings.compare_probe_slots,
+            use_llm_gate=False, expand=False,
+        )
+        for item in probe_result.evidence:
+            if item.chunk_id not in seen:
+                seen.add(item.chunk_id)
+                evidence_items.append(item)
+
+    allowed_ids = [item.chunk_id for item in evidence_items]
+
     evidence = "\n\n".join(
         f"[{item.chunk_id}] {(item.citation.display if item.citation else '')}\n{item.text[:1000]}"
-        for item in result.evidence
+        for item in evidence_items
     )
     categories = "\n".join(
         f"- `{c.value}` - {CATEGORY_LABELS[c]}" for c in COMPARED
@@ -166,7 +241,7 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
     all_cited: list[str] = []
     for category in COMPARED:
         raw = by_category.get(category, {})
-        kept, rejected = validate_ids(raw.get("citation_ids") or [], result.allowed_ids)
+        kept, rejected = validate_ids(raw.get("citation_ids") or [], allowed_ids)
         if rejected:
             logger.warning("Comparison rejected unverifiable ids: %s", rejected)
         # Models mention ids in prose despite being told not to; the citation

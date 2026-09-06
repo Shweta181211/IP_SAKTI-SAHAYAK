@@ -74,14 +74,35 @@ def tokenize(text: str) -> list[str]:
     return tokens
 
 
-@lru_cache(maxsize=1)
-def bm25_index():
-    """BM25 over the same chunk set as the vector store, in the same order."""
+@lru_cache(maxsize=4)
+def bm25_index(jurisdiction: str = "national"):
+    """BM25 over one jurisdiction's chunks only.
+
+    This used to index the whole corpus and ignore jurisdiction, which was
+    invisible while `03_international/` was empty - every chunk was national, so
+    an unfiltered lexical search could not cross a boundary that did not exist.
+    The moment treaty texts were ingested that became the single worst bug the
+    problem statement names: the dense half of the hybrid filtered on
+    jurisdiction and the lexical half did not, so an international question
+    would have had Indian statutes fused straight into its evidence, and the
+    answer would have cited them as if they governed.
+
+    Separate indexes rather than filtering after scoring, because BM25's IDF is
+    computed across the corpus it is built on. One mixed index would score
+    "patent" against 3,275 chunks of two legal systems and rank by a document
+    frequency that describes neither. Per-jurisdiction indexes give each corpus
+    its own term statistics, which is both more correct and what "visibly
+    separate" means in retrieval terms.
+    """
     from rank_bm25 import BM25Okapi
 
-    chunks = all_chunks()
+    chunks = [c for c in all_chunks() if c.get("jurisdiction") == jurisdiction]
+    if not chunks:
+        logger.warning("No chunks for jurisdiction %r; lexical search disabled for it",
+                       jurisdiction)
+        return None, []
     corpus = [tokenize(str(c["chunk_text"])) for c in chunks]
-    logger.info("Building BM25 index over %d chunks", len(corpus))
+    logger.info("Building BM25 index over %d %s chunks", len(corpus), jurisdiction)
     return BM25Okapi(corpus), [c["chunk_id"] for c in chunks]
 
 
@@ -123,11 +144,19 @@ def warm_up() -> dict[str, Any]:
     """Load every index up front. Returns a small health summary."""
     chunk_count = len(all_chunks())
     col = collection()
-    bm25_index()
+    # Warm every jurisdiction's lexical index, not just the national one, or the
+    # first international question pays a full BM25 build mid-request.
+    counts: dict[str, int] = {}
+    for chunk in all_chunks():
+        key = str(chunk.get("jurisdiction") or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    for jurisdiction in counts:
+        bm25_index(jurisdiction)
     embedder()
     return {
         "chunks_in_json": chunk_count,
         "chunks_in_vector_db": col.count(),
         "collection": settings.collection_name,
         "embed_model": settings.embed_model,
+        "chunks_by_jurisdiction": counts,
     }

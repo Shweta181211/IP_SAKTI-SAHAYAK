@@ -82,6 +82,23 @@ class AbstentionKind(str, Enum):
     LEGAL_ADVICE = "legal_advice"
 
 
+class ResponseStyle(str, Enum):
+    """How an answer is phrased. Never what it says or what it cites.
+
+    `plain` is applied as a REPHRASING of a finished legal answer, not as a
+    different generation. That is a deliberate design choice: if style were a
+    prompt instruction on the main call, the model would re-choose its citations
+    each time and the two styles could legitimately cite different provisions -
+    at which point "the same answer in plainer words" would be a claim we could
+    not actually make. Rewriting a finished answer means the citation list and
+    the classification are carried across UNCHANGED by construction rather than
+    by hope, and the test for that is an equality check rather than a sample.
+    """
+
+    LEGAL = "legal"
+    PLAIN = "plain"
+
+
 class ConfidenceLevel(str, Enum):
     """How well-supported an answer is.
 
@@ -212,6 +229,10 @@ class Answer(BaseModel):
     # the user can see how their shorthand was interpreted.
     resolved_question: str | None = None
     jurisdiction: str = "india"
+    # Which phrasing this was rendered in. The citations and the
+    # classification are identical across styles by construction - only the
+    # prose differs - so this is a display fact, not a provenance one.
+    response_style: str = "legal"
     # A single-sentence direct answer. Most users want the conclusion first and
     # the reasoning underneath, not four paragraphs to read before they know
     # whether the answer was yes or no.
@@ -304,6 +325,10 @@ class QueryRequest(BaseModel):
     # abstention rather than pretending, because the corpus has no treaty texts.
     jurisdiction: str = Field(default="india", pattern="^(india|international)$")
     top_k: int = Field(default=12, ge=1, le=20)
+    # Phrasing only. Applied as a rephrasing pass over the finished answer, so
+    # asking the same question in both styles costs one extra call rather than a
+    # second full generation - and cannot change what was cited.
+    response_style: ResponseStyle = ResponseStyle.LEGAL
     # Consent to retain the QUESTION TEXT in the audit log. Defaults to False:
     # the operational record that makes the system auditable carries no user
     # content at all, so keeping the text is a separate choice the user makes,
@@ -336,13 +361,161 @@ class HealthResponse(BaseModel):
     status: str
     chunks_in_json: int
     chunks_in_vector_db: int
+    # Per-jurisdiction chunk counts. The India/International toggle is only
+    # honest if you can see that both sides actually hold documents.
+    chunks_by_jurisdiction: dict[str, int] = Field(default_factory=dict)
     collection: str
     embed_model: str
     generation_model: str
+    # Every (provider, model) that could serve a request right now, best
+    # first. Surfaced because "which model answered" stopped being a single
+    # value once the chain spanned three independent accounts - and when a
+    # provider is capped, seeing the fallback engage is how you tell a
+    # degraded system from a broken one.
+    llm_chain: list[str] = Field(default_factory=list)
     anchor_problems: list[str] = Field(default_factory=list)
     # Aggregate of the local audit trail, so auditability is demonstrable rather
     # than asserted. Counts only - never question text.
     audit: dict = Field(default_factory=dict)
+
+
+class JurisdictionPoint(BaseModel):
+    """One similarity or difference between the two legal systems.
+
+    The shape is the safeguard. A free-text paragraph comparing two
+    jurisdictions is one careless sentence away from "the law requires X",
+    leaving a reader unable to tell which system requires it - which is the
+    conflation the problem statement forbids. So a point cannot be expressed
+    without saying, per side, what that side holds and which of ITS OWN
+    citations says so. There is no field in which a blended claim can live.
+    """
+
+    kind: str = Field(description='"similarity" or "difference"')
+    summary: str = Field(description="One sentence naming what is being compared")
+
+    national_claim: str | None = Field(
+        default=None, description="What the Indian answer established, in its own terms"
+    )
+    national_citation_ids: list[str] = Field(default_factory=list)
+
+    international_claim: str | None = Field(
+        default=None, description="What the international answer established"
+    )
+    international_citation_ids: list[str] = Field(default_factory=list)
+
+
+class JurisdictionComparison(BaseModel):
+    """Two independently generated answers, plus a comparison of them.
+
+    `national` and `international` are complete Answers produced by separate
+    retrieval and generation passes over separate corpora - not one answer
+    relabelled, and not one jurisdiction's chunks reused for the other. They are
+    carried whole so the UI can render each with its own citations and the user
+    can read either on its own.
+
+    The comparison is a THIRD call that sees only those two finished answers. It
+    may restate and contrast them; it may not introduce law of its own, and
+    every claim it makes is validated back to the citations of the side it is
+    attributed to.
+    """
+
+    question: str
+    national: Answer
+    international: Answer
+    points: list[JurisdictionPoint] = Field(default_factory=list)
+
+    # Points the synthesis produced that failed validation - a claim citing the
+    # wrong jurisdiction's sources, or citing something neither answer used.
+    # Surfaced rather than swallowed, like rejected_citation_ids: a guard you
+    # can see is worth more than one you cannot.
+    rejected_points: list[str] = Field(default_factory=list)
+
+    synthesis_unavailable: bool = False
+    synthesis_message: str | None = None
+
+    disclaimer: str = (
+        "This is information, not legal advice. It cites primary legal sources "
+        "but is not a substitute for a qualified IP practitioner."
+    )
+
+
+class NextStep(BaseModel):
+    """One practical thing the user could do next.
+
+    Citations are required for the same reason every other claim needs them: a
+    step like "apply for a licence under Rule 158-B" is a statement about the
+    law wearing the clothes of advice, and it is the most advice-like text this
+    product produces. `jurisdiction` records which corpus it came from, so a
+    step drawn from treaty text can never be read as an Indian requirement.
+    """
+
+    text: str
+    citation_ids: list[str] = Field(default_factory=list)
+    jurisdiction: str = Field(
+        default="national", description='"national" or "international"'
+    )
+
+
+class NextSteps(BaseModel):
+    """The optional "what this means next" block.
+
+    Deliberately skippable. Not every question earns one: "what is a GI tag?"
+    is answered by the answer, and appending three imperatives to it would be
+    padding that trains people to stop reading. `applicable` is the model's
+    judgement on whether the question was actually asking what to DO.
+    """
+
+    applicable: bool = True
+    steps: list[NextStep] = Field(default_factory=list)
+    # Why no steps, when there are none. Shown instead of an empty section.
+    reason: str | None = None
+    unavailable: bool = False
+    # Steps that named a source the source answer never cited. Surfaced like
+    # rejected_citation_ids: this section is the most advice-like text here, so
+    # its guard should be the most visible.
+    rejected: list[str] = Field(default_factory=list)
+    # Repeated ON this block, not only at the foot of the page. This is the
+    # section a reader is most likely to act on directly.
+    disclaimer: str = (
+        "General guidance based only on the sources cited above - not a legal "
+        "determination, and not a substitute for a qualified IP practitioner."
+    )
+
+
+class NextStepsRequest(BaseModel):
+    """Body for POST /next-steps.
+
+    Takes an answer the client already has rather than a question, because this
+    step must NOT retrieve. Re-retrieving would let it introduce provisions the
+    answer never established, which is the one thing a "what to do next" section
+    must not do. Opt-in by construction: nothing calls this unless asked.
+    """
+
+    answer: Answer | None = None
+    comparison: JurisdictionComparison | None = None
+    style: ResponseStyle = ResponseStyle.LEGAL
+
+
+class CompareJurisdictionsRequest(BaseModel):
+    """Body for POST /compare-jurisdictions.
+
+    Opt-in by construction: this endpoint costs three generation passes, so
+    nothing calls it unless the user asked for a comparison.
+    """
+
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=MAX_QUESTION_CHARS)
+    ]
+    top_k: int = Field(default=12, ge=1, le=20)
+    log_consent: bool = False
+    # Answers the client already has on screen. When both are supplied the
+    # server skips generation entirely and only runs the synthesis - which is
+    # what makes "ask nationally, then reveal the international view, then
+    # compare" cost one call rather than nine, and guarantees the comparison
+    # describes exactly the two answers the reader is looking at rather than
+    # two freshly generated ones that might differ.
+    national: Answer | None = None
+    international: Answer | None = None
 
 
 class CompareRequest(BaseModel):

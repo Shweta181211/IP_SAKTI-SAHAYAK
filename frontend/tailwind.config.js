@@ -21,6 +21,7 @@ export default {
       fontFamily: {
         sans: ['"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         serif: ['"IBM Plex Serif"', "ui-serif", "Georgia", "serif"],
+        display: ['Fraunces', "ui-serif", "Georgia", "serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
       },
       maxWidth: { sheet: "78rem" },

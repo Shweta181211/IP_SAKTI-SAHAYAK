@@ -1,5 +1,5 @@
 Input folder: D:\IP_SAKTI-SAHAYAK\data\corpus\corpus
-PDFs discovered: 26
+PDFs discovered: 37
 
 [001] 01_classification\Drugs and Cosmetics Act, 1940.pdf | pdfplumber | pages=43
 [002] 01_classification\FSSAI Ayurveda Aahar Regulations, 2022.pdf | pdfplumber | pages=8
@@ -15,22 +15,33 @@ PDFs discovered: 26
 [012] 02_national_statutes\The Geographical Indications of Goods (Registration and Protection) Act, 1999.pdf | pdfplumber | pages=31
 [013] 02_national_statutes\The Protection of Plant Varieties and Farmers Rights Act, 2001.pdf | pdfplumber | pages=34
 [014] 02_national_statutes\Trade Marks Act 1999.pdf | pdfplumber | pages=56
-[015] 04_registries\About TKDL.pdf | pdfplumber | pages=1
-[016] 04_registries\ABS Guidelines.pdf | pdfplumber | pages=28
-[017] 04_registries\Kandhamal Haladi.pdf | pdfplumber | pages=20
-[018] 04_registries\Lakadong Turmeric.pdf | pdfplumber | pages=11
-[019] 04_registries\Madurai Marikolunthu.pdf | pdfplumber | pages=10
-[020] 04_registries\MANUAL OF PATENT OFFICE PRACTICE.pdf | pdfplumber | pages=174
-[021] 04_registries\The Biological Diversity (Amendment) Rules 2025.pdf | pdfplumber | pages=5
-[022] 04_registries\The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
-[023] 04_registries\TKDL Access Agreement.pdf | pdfplumber | pages=3
-[024] 04_registries\TKDL Access Policy.pdf | pdfplumber | pages=19
-[025] 05_pharmacopoeia\Ayurvedic Formulary of India (AFI).pdf | pdfplumber | pages=438
-[026] 05_pharmacopoeia\Ayurvedic Pharmacopoeia of India (API)Part1 Vol1.pdf | pdfplumber | pages=183
+[015] 03_international\01_WTO_TRIPS_Agreement.pdf | pdfplumber | pages=31
+[016] 03_international\02_CBD_Convention_on_Biological_Diversity.pdf | pdfplumber | pages=36
+[017] 03_international\03_CBD_Nagoya_Protocol.pdf | pdfplumber | pages=15
+[018] 03_international\04_WIPO_GRATK_Treaty_2024.pdf | pdfplumber | pages=10
+[019] 03_international\05_WIPO_PCT_and_Regulations_2026.pdf | pdfplumber | pages=240
+[020] 03_international\06_WIPO_Madrid_Protocol_Rules_2025.pdf | pdfplumber | pages=162
+[021] 03_international\07_WIPO_Hague_Agreement_Geneva_Act.pdf | pdfplumber | pages=129
+[022] 03_international\08_WIPO_Budapest_Treaty.pdf | pdfplumber | pages=10
+[023] 03_international\09_EPO_European_Patent_Convention.pdf | pdfplumber | pages=75
+[024] 03_international\10_Botanical-Drug-Development--Guidance-for-Industry.pdf | pdfplumber | pages=34
+[025] 03_international\10_EU_Directive_2004_24_Traditional_Herbal_Medicinal_Products.pdf | pdfplumber | pages=6
+[026] 04_registries\About TKDL.pdf | pdfplumber | pages=1
+[027] 04_registries\ABS Guidelines.pdf | pdfplumber | pages=28
+[028] 04_registries\Kandhamal Haladi.pdf | pdfplumber | pages=20
+[029] 04_registries\Lakadong Turmeric.pdf | pdfplumber | pages=11
+[030] 04_registries\Madurai Marikolunthu.pdf | pdfplumber | pages=10
+[031] 04_registries\MANUAL OF PATENT OFFICE PRACTICE.pdf | pdfplumber | pages=174
+[032] 04_registries\The Biological Diversity (Amendment) Rules 2025.pdf | pdfplumber | pages=5
+[033] 04_registries\The Biological Diversity Rules 2024.pdf | pdfplumber | pages=86
+[034] 04_registries\TKDL Access Agreement.pdf | pdfplumber | pages=3
+[035] 04_registries\TKDL Access Policy.pdf | pdfplumber | pages=19
+[036] 05_pharmacopoeia\Ayurvedic Formulary of India (AFI).pdf | pdfplumber | pages=438
+[037] 05_pharmacopoeia\Ayurvedic Pharmacopoeia of India (API)Part1 Vol1.pdf | pdfplumber | pages=183
 
 SUMMARY
-PDFs processed: 26
-Chunks created: 2457
-Methods: {'pdfplumber': 26}
-Chunks by regime: {'drug_regulatory_classification': 948, 'ip_statute': 768, 'registry_guideline': 394, 'pharmacopoeia_reference': 347}
+PDFs processed: 37
+Chunks created: 3282
+Methods: {'pdfplumber': 37}
+Chunks by regime: {'drug_regulatory_classification': 948, 'ip_statute': 768, 'international_treaty': 825, 'registry_guideline': 394, 'pharmacopoeia_reference': 347}
 PDFs needing manual review: none flagged

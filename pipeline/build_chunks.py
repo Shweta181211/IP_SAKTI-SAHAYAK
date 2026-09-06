@@ -418,7 +418,14 @@ def main() -> int:
         regime, subtype, year = classify(
             pdf.name, folder, body_text=" ".join(pages)
         )
-        act_name = pdf.stem.replace("_", " ").strip()
+        # The international documents are filed with an ordering prefix
+        # ("01_WTO_TRIPS_Agreement", "05_WIPO_PCT_and_Regulations_2026"), and
+        # act_name is what a citation card shows a judge. "05 WIPO PCT and
+        # Regulations 2026, p. 12" reads like a filename; the prefix is shelving
+        # metadata, not part of the instrument's name. Strip a leading index
+        # only when digits are followed by a separator, so a real leading number
+        # in a title survives.
+        act_name = re.sub(r"^\d{1,2}[ _-]+", "", pdf.stem).replace("_", " ").strip()
         doc_id = f"DOC{doc_number:03d}"
         chunks_before = len(all_chunks)
         for number, piece in enumerate(chunk_pieces(split_into_pieces(pages)), start=1):

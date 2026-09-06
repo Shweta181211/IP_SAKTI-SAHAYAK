@@ -43,6 +43,14 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face SentenceTransformer model")
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--rebuild", action="store_true", help="Delete and recreate an existing database")
+    # Embed at most N chunks, then exit cleanly. Combined with the resume
+    # logic above this makes the build survive a machine that cannot hold the
+    # model and a long-lived process at once: a shell loop calls this
+    # repeatedly, and every invocation starts fresh, does a slice of the work
+    # and releases all of its memory on exit. Slower per chunk (the model is
+    # reloaded each time) and far more likely to finish.
+    parser.add_argument("--limit", type=int, default=0,
+                        help="Embed at most this many chunks, then exit (0 = all)")
     args = parser.parse_args()
 
     chunks = json.loads(args.chunks.read_text(encoding="utf-8"))
@@ -57,10 +65,36 @@ def main() -> int:
         print(f"Removed existing database: {args.db_dir}")
     client = chromadb.PersistentClient(path=str(args.db_dir))
     existing = client.get_or_create_collection(COLLECTION_NAME, metadata={"model_name": args.model})
+    # Resume rather than refuse. Embedding this corpus takes ~30 minutes of CPU,
+    # and a machine that runs out of memory half way through used to leave a
+    # partial database that was worse than useless: inconsistent with
+    # all_chunks.json, and only recoverable by starting again from zero.
+    #
+    # So an existing database is treated as progress, not as an obstacle. Only
+    # the chunks it does not already hold are embedded, which makes the build
+    # interruptible and restartable. --rebuild still forces a clean wipe when
+    # the chunk ids themselves have changed.
+    already = set()
     if existing.count() > 0:
-        print(f"Database already contains {existing.count()} chunks at {args.db_dir}. Use --rebuild to regenerate it.")
-        return 0
+        already = set(existing.get(include=[])["ids"])
+        remaining = [c for c in valid if c["chunk_id"] not in already]
+        if not remaining:
+            print(f"Database already holds all {len(valid)} chunks at {args.db_dir}. "
+                  "Nothing to do; use --rebuild to regenerate from scratch.")
+            return 0
+        print(f"Resuming: {len(already)} of {len(valid)} chunks already embedded, "
+              f"{len(remaining)} to go.")
+        valid = remaining
 
+    if args.limit and len(valid) > args.limit:
+        print(f"Limiting this pass to {args.limit} chunks.")
+        valid = valid[:args.limit]
+
+    try:
+        import torch
+        torch.set_num_threads(1)
+    except Exception:
+        pass
     print(f"Loading multilingual model: {args.model}")
     model = SentenceTransformer(args.model)
     start = time.perf_counter()

@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import ROOT, settings
+from .config import ROOT, active_model, settings
 from .schemas import Answer, ComparisonResult
 
 logger = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ def log_answer(
         "search_degraded": answer.search_degraded,
         "escalate": answer.escalate,
         # --- provenance ---------------------------------------------------
-        "model": settings.model,
+        "model": active_model(),
         "elapsed_s": round(elapsed_s, 2) if elapsed_s is not None else None,
     }
     # The only personal-data field, and the only one gated on consent.
@@ -156,7 +156,7 @@ def log_comparison(
         "contrasts": len(result.contrasts),
         "citations": len(result.citations),
         "search_degraded": result.search_degraded,
-        "model": settings.model,
+        "model": active_model(),
         "elapsed_s": round(elapsed_s, 2) if elapsed_s is not None else None,
     }
     if consent:

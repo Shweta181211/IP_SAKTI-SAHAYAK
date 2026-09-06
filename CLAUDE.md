@@ -91,7 +91,8 @@ regenerable from `data/corpus.zip` + `pipeline/`. Only the irreplaceable input
 
 ## 3. The corpus — facts you need before writing retrieval code
 
-**2,457 chunks** from **26 Indian legal/regulatory PDFs** (2,342 before the post-comparison corpus fix - see §6g). All extracted cleanly with
+**3,282 chunks** from **37 PDFs** - 2,457 national (26 Indian legal/regulatory documents) and
+825 international (11 treaties and regional instruments, added in §6l). All extracted cleanly with
 pdfplumber; none needed OCR, none failed. Zero encoding corruption (no U+FFFD).
 
 Chunk sizes: median 242 tokens, max 798, none over 900. 157 chunks are under 50 tokens.
@@ -105,14 +106,14 @@ Chunk sizes: median 242 tokens, max 798, none over 900. 157 chunks are under 50 
 | `act_name` | 24 distinct values — use this for display citations |
 | `regime_type` | 4 values: `drug_regulatory_classification`, `ip_statute`, `registry_guideline`, `pharmacopoeia_reference` |
 | `act_subtype` | 11 values: `patent`, `trademark`, `copyright`, `design`, `geographical_indication`, `plant_varieties`, `biodiversity_abs`, `traditional_knowledge`, `drug_regulatory`, `food_regulatory`, `pharmacopoeia`. **`other` is now empty** — derived from document content, not the filename (§6j) |
-| `jurisdiction` | **currently `national` for all 2,457 chunks** |
+| `jurisdiction` | `national` (2,457) or `international` (825). **This is the separation the PS grades** - the two are indexed and retrieved apart, never mixed in one evidence set (§6l) |
 | `year`, `page_number`, `page_numbers`, `token_count` | |
 | `section_or_clause` | **noisy — see below** |
 
 ### Coverage by regime
 
 `01_classification` 948 · `02_national_statutes` 768 · `04_registries` 394 ·
-`05_pharmacopoeia` 347 · `03_international` **empty (deferred, correct)**
+`05_pharmacopoeia` 347 · `03_international` **825 (populated in §6l)**
 
 Largest sources: Drugs & Cosmetics Rules 1945 (795), Ayurvedic Formulary of India (220),
 Manual of Patent Office Practice (197), Biological Diversity Rules 2024 (182),
@@ -131,9 +132,10 @@ Patents Act 1970 (162).
    `"... o (n) a presentation of information; C a (o) topography ... i d (p) an invention which..."`.
    The substantive provision is intact and retrievable; cosmetic only.
 
-3. **`jurisdiction` has exactly one value today.** The India/International toggle is real
-   plumbing with one populated side — not fake UI. It becomes meaningful when
-   `03_international` is populated in a later phase.
+3. **`jurisdiction` now has two populated values.** The India/International toggle
+   answers from a genuinely separate corpus on each side. Read §6l before touching
+   retrieval: BM25 has one index *per jurisdiction* rather than one index filtered
+   afterwards, because IDF is computed over whatever corpus the index was built on.
 
 ### Verified coverage for our benchmark queries
 
@@ -237,6 +239,8 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 10 | Polish + demo rehearsal | **Done** |
 | 11 | Post-audit hardening (security, robustness, coverage) | **Done** — §6j |
 | 12 | Post-evaluation fixes (gate scope, fabricated provisions, subject scope, confidence) | **Done** — §6k |
+| 13 | International corpus, progressive jurisdiction flow, frontend merge | **Done** — §6l |
+| 14 | Outage triage: key staleness, per-minute vs daily caps, comparison retrieval | **Done** — §6m |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -826,6 +830,209 @@ Backend restarted on the rebuilt index (2,457 chunks in JSON, 2,450 embedded):
 
 ---
 
+## 6m. Phase 14 - the outage, and three defects behind it
+
+Every query was returning `gate_unavailable` ("Safety check unavailable") straight
+after a fresh Gemini key was added. The key was fine. Three separate faults were,
+and two of them are the kind that make a key rotation look like a code bug.
+
+### A rotated key could not take effect without a restart
+
+`llm.py::_client_for` cached the OpenAI client on `(base_url, api_key_env)` - the
+NAME of the variable, not the key. A client built with a since-exhausted key was
+therefore reused for the life of the process, so editing `.env` changed nothing.
+`config.provider_key` compounded it: `load_dotenv()` without `override=True` will
+not replace an already-loaded value, so the new key never even reached `os.environ`.
+
+The symptom is maximally misleading - every question fails the gate while a
+hand-run probe reading the same `.env` succeeds. Both are fixed: the client cache
+is keyed on the key VALUE, and `.env` is authoritative (deployments ship no `.env`,
+so nothing is overridden there).
+
+### A 31-second limit was retiring a provider for 20 minutes
+
+The one that actually caused the cascade. Gemini reports a **per-minute** limit
+with status `RESOURCE_EXHAUSTED`, and `_DAILY_CAP_MARKERS` contained
+`resource_exhausted`. Measured by bursting the free tier:
+
+    quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'
+    limit: 15, retryDelay: 31s, status: RESOURCE_EXHAUSTED
+
+So `_is_daily_cap()` said yes and `_mark_capped()` retired that model for the full
+20-minute memo. With both Gemini models retired that way and OpenRouter genuinely
+out of daily quota, the whole six-endpoint chain collapsed onto Groq, which then
+tripped its own per-minute token limit (ITPM 7000) and the request failed closed.
+
+`_is_per_minute_limit()` now runs FIRST and short-circuits the daily check. A
+genuine Gemini *daily* cap still classifies correctly, because its quotaId carries
+`PerDay`. Verified against five real provider payloads.
+
+*The general lesson: two limits that share a status code are two limits. Read the
+payload, not the status.*
+
+### The category comparison could not show the contrast it exists for
+
+`compare_categories` retrieved once against the bare product description, and
+`expand_query` restates the PRODUCT - so a product description expands into
+product vocabulary. Measured on "ashwagandha root extract capsule standardised to
+5% withanolides": all twelve chunks came from the D&C Rules 1945, `patentable`
+read "Not covered in evidence" for **all four** categories, and `new_drug` and
+`phytopharmaceutical` retrieved nothing at all. The module docstring and the
+comment at the retrieval call both claimed a patentability bias existed. Neither
+was implemented.
+
+Two changes, and the second is the one that mattered:
+
+1. One statutory probe per compared category, fused into the expansion. Anchored
+   to the fixed `COMPARED` set - a structural property of the feature - not to
+   anything scanned out of the user's wording, so 5's no-keyword-special-casing
+   rule holds. This alone filled in only two of four categories.
+2. **Reserved slots.** RRF rewards *consensus* across formulations, which is the
+   opposite of what a comparison needs: the product's vocabulary appears in every
+   ranked list and accumulates, while the provision governing exactly one category
+   appears in one list and is out-scored. Each category now also gets
+   `compare_probe_slots` from its own probe, merged in. No LLM call - the gate has
+   already settled scope and a fixed probe needs no expansion.
+
+Result on the same product: four categories, four cited, four *different*
+patentability verdicts, and three distinct acts (D&C Rules, Manual of Patent Office
+Practice, Patents Act 1970) where there had been one.
+
+### Also fixed
+
+| Fix | Note |
+|---|---|
+| Jurisdiction synthesis always failed | `max_tokens=1200` truncated it mid-array at `{"points": [`, so a healthy provider reported the whole comparison unavailable. That output is several points wide, each carrying prose for BOTH sides plus two id arrays - far larger than any other JSON reply here. Raised to 3000; measured that gpt-oss-120b returns clean JSON at 1200 on a small task, so the ceiling was the prompt's output size, not the model. |
+| "Plain English" collided with the EN/HI language toggle | Renamed to **Legal terms / Simple terms**. Hindi had the same collision - "सरल भाषा" is literally "simple LANGUAGE" beside a language switcher - now विधिक शब्द / सरल शब्द. |
+| `settings.fallback_models` was dead | Referenced nowhere outside its own definition since `llm_chain` superseded it, and its 24-line comment actively misdescribed current behaviour. Removed. |
+| Stale benchmark expectation | The Nagoya case required a `foreign_jurisdiction` refusal, written when `03_international/` was empty. India implements Nagoya through the BD Act, so national mode now answers it - from Indian implementing law only. The assertion is deliberately *stronger* than the old one: it must cite Biological Diversity. The FDA case still refuses, because foreign **domestic** law is a real scope boundary. |
+
+### The consultation page lost its rail
+
+The landing page was the engaging surface and the workspace was a form with a
+300px sidebar beside it, which read as two different products. The rail is gone:
+
+- **Mode, jurisdiction and wording are pills above the composer**, where the
+  decision is actually made, via one shared `PillGroup` - the rail's three
+  groups had drifted into three slightly different markups and only one of them
+  implemented a disabled state.
+- **History and the log-consent choice are behind one header menu**, because
+  they are set once a session rather than per question.
+- **The interface language toggle is simply deleted.** `Shell` already owned
+  one; two controls for one preference is two sources of truth. `setUiLang` is
+  no longer destructured here, which is what surfaced it.
+- **The empty state stayed on paper, scaled up.** Three passes, and the two
+  failures are worth more than the result:
+
+  1. Paper with a faint blob and leaf - too faint to read as a decision.
+  2. The landing page's hero reproduced verbatim: pointer-tracked blob, swaying
+     leaf, Fraunces headline, instrument marquee. Rejected on sight.
+  3. A dark ledger workspace - restrained, small type. Rejected harder.
+
+  What was actually being asked for, all along, was the landing page's
+  **generosity** - big type, plenty of air, obvious hierarchy - and NOT its
+  ground, its ornament or its content. Every attempt to borrow the *look* made
+  the page worse; the one that borrowed the *scale* worked. So the final state
+  is the original paper markup with the headline at
+  `clamp(1.9rem, 3.4vw, 2.55rem)`, a 15.5px lead and roomier cards - plus the
+  landing page's **leaf mark** above the headline, same geometry, swaying.
+
+  The leaf is the one piece of bespoke CSS on this screen, and it does not
+  reuse `leaf-sway` directly: the landing mark is ~280px, where an 8px drop
+  reads as a gentle sway; on a small mark the same 8px is a lurch. The rotation
+  is kept, the travel scaled, and the origin moved to the stem.
+
+  **It sits BESIDE the headline, not above it.** Stacked, the mark cost ~80px
+  of vertical room - exactly what the fourth example row needs - so both mark
+  and headline had to stay small. Beside it, it occupies width the centred
+  headline was not using, and that height comes back as size: leaf 74px -> 172px
+  and headline 2.55rem -> 3.4rem. Below `sm` it stacks and the heading centres,
+  because at 390px the mark leaves ~270px and sets the headline in six lines.
+
+  **The leaf width is capped, not purely `vw`-scaled.** Uncapped it kept
+  growing on wider screens and pushed the fourth row under the composer at
+  1440x900 - on a viewport that was WIDER. Vertical room does not grow with
+  width, so the ceiling is what protects the layout.
+
+  Measured clearance between the last example card and the composer bar:
+  **18px at 1280, 1440 and 1600.** All four cards must clear the composer at
+  900px height - re-measure that before changing any spacing, type size or the
+  leaf cap here, because almost every change on this screen trades against it.
+
+- **The header eyebrow is hidden while the empty state shows.** Both printed
+  `t.tagline`, a centimetre apart.
+
+- The menu panel is **dark for a reason, not for taste**: `SessionList` is
+  styled in cream for the old rail, so on the light panel of the first pass it
+  rendered cream-on-cream and was invisible. Matching the rail's ground reuses
+  that component unchanged, so the bug fix and the visual request are one edit.
+- The **"825 sources"** count under the International option is gone, along
+  with the now-dead `jurisdictionSources` and `sectionLang` strings.
+- `ACTS` moved to `src/data/acts.ts` so the landing page and the consultation
+  cannot drift apart.
+
+### Next steps had to be enforced in code, not asked for in the prompt
+
+`NEXT_STEPS_PROMPT` already said, in as many words, "not a restatement of the
+refusal". The model returned *"Recognize that the classical churna ... cannot
+receive patent protection"* anyway. The prompt was right and the free model
+under-followed it, so the rule now also lives in `_NON_ACTION_OPENERS`, which
+drops any step opening with Recognise/Understand/Note/Be aware/Consider that.
+Matched only at the START, so "Consider filing an application" survives.
+
+Plain mode gained one rule for the same reason: start each step with the
+consequence, never the provision. Measured after: *"You cannot patent this,
+because Section 3(p) ... treats"* rather than *"Under Section 3(p) ..."*.
+
+**And writing that guard reproduced 6k's bug exactly.** The regex went in as
+`r")"` - a literal BACKSPACE - because the patch string was non-raw, so
+`` became the escape while `\s` survived (it is not a valid escape). The
+guard was inert and looked perfect in every rendering. Found only by counting
+control bytes. **`test_units.py`'s control-character sweep exists for this; run
+it after any regex edit.**
+
+### Verified at the close of this phase
+
+Cold backend on the rebuilt index, rate limiting disabled:
+
+```
+tests/test_units.py              133/133
+tests/test_security.py            25/25
+tests/test_gate_scope.py          16/16
+tests/test_legal_advice.py        15/15
+tests/test_jurisdiction.py        10/10   (was 6/6 with 2 SKIPPED in 6l)
+tests/test_jurisdiction_compare.py 12/12
+tests/test_style_and_steps.py     21/21
+tests/test_subject_scope.py       11/11
+tests/test_flagship.py             4/4    (5/5 cold runs cite 3(p) + TKDL)
+tests/e2e_api.py                  39/39
+tests/benchmarks.py               92/93
+frontend tsc --noEmit  clean      npm run build  clean
+```
+
+The one benchmark miss was the off-domain marketing question answering instead of
+refusing. Re-measured immediately: **4/4 refuse with `out_of_scope`.** Free-model
+variance, and 6f's warning stands - **re-run the suites before demoing.**
+
+Style toggle verified as an equality property, not a sample: legal and plain return
+**identical** citation lists, per-step ids, classification and confidence, with
+every step's prose different.
+
+### Known still open
+
+- **The machine is the fragile part, not the code.** The backend needs ~1.5 GB and
+  this laptop has 7.78 GB total; a run was OOM-killed by Windows at 98% commit
+  charge. Close browsers before demoing.
+- OpenRouter is fully daily-capped (both models). Google and Groq have headroom,
+  and the chain fails over correctly between them - but a burst still trips
+  Gemini's 15 requests/minute free-tier limit, so do not fire suites back to back.
+- Our own rate limiter (12/min) will 429 a suite run started immediately after
+  another. Start the server with `IPSAKTI_RATE_LIMIT_QUERY=0` to run them.
+- Confidence is still uncalibrated.
+- The OpenRouter key exposed by the 6j traversal bug has still not been rotated.
+
+---
+
 ## 7. Notes for Person B (corpus/ingestion owner)
 
 Your work was kept intact. What changed and what deliberately did not:
@@ -1327,3 +1534,175 @@ frontend/src/useSessions.test.mjs  12   session titles and dates
   reachable, which is more than could be said before. That is not calibration.
 - Duplicate Biological Diversity Rules 2024 (~184 chunks) — §6g decision stands.
 - Patents Act s.3(p) still unreachable by search (margin bleed, §6g).
+
+---
+
+## 6l. Phase 13 - the international corpus, the progressive flow, and the frontend merge
+
+Two things happened in this phase: `03_international/` stopped being an empty
+promise, and the parallel build's frontend was merged in. Both are recorded here
+because both changed facts written earlier in this file.
+
+### The corpus is now two corpora, and they are kept apart in code
+
+**3,282 chunks from 37 PDFs** - `national` 2,457 (unchanged, byte-identical) and
+`international` 825 across **eleven instruments**: TRIPS, CBD, Nagoya, WIPO
+GRATK 2024, PCT, Madrid, Hague, Budapest, the European Patent Convention, EU
+Directive 2004/24/EC, and the FDA Botanical Drug guidance. 3,275 are embedded
+(7 remain too short to embed, the same Schedule M headings as always).
+
+The problem statement requires the two answer-sets to be "visibly separate" and
+"never conflated", so separation is enforced at the **evidence set**, not in the
+prose:
+
+- Chroma is queried with `where={"jurisdiction": ...}`.
+- **BM25 gets one index per jurisdiction**, not one index filtered afterwards.
+  IDF is computed over the corpus the index is built on: a single mixed index
+  would score "patent" against 3,275 chunks of two legal systems and rank by a
+  document frequency that describes neither.
+- The relevance gate carries its own rules per side, and nudges across rather
+  than answering across - a treaty question asked in the national corpus is
+  refused *with a pointer to the toggle*, never answered from Indian law.
+
+Measured on the rebuilt index, expansion and gate off so it holds even while
+every provider is capped: **12/12 evidence sets stayed inside their own corpus**,
+and both newly added instruments rank #1 for their own subject matter.
+
+### Adding two PDFs renumbered a third of the database - and there is now a tool
+
+`doc_id` is assigned by sorted position, so dropping `09_EPO...` and
+`10_EU_Directive...` into `03_international/` shifted every document that sorts
+after them. Against the existing vector DB that meant **576 ids no longer
+existed, 200 ids now named a different passage, and 668 were new**. Only 2,407
+of 3,183 were still correct.
+
+The dangerous part is the middle number. A resume-style top-up would have added
+the 668 and left 200 ids whose stored text belongs to *another document* -
+citations that resolve, look clean, and quote the wrong instrument. A sampled
+check caught it; an id-set comparison alone would not have.
+
+`pipeline/repair_vector_db.py` does the minimum that is provably equivalent to a
+full rebuild - delete stale, re-embed changed, embed new, refresh drifted
+metadata - and then verifies **every id, passage and metadata field** against
+`all_chunks.json`. 868 chunks re-encoded instead of 3,275, and the outcome is
+checked rather than assumed. `--limit` makes it restartable, because a full pass
+was OOM-killed three times on this machine.
+
+*The rule from 6g still stands and is now load-bearing: never hardcode a
+chunk_id. This phase is what that rule was protecting against.*
+
+### Progressive disclosure, because a second jurisdiction is a second answer
+
+The international position is **not** fetched with every question. The user gets
+the national answer, and then chooses:
+
+    ask (national)  ->  reveal the other side  ->  compare  ->  next steps
+
+Each step is an explicit click and its own generation. Nobody pays three model
+calls for a side they did not want, and - more importantly - the comparison
+describes the two answers **already on screen**: both are POSTed back to
+`/compare-jurisdictions` rather than regenerated, so what the reader is told is
+being compared is what they can actually see.
+
+`jurisdiction_compare.py::_validate_point` enforces citation ownership **per
+side**: a point's `national_citation_ids` must resolve to national chunks and
+its `international_citation_ids` to international ones. A point that cannot
+satisfy that is rejected, not softened. This is the difference between
+separation as a prompt instruction and separation as a checked property.
+
+`next_steps.py` may draw on both sides, and every step is labelled with the
+jurisdiction it came from. `plain_language.py` rewrites a **finished** answer:
+citations are copied in code, never re-emitted by the model, so plain English
+cannot quietly acquire a source the legal wording did not have.
+
+### The frontend merge - what was taken from the parallel build
+
+Her build and ours are descendants of the same design (same palette, same
+"printed legal opinion sheet" concept), which made this a graft rather than a
+rewrite. Taken from hers, essentially unchanged:
+
+| Ported | Why |
+|---|---|
+| `Root.tsx` + `Shell.tsx` (react-router) | The workspace was the whole product; it is now one destination among several. |
+| `pages/Home.tsx` | A landing page that explains the two layers *before* the first question. |
+| `pages/Export.tsx` | Ten treaty routes, each deep-linking into `/ask?j=international&q=...`. |
+| `pages/Sources.tsx` | Links to the official registries, so a judge can check us. |
+| `printBriefing.ts` | The consultation as a printable opinion sheet. |
+| `index.css` (superset) + Fraunces | Her stylesheet is ours plus the landing/print work. |
+
+Kept from ours: the whole answer pipeline, the session sidebar, the progressive
+jurisdiction flow, the confidence badge, next steps, plain-language mode, and
+the composer.
+
+Three things changed on the way in:
+
+1. **Language, log consent and health moved to `Root`.** Two copies of the same
+   toggle in a header and a rail is two sources of truth for one preference.
+2. **A deep link that names a jurisdiction now asks in it.** `?j=` and `?q=` are
+   read in separate effects, so the submit closure still held the old
+   jurisdiction and a treaty link would have been asked of Indian law. The
+   link's own value is passed straight to `submit`.
+3. **The landing page's claims were corrected.** It described a build where the
+   jurisdiction is inferred from the question. Here it is an explicit toggle
+   with a default and a nudge, which is the safer design - and a landing page
+   that oversells the automation is a claim a judge can falsify in ten seconds.
+
+### Which international handling was kept, and why
+
+| | Hers | Ours | Kept |
+|---|---|---|---|
+| BM25 scoping | one index, filtered after scoring | one index per jurisdiction | **ours** - filtering after scoring leaves IDF computed over both legal systems |
+| Query expansion | treaty vocabulary when international | one Indian-statute prompt for both | **hers** - a real defect in ours, adopted |
+| Both layers at once | `export` mode, one prompt told to keep layers distinct | progressive reveal + comparison with per-side citation validation | **ours** - separation checked in code beats separation requested in a prompt |
+| Layer detection | `auto` infers the layer | explicit toggle + a refusal that points at the other one | **ours** - the refusal is demonstrable; inference is one more thing to be wrong about |
+
+### Verified at the close of this phase
+
+```
+vector DB repair        every id, passage and metadata field matches all_chunks.json
+                        3,275 embedded - national 2,450 | international 825
+jurisdiction separation 12/12 evidence sets stayed inside their own corpus
+                        EPC and EU Directive both rank #1 for their own subject
+/health                 3,275 chunks, anchor_problems: []
+routing                 / /ask /export /sources -> SPA; /api/nope -> 404 JSON
+tests/test_units.py     133/133
+tests/test_security.py  25/25
+tests/test_jurisdiction.py  6/6 (its two answer checks SKIPPED - see below)
+frontend tsc --noEmit   clean      npm run build clean
+```
+
+The national flagship was re-checked end to end on the rebuilt index: classifies
+`classical_generic`, cites Section 3(p) from the Manual of Patent Office
+Practice, and names TKDL.
+
+### Blocked, and it is capacity rather than behaviour
+
+**All three free providers are daily-capped simultaneously** - Google
+(`gemini-3.5-flash-lite`), Groq (`openai/gpt-oss-120b`) and OpenRouter
+(`minimax/minimax-m3:free`, capped by shared free capacity, not by credits). The
+chain does the right thing: it recognises a daily cap as unwaitable, skips the
+rest of that provider, and fails in ~6s rather than hanging. The user is told
+`gate_unavailable` - "I could not run the check, try again" - rather than being
+given an answer the gate never approved.
+
+So these remain **unrun on the new corpus**, not failed:
+`benchmarks.py`, `e2e_api.py`, `test_flagship.py`, `test_subject_scope.py`,
+`test_gate_scope.py`, `test_legal_advice.py`, `test_jurisdiction_compare.py`,
+`test_style_and_steps.py`. Re-run them before demoing; do not quote a past
+green.
+
+$10 of OpenRouter credit, or any provider key with headroom, unblocks all of it.
+
+### Known still open
+
+- The FDA Botanical Drug guidance sits in `03_international/` although it is US
+  domestic law. It is *reachable* under the international toggle, which is
+  arguably wrong - the gate refuses foreign domestic authorisation questions, so
+  nothing conflates, but the filing is untidy. Decide before demo day.
+- `act_subtype` labels ~573 international chunks `design`; `infer_subtype()`
+  reads document text by marker frequency and the Hague Agreement's vocabulary
+  dominates. Harmless while `REGIME_BOOST` is 0.0 - and another reason not to
+  raise it without measuring first (6j).
+- Confidence is still uncalibrated.
+- The OpenRouter key exposed by the traversal bug (6j) has still not been
+  rotated.

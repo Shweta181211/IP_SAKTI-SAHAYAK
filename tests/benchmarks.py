@@ -89,9 +89,19 @@ OFF_SCRIPT = [
     Case("boundary: foreign law",
          "Can I sell my ayurvedic supplement in the USA under FDA rules?",
          expect_abstain=True, expect_abstention_kind="foreign_jurisdiction"),
+    # Expectation changed in 6l, when 03_international stopped being empty.
+    # This used to require a refusal, because with no treaty texts the only
+    # honest answer was "I do not hold that". India implements Nagoya through
+    # the Biological Diversity Act, so asked of the NATIONAL corpus the question
+    # now has a real Indian answer, and refusing it would be the wrong
+    # behaviour. The assertion is deliberately stronger than the old one: it
+    # is not enough to answer, the answer must come from Indian implementing
+    # law - which is the separation property the problem statement grades.
+    # The FDA case above still refuses, because foreign DOMESTIC law is a
+    # genuine scope boundary rather than a treaty India has legislated for.
     Case("boundary: international treaty",
          "What does the Nagoya Protocol require for exporting Indian herbs?",
-         expect_abstain=True, expect_abstention_kind="foreign_jurisdiction"),
+         expect_abstain=False, must_cite_act="Biological Diversity"),
     Case("boundary: off-domain",
          "What is the best marketing strategy for my ayurvedic startup?",
          expect_abstain=True, expect_abstention_kind="out_of_scope"),

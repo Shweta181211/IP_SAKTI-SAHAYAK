@@ -24,19 +24,27 @@ from fastapi.staticfiles import StaticFiles
 
 from . import audit
 from .classification import classify, verify_anchors
-from .config import ROOT, settings
+from .config import ROOT, active_model, settings
 from .corpus_index import warm_up
 from .escalation import assess as assess_escalation
 from .comparison import compare_categories
+from .jurisdiction_compare import compare_jurisdictions
+from .next_steps import next_steps_for_answer, next_steps_for_comparison
+from .plain_language import apply_style
 from .generation import answer_question
+from .llm import endpoints as llm_endpoints
 from .ratelimit import RateLimiter, enforce
 from .schemas import (
     AbstentionKind,
     Answer,
+    CompareJurisdictionsRequest,
     CompareRequest,
     ComparisonResult,
     ClassificationResult,
     HealthResponse,
+    JurisdictionComparison,
+    NextSteps,
+    NextStepsRequest,
     QueryRequest,
 )
 
@@ -49,6 +57,18 @@ _state: dict = {}
 # sharing one counter would let either starve the other.
 query_limiter = RateLimiter(limit=settings.rate_limit_query)
 compare_limiter = RateLimiter(limit=settings.rate_limit_compare)
+
+
+def _international_available() -> bool:
+    """True when the treaty corpus actually holds documents.
+
+    Checked rather than assumed: a rebuild, a fresh clone, or a corpus.zip that
+    predates the international phase all leave `03_international/` empty, and in
+    that state answering an international question would silently fall back to
+    whatever the national index returns. Refusing is the only safe default.
+    """
+    info = _state.get("health") or {}
+    return bool(info.get("chunks_by_jurisdiction", {}).get("international"))
 
 
 @asynccontextmanager
@@ -105,9 +125,11 @@ def health() -> HealthResponse:
         status="degraded" if problems else "ok",
         chunks_in_json=info["chunks_in_json"],
         chunks_in_vector_db=info["chunks_in_vector_db"],
+        chunks_by_jurisdiction=info.get("chunks_by_jurisdiction", {}),
         collection=info["collection"],
         embed_model=info["embed_model"],
-        generation_model=settings.model,
+        generation_model=active_model(),
+        llm_chain=[str(e) for e in llm_endpoints()],
         anchor_problems=problems,
         audit=audit.summary(),
     )
@@ -134,9 +156,15 @@ def classify_endpoint(request: QueryRequest) -> ClassificationResult:
 def query(request: QueryRequest, http_request: Request) -> Answer:
     """The full core loop: classify, retrieve, generate, validate."""
     enforce(query_limiter, http_request)
-    # The toggle is real plumbing, not decoration: the corpus has no treaty texts,
-    # so the honest response is to say so rather than answer from Indian law.
-    if request.jurisdiction == "international":
+    # Until the treaty corpus was ingested this branch returned a fixed
+    # abstention, because answering an international question from Indian law
+    # would have been the worst thing this tool could do. `03_international/`
+    # now holds 825 chunks across 11 instruments, so the honest response is to
+    # answer from them - and the separation is enforced in retrieval rather
+    # than here. The branch remains for the case where that corpus is empty
+    # again (a rebuild, a fresh clone), which must still refuse rather than
+    # quietly fall back to national law.
+    if request.jurisdiction == "international" and not _international_available():
         # Built here rather than in generation.py, so it must set the same
         # fields generation would - including the escalation offer, which is
         # exactly right for this case: a real legal need, outside our corpus.
@@ -149,8 +177,9 @@ def query(request: QueryRequest, http_request: Request) -> Answer:
             abstained=True,
             abstention_kind=AbstentionKind.FOREIGN_JURISDICTION,
             abstention_message=(
-                "International coverage is not available yet. The corpus currently holds "
-                "Indian law only. Switch to India to get the national position."
+                "The international corpus is not loaded, so I cannot answer this from "
+                "treaty sources - and I will not answer it from Indian law instead. "
+                "Rebuild the index (pipeline/build_vector_db.py) or switch to India."
             ),
             escalate=escalate,
             escalation_reason=escalation_reason,
@@ -162,8 +191,15 @@ def query(request: QueryRequest, http_request: Request) -> Answer:
     started = time.time()
     try:
         answer = answer_question(
-            request.question, top_k=request.top_k, history=request.history
+            request.question, top_k=request.top_k, history=request.history,
+            jurisdiction="international" if request.jurisdiction == "international"
+            else "national",
         )
+        # Style is applied AFTER generation and caching, so switching styles on
+        # the same question reuses the generated answer and cannot change what
+        # it cited. See plain_language.py for why it is a rewrite rather than a
+        # prompt instruction.
+        answer = apply_style(answer, request.response_style)
         audit.log_answer(
             request.question, answer,
             consent=request.log_consent, elapsed_s=time.time() - started,
@@ -202,6 +238,74 @@ def compare(request: CompareRequest, http_request: Request) -> ComparisonResult:
             status_code=502,
             detail="Comparison failed because an upstream service was unavailable. "
                    "Please try again in a moment.",
+        ) from exc
+
+
+
+@api.post("/compare-jurisdictions", response_model=JurisdictionComparison)
+def compare_jurisdictions_endpoint(
+    request: CompareJurisdictionsRequest, http_request: Request
+) -> JurisdictionComparison:
+    """The Indian position and the international one, answered separately.
+
+    Costs three generation passes, so it shares the comparison rate-limit bucket
+    rather than the query one and is never triggered automatically - the user
+    asks for it explicitly.
+    """
+    enforce(compare_limiter, http_request)
+    if not _international_available():
+        raise HTTPException(
+            status_code=409,
+            detail="The international corpus is not loaded, so there is nothing to "
+                   "compare against. Rebuild the index with pipeline/build_vector_db.py.",
+        )
+    started = time.time()
+    try:
+        result = compare_jurisdictions(
+            request.question, top_k=request.top_k,
+            national=request.national, international=request.international,
+        )
+        audit.log_answer(
+            request.question, result.national,
+            consent=request.log_consent, elapsed_s=time.time() - started,
+        )
+        audit.log_answer(request.question, result.international, consent=request.log_consent)
+        return result
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Jurisdiction comparison failed")
+        raise HTTPException(
+            status_code=502,
+            detail="The comparison failed because an upstream service was unavailable. "
+                   "Please try again in a moment.",
+        ) from exc
+
+
+
+@api.post("/next-steps", response_model=NextSteps)
+def next_steps_endpoint(request: NextStepsRequest, http_request: Request) -> NextSteps:
+    """Practical follow-ups for an answer the client already has.
+
+    Takes the answer rather than the question on purpose: this step must not
+    retrieve, or it could introduce obligations the answer never established.
+    Opt-in - nothing calls it unless the reader asked what to do next.
+    """
+    enforce(query_limiter, http_request)
+    try:
+        if request.comparison is not None:
+            return next_steps_for_comparison(request.comparison, request.style.value)
+        if request.answer is not None:
+            return next_steps_for_answer(request.answer, request.style.value)
+        raise HTTPException(
+            status_code=422, detail="Provide either an answer or a comparison."
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Next steps failed")
+        raise HTTPException(
+            status_code=502,
+            detail="Suggestions could not be generated because an upstream service was "
+                   "unavailable. Please try again in a moment.",
         ) from exc
 
 

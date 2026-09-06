@@ -1,4 +1,11 @@
-import type { Answer, ComparisonResult, Health } from "./types";
+import type {
+  Answer,
+  ComparisonResult,
+  Health,
+  JurisdictionComparison,
+  NextSteps,
+  ResponseStyle,
+} from "./types";
 
 // Vite proxies /api to the backend in dev; in production both sit behind one
 // origin. Either way the frontend never hardcodes a host.
@@ -88,6 +95,7 @@ export function askQuestion(
   history: string[] = [],
   signal?: AbortSignal,
   logConsent = false,
+  responseStyle: ResponseStyle = "legal",
 ): Promise<Answer> {
   // The API is stateless; the client owns the transcript. Sending prior
   // questions lets the server resolve follow-ups like "what about trademarking
@@ -99,6 +107,7 @@ export function askQuestion(
       jurisdiction,
       history: history.slice(-MAX_HISTORY_TURNS),
       log_consent: logConsent,
+      response_style: responseStyle,
     },
     signal,
   );
@@ -110,6 +119,40 @@ export function compareCategories(
   logConsent = false,
 ): Promise<ComparisonResult> {
   return post<ComparisonResult>("/compare", { product, log_consent: logConsent }, signal);
+}
+
+/** Opt-in only: this costs three generation passes, so nothing calls it
+ *  unless the user chose the comparison mode. */
+export function compareJurisdictions(
+  question: string,
+  signal?: AbortSignal,
+  logConsent = false,
+  /** Answers already on screen. Supplying both turns this into a single
+   *  synthesis call instead of two more generations — and guarantees the
+   *  comparison describes the exact answers the reader is looking at. */
+  answers?: { national?: Answer; international?: Answer },
+): Promise<JurisdictionComparison> {
+  return post<JurisdictionComparison>(
+    "/compare-jurisdictions",
+    {
+      question,
+      log_consent: logConsent,
+      national: answers?.national ?? null,
+      international: answers?.international ?? null,
+    },
+    signal,
+  );
+}
+
+/** Opt-in: suggestions are only fetched when the reader asks for them, and the
+ *  ANSWER is posted back rather than the question — this step must not retrieve,
+ *  or it could introduce obligations the answer never established. */
+export function fetchNextSteps(
+  payload: { answer?: Answer; comparison?: JurisdictionComparison },
+  style: ResponseStyle = "legal",
+  signal?: AbortSignal,
+): Promise<NextSteps> {
+  return post<NextSteps>("/next-steps", { ...payload, style }, signal);
 }
 
 export async function fetchHealth(): Promise<Health | null> {

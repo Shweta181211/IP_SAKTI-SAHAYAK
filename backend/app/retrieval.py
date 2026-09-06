@@ -231,6 +231,21 @@ MESSAGE: {question}
 Return ONLY JSON: {{"queries": ["...", "...", "..."]}}"""
 
 
+INTL_EXPANSION_PROMPT = """Rewrite a user's message into search queries phrased the way an international treaty or WIPO filing system would phrase it.
+
+Users write in everyday words ("how do I protect my herbal extract abroad?"). The instruments use their own vocabulary: PCT international application and national phase, Madrid Protocol designation, Hague international registration, Nagoya access and benefit-sharing on mutually agreed terms, TRIPS patentable subject matter, GRATK disclosure of the source of genetic resources and associated traditional knowledge.
+
+**Translate the vocabulary. Never change the question.** Keep the legal issue the user actually raised.
+
+**If the message raises no legal issue at all** - many are simply a description of a product - the question is "what do these instruments require of something like this?". Expand toward disclosure obligations, benefit-sharing, and the routes for protecting or registering across borders.
+
+Produce 3 short queries using the treaty concepts the message genuinely implicates. Do not answer it. Do not invent article numbers that were not implied.
+
+MESSAGE: {question}
+
+Return ONLY JSON: {{"queries": ["...", "...", "..."]}}"""
+
+
 @dataclass
 class Expansion:
     """Query formulations, plus whether producing them actually worked.
@@ -257,7 +272,7 @@ class Expansion:
     reason: str | None = None
 
 
-def expand_query(question: str) -> Expansion:
+def expand_query(question: str, jurisdiction: str = "national") -> Expansion:
     """Restate the question in statutory vocabulary to bridge the wording gap.
 
     Returns the original question first, then any expansions, and reports
@@ -266,7 +281,9 @@ def expand_query(question: str) -> Expansion:
     from .llm import LLMUnavailable, complete_json
 
     try:
-        data = complete_json(EXPANSION_PROMPT.format(question=question), max_tokens=300)
+        prompt = (INTL_EXPANSION_PROMPT if jurisdiction == "international"
+                  else EXPANSION_PROMPT)
+        data = complete_json(prompt.format(question=question), max_tokens=300)
     except LLMUnavailable as exc:
         logger.warning("Query expansion unavailable (%s); searching on the question alone", exc)
         return Expansion(
@@ -298,8 +315,16 @@ def _dense_candidates(question: str, jurisdiction: str) -> list[tuple[str, float
     return list(zip(result["ids"][0], result["distances"][0]))
 
 
-def _lexical_candidates(question: str) -> list[tuple[str, float]]:
-    bm25, ids = bm25_index()
+def _lexical_candidates(question: str, jurisdiction: str) -> list[tuple[str, float]]:
+    """Lexical half of the hybrid, scoped to one jurisdiction.
+
+    The jurisdiction argument is not optional and has no default on purpose:
+    the dense half has always filtered, and a lexical half that quietly did not
+    is how Indian statutes would end up inside an international answer.
+    """
+    bm25, ids = bm25_index(jurisdiction)
+    if bm25 is None:
+        return []
     scores = bm25.get_scores(tokenize(question))
     ranked = sorted(zip(ids, scores), key=lambda pair: pair[1], reverse=True)
     return ranked[:CANDIDATE_DEPTH]
@@ -331,7 +356,8 @@ def retrieve(
     # Callers may pass precomputed expansions (see generation.py, which runs
     # expansion concurrently with classification to save a round trip).
     if expansion is None:
-        expansion = expand_query(question) if expand else Expansion([question])
+        expansion = (expand_query(question, jurisdiction) if expand
+                     else Expansion([question]))
     queries = expansion.queries
     if len(queries) > 1:
         logger.info("Expanded query into %d formulations", len(queries))
@@ -356,7 +382,7 @@ def retrieve(
     # discarded formulation and ignoring the one that worked is backwards.
     for position, q in enumerate(queries):
         dense_hits = _dense_candidates(q, jurisdiction)
-        lexical_hits = _lexical_candidates(q)
+        lexical_hits = _lexical_candidates(q, jurisdiction)
         if dense_hits and (not dense or dense_hits[0][1] < dense[0][1]):
             dense = dense_hits
         if lexical_hits and (not lexical or lexical_hits[0][1] > lexical[0][1]):
@@ -399,7 +425,7 @@ def retrieve(
     lexical_best = lexical[0][1] if lexical else None
     sufficient, reason, kind = assess_sufficiency(
         question, dense_best, lexical_best, evidence,
-        use_llm_gate=use_llm_gate, formulations=queries,
+        use_llm_gate=use_llm_gate, formulations=queries, jurisdiction=jurisdiction,
     )
     return RetrievalResult(
         evidence, sufficient, reason, dense_best, lexical_best, kind,
@@ -481,15 +507,33 @@ def _scope_message(reason: str) -> str:
     return reason
 
 
+# The corpus this gate is screening against changes with the toggle, so its
+# description and its jurisdiction rules are parameters rather than prose. The
+# national wording asserted "no international treaty texts", which was true
+# until 03_international/ was ingested and would now refuse every treaty
+# question the corpus can actually answer.
+NATIONAL_SCOPE = """The corpus being searched contains ONLY **Indian** law on Ayurveda: intellectual property (patents, GI, trade marks, copyright, designs, plant varieties), drug and cosmetic regulation, biodiversity/ABS, and pharmacopoeial standards. A separate international corpus exists but is NOT what you are screening against here."""
+
+NATIONAL_JURISDICTION_RULES = """- "india" - governed by Indian law. This is the default: a question with no country mentioned is an Indian question.
+- "foreign" - governed by another country's law or by a foreign regulator (for example selling into the USA under FDA rules, or filing in the Japanese patent office). Answering these from Indian statutes would be wrong, so they must be refused.
+- "international" - governed by a treaty or multi-country system (PCT, Madrid, Nagoya, TRIPS, WIPO). Those instruments are held in a different corpus, so refuse here and the user can switch.
+- "none" - not a legal question at all (a recipe, business advice, small talk). Jurisdiction does not apply."""
+
+INTERNATIONAL_SCOPE = """The corpus being searched contains ONLY **international** instruments: the WTO TRIPS Agreement, the Convention on Biological Diversity and its Nagoya Protocol, WIPO treaties (GRATK, PCT, Madrid, Hague, Budapest) and one foreign regulator's guidance. It holds **no** Indian statute. The user has deliberately asked for the international position, so treaty coverage is what you are screening for."""
+
+INTERNATIONAL_JURISDICTION_RULES = """- "international" - governed by a treaty or multi-country system. This is the DEFAULT here: the user switched to the international corpus on purpose, so a question about patents, trade marks, designs, biodiversity or traditional knowledge is in scope.
+- "india" - the question can ONLY be answered by reading Indian domestic law, and the instruments above have nothing to say about it: the wording of a specific Indian provision, an FSSAI licence form, which Indian authority to file with. Say "india" so the user can be sent back to the national corpus.
+
+  Be strict about this: a user who describes their product in Indian terms ("a classical churna from a First Schedule text", "an Ayurvedic proprietary medicine") is describing WHAT they have, not asking what an Indian statute says. If the underlying question - can this be patented, must benefits be shared, can this name be registered - is one these instruments address, that is "international" and you should answer it. The user switched to this corpus deliberately; do not send them back for naming their own product.
+- "foreign" - asks about one named country's domestic law that is not covered by the instruments above.
+- "none" - not a legal question at all (a recipe, business advice, small talk)."""
+
 RELEVANCE_PROMPT = """Screen a user's question against a legal corpus, on two dimensions.
 
-The corpus contains ONLY **Indian** law on Ayurveda: intellectual property (patents, GI, trade marks, copyright, designs, plant varieties), drug and cosmetic regulation, biodiversity/ABS, and pharmacopoeial standards. It holds **no** foreign law and no international treaty texts.
+{corpus_scope}
 
 **1. Jurisdiction.** Which legal system would actually answer this question?
-- "india" - governed by Indian law. This is the default: a question with no country mentioned is an Indian question.
-- "foreign" - governed by another country's law or by a foreign regulator (for example selling into the USA under FDA rules, or filing in the Japanese patent office). Answering these from Indian statutes would be wrong, so they must be refused.
-- "international" - governed by a treaty or multi-country system (PCT, Madrid, Nagoya, TRIPS, WIPO). We hold only India's own implementing law, not the treaties themselves.
-- "none" - not a legal question at all (a recipe, business advice, small talk). Jurisdiction does not apply.
+{jurisdiction_rules}
 
 **2. Subject matter.** Do the passages bear on the question at all? This is a scope check, not a completeness check: answer true if any provision is relevant even partially, since a later stage refuses any claim it cannot cite. Answer false only when the question falls outside the corpus's subject matter entirely.
 
@@ -502,6 +546,8 @@ The corpus contains ONLY **Indian** law on Ayurveda: intellectual property (pate
 **3. Advice on the user's own dispute.** Is the user asking you to forecast how their particular case will come out, or to recommend what legal action they should take? Set `personal_advice` true for:
 - predicting an outcome - "will I win", "what are my chances in court", "do I have a strong case", "will they succeed against me";
 - recommending whether to act - "should I sue them", "should I settle", "is it worth taking them to court".
+
+This is about LEGAL action. A question that is not about law at all - a marketing plan, a pricing decision, where to find a supplier - is not `personal_advice`; set `jurisdiction` to "none" for those instead. Refusing a business question as though it were a lawsuit tells the user the wrong thing about why we cannot help.
 
 Set it **false** for questions about what the law says, however close to a dispute they sit: "what remedies does the Patents Act give for infringement", "what defences are available to an infringement claim", "which court hears patent suits", "what is the limitation period", "what counts as infringement". Stating the law is information and we answer it; forecasting a case applies the law to facts we cannot see, and only a practitioner with the file can do that. Someone in the middle of a dispute is perfectly entitled to ask the first kind of question.
 
@@ -524,6 +570,7 @@ def llm_relevance_gate(
     question: str,
     evidence: list[Evidence],
     formulations: list[str] | None = None,
+    jurisdiction: str = "national",
 ) -> tuple[bool, str, AbstentionKind]:
     """Screen for subject matter AND jurisdiction before anything is answered.
 
@@ -559,9 +606,21 @@ def llm_relevance_gate(
     try:
         data = complete_json(
             RELEVANCE_PROMPT.format(
-                question=question, formulations=searched_as, passages=passages
+                question=question,
+                formulations=searched_as,
+                passages=passages,
+                corpus_scope=(INTERNATIONAL_SCOPE if jurisdiction == "international"
+                              else NATIONAL_SCOPE),
+                jurisdiction_rules=(INTERNATIONAL_JURISDICTION_RULES
+                                    if jurisdiction == "international"
+                                    else NATIONAL_JURISDICTION_RULES),
             ),
-            max_tokens=250,
+            # Raised from 250: this prompt gained the corpus-scope block, the
+            # jurisdiction rules and the SEARCHED AS lines, and models answer a
+            # longer prompt with a longer `reason`. Measured: replies were being
+            # cut off mid-string, so complete_json could not parse them and a
+            # perfectly healthy provider produced gate_unavailable.
+            max_tokens=400,
         )
     except LLMUnavailable as exc:
         logger.error("Relevance gate unavailable (%s); refusing rather than guessing", exc)
@@ -572,8 +631,10 @@ def llm_relevance_gate(
             "in a moment."
         ), AbstentionKind.GATE_UNAVAILABLE
 
+    searching_international = jurisdiction == "international"
     reason = str(data.get("reason") or "").strip()
-    jurisdiction = str(data.get("jurisdiction") or "india").strip().lower()
+    verdict = str(data.get("jurisdiction")
+                  or ("international" if searching_international else "india")).strip().lower()
     relevant = bool(data.get("relevant"))
     personal_advice = bool(data.get("personal_advice"))
 
@@ -581,17 +642,33 @@ def llm_relevance_gate(
     # all. "none" is what keeps a chocolate-cake question from being told it is
     # "governed by another country's law", while still letting a US regulatory
     # question be refused for the right reason rather than as mere off-topic.
-    if jurisdiction == "foreign":
-        return False, (
-            "This question is governed by another country's law. This corpus covers "
-            "Indian law only, so answering it from these sources would be misleading."
-        ), AbstentionKind.FOREIGN_JURISDICTION
-    if jurisdiction == "international":
-        return False, (
-            "This question turns on an international treaty or filing system. The corpus "
-            "currently holds Indian law only - international coverage is a later phase. "
-            "Ask about the Indian position and I can answer that."
-        ), AbstentionKind.FOREIGN_JURISDICTION
+    # Which verdict means "wrong corpus" depends on which corpus is loaded.
+    # Refusing an international question is right when searching Indian statute
+    # and wrong when searching the treaties themselves.
+    if searching_international:
+        if verdict == "india":
+            return False, (
+                "This asks specifically about Indian domestic law, which is not in the "
+                "international corpus. Switch to India and I can answer it from the "
+                "Indian statutes."
+            ), AbstentionKind.FOREIGN_JURISDICTION
+        if verdict == "foreign":
+            return False, (
+                "This turns on one country's own domestic law, which the international "
+                "instruments here do not cover."
+            ), AbstentionKind.FOREIGN_JURISDICTION
+    else:
+        if verdict == "foreign":
+            return False, (
+                "This question is governed by another country's law. This corpus covers "
+                "Indian law only, so answering it from these sources would be misleading."
+            ), AbstentionKind.FOREIGN_JURISDICTION
+        if verdict == "international":
+            return False, (
+                "This question turns on an international treaty or filing system. Switch "
+                "the jurisdiction toggle to International and I can answer it from the "
+                "treaty texts."
+            ), AbstentionKind.FOREIGN_JURISDICTION
 
     # Checked before subject matter, because a question like "will I win my
     # patent suit?" IS on-subject - the Patents Act governs infringement - and
@@ -606,6 +683,14 @@ def llm_relevance_gate(
     # model swap. Nothing previously asked it: minimax happened to refuse via
     # `relevant: false` and gemini happened not to, and neither was following an
     # instruction. An unasked question has no defined answer.
+    # "none" means this is not a legal question at all - a recipe, a business
+    # plan, small talk. It has to be handled BEFORE the advice check, or a
+    # question like "what is the best marketing strategy for my startup?" gets
+    # refused as if the user had asked about a lawsuit: true that we will not
+    # answer it, wrong about why, and the wrong thing to tell them.
+    if verdict == "none":
+        return False, _scope_message(reason), AbstentionKind.OUT_OF_SCOPE
+
     if personal_advice:
         return False, (
             "I can tell you what the law says, but not how your own case will turn out or "
@@ -627,6 +712,7 @@ def assess_sufficiency(
     evidence: list[Evidence],
     use_llm_gate: bool = True,
     formulations: list[str] | None = None,
+    jurisdiction: str = "national",
 ) -> tuple[bool, str, AbstentionKind]:
     """Decide whether retrieved evidence can support any answer at all."""
     if not evidence:
@@ -648,4 +734,4 @@ def assess_sufficiency(
     # Skipping the gate on a tight match also skipped the jurisdiction check,
     # and the USA/FDA question scored 0.2980 - comfortably inside any fast path
     # we would have set. Jurisdiction has to be checked on every question.
-    return llm_relevance_gate(question, evidence, formulations)
+    return llm_relevance_gate(question, evidence, formulations, jurisdiction)

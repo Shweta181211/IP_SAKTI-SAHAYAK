@@ -25,6 +25,27 @@ export type AbstentionKind =
 
 export type ConfidenceLevel = "high" | "moderate" | "limited";
 
+/** Phrasing only. Citations and classification are identical across styles —
+ *  plain mode is a rewrite of a finished answer, not a second generation. */
+export type ResponseStyle = "legal" | "plain";
+
+export interface NextStep {
+  text: string;
+  citation_ids: string[];
+  /** Which corpus the step follows from, so a treaty-derived step can never
+   *  read as an Indian requirement. */
+  jurisdiction: "national" | "international";
+}
+
+export interface NextSteps {
+  applicable: boolean;
+  steps: NextStep[];
+  reason: string | null;
+  unavailable: boolean;
+  rejected: string[];
+  disclaimer: string;
+}
+
 export interface CategoryContrast {
   category: Category;
   label: string;
@@ -94,6 +115,7 @@ export interface Answer {
   abstention_message: string | null;
   clarifying_question: string | null;
   rejected_citation_ids: string[];
+  response_style?: ResponseStyle;
   /** Provision references the model wrote that no retrieved chunk contains.
    *  The sentence carrying them is removed server-side before the answer ships. */
   unsupported_provisions: string[];
@@ -112,9 +134,13 @@ export interface Health {
   status: string;
   chunks_in_json: number;
   chunks_in_vector_db: number;
+  /** Per-jurisdiction chunk counts; drives whether the International toggle is live. */
+  chunks_by_jurisdiction?: Record<string, number>;
   collection: string;
   embed_model: string;
   generation_model: string;
+  /** Active (provider:model) fallback chain, best first. */
+  llm_chain?: string[];
   anchor_problems: string[];
   /** Aggregate of the server's local audit trail — counts only, never text. */
   audit?: {
@@ -133,4 +159,33 @@ export function citationLabel(c: Citation): string {
   if (c.section) parts.push(c.section);
   if (c.page) parts.push(`p. ${c.page}`);
   return parts.join(", ");
+}
+
+/** One similarity or difference between the two legal systems.
+ *
+ *  Each side carries its own claim and its own citations. There is deliberately
+ *  no field for an unattributed statement of law — the problem statement
+ *  requires the two answer-sets to stay visibly separate, and a shape that
+ *  cannot express a blended claim is a stronger guarantee than a prompt asking
+ *  for one. */
+export interface JurisdictionPoint {
+  kind: "similarity" | "difference";
+  summary: string;
+  national_claim: string | null;
+  national_citation_ids: string[];
+  international_claim: string | null;
+  international_citation_ids: string[];
+}
+
+export interface JurisdictionComparison {
+  question: string;
+  /** Independently generated — not one answer relabelled. */
+  national: Answer;
+  international: Answer;
+  points: JurisdictionPoint[];
+  /** Comparison points dropped for citing across jurisdictions or citing nothing. */
+  rejected_points: string[];
+  synthesis_unavailable: boolean;
+  synthesis_message: string | null;
+  disclaimer: string;
 }

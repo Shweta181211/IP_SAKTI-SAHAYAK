@@ -132,10 +132,41 @@ def main() -> int:
         record(f"{label} emits no citations", not a["citations"])
 
     print("\n" + "=" * 74 + "\n JURISDICTION TOGGLE\n" + "=" * 74)
+    # These assertions used to require the international side to ABSTAIN. That
+    # was correct only while 03_international/ was empty: with no treaty texts,
+    # the honest answer to a treaty question is a refusal. The corpus now holds
+    # 825 chunks across eleven instruments, so the contract has changed - the
+    # toggle must ANSWER, and the property worth testing is the one the problem
+    # statement actually cares about: that it answers from international sources
+    # and never from Indian law.
+    _, health = call("/health")
+    intl_loaded = (health.get("chunks_by_jurisdiction") or {}).get("international", 0)
+    record("international corpus is loaded", intl_loaded > 0, f"{intl_loaded} chunks")
+
     a, _ = ask("Can a classical churna be patented?", jurisdiction="international")
-    record("international toggle abstains honestly",
-           a["abstained"] and a["abstention_kind"] == "foreign_jurisdiction")
-    record("international emits no fabricated content", not a["steps"] and not a["citations"])
+    if not intl_loaded:
+        # Without the corpus the old contract still applies, and must.
+        record("international abstains when its corpus is absent",
+               a["abstained"] and a["abstention_kind"] == "foreign_jurisdiction")
+        record("international emits no fabricated content",
+               not a["steps"] and not a["citations"])
+    else:
+        record("international toggle answers from the treaty corpus",
+               not a["abstained"] and bool(a["citations"]),
+               f"{len(a['citations'])} citations")
+        record("international answer declares its jurisdiction",
+               a.get("jurisdiction") == "international", str(a.get("jurisdiction")))
+        # The one that matters. Checked against the corpus rather than by
+        # reading the prose: a citation card naming an Indian act inside an
+        # international answer is the conflation the PS forbids.
+        acts = sorted({c["act_name"] for c in a["citations"]})
+        indian_markers = ("Drugs and Cosmetics", "Patents Act", "TKDL",
+                          "Geographical Indications of Goods", "Trade Marks Act",
+                          "Copyright Act", "Biological Diversity", "Ayurvedic",
+                          "FSSAI", "MANUAL OF PATENT")
+        leaked = [act for act in acts if any(m in act for m in indian_markers)]
+        record("NO Indian source appears in the international answer",
+               not leaked, f"leaked: {leaked}" if leaked else f"sources: {acts}")
 
     print("\n" + "=" * 74 + "\n CITATION INTEGRITY ACROSS MANY QUESTIONS\n" + "=" * 74)
     questions = [

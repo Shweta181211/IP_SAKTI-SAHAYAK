@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Answer, ComparisonResult } from "./types";
+import type { Answer, ComparisonResult, JurisdictionComparison } from "./types";
 
 /**
  * Named, resumable consultations, persisted per browser.
@@ -25,9 +25,19 @@ import type { Answer, ComparisonResult } from "./types";
 /** One exchange in a transcript. Either an answer or a comparison. */
 export interface Turn {
   id: number;
-  kind: "answer" | "comparison";
+  kind: "answer" | "comparison" | "jurisdictions";
   answer?: Answer;
+  /** Revealed on request, for the same question. Kept beside the national
+   *  answer rather than replacing it: the two are read together and must stay
+   *  visibly separate. */
+  international?: Answer;
+  /** Built from the two answers above once the reader asks for it. */
+  jurisdictionComparison?: JurisdictionComparison;
   comparison?: ComparisonResult;
+  /** A national/international pair plus their comparison. Stored whole so a
+   *  resumed session shows both sides with their own citations, rather than a
+   *  summary that has lost track of which corpus said what. */
+  jurisdictions?: JurisdictionComparison;
 }
 
 export interface Session {
@@ -73,7 +83,9 @@ export function titleFor(session: Session): string {
   const text =
     first?.kind === "comparison"
       ? first.comparison?.product
-      : first?.answer?.question;
+      : first?.kind === "jurisdictions"
+        ? first.jurisdictions?.question
+        : first?.answer?.question;
   if (!text) return "";
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > TITLE_CHARS ? `${clean.slice(0, TITLE_CHARS).trimEnd()}…` : clean;
