@@ -118,7 +118,19 @@ def assess(
     # Requiring both retrievers to have ranked the passage highly makes it a
     # real signal again: corroboration means they independently agreed it was
     # among the best matches, not merely that neither excluded it.
-    window = result.evidence[:AGREEMENT_WINDOW]
+    # Measured over the passages the answer ACTUALLY CITES, not the top of the
+    # retrieved list. Scoring the whole retrieval let this component describe a
+    # search rather than an answer: an answer where two of three steps abstained
+    # still collected the full 0.25 because the retrievers had agreed about
+    # passages nobody could cite. That is how the bottom bucket became
+    # unreachable - the worst answer measured across ~50 in the evaluation
+    # scored 0.50 with an unsourced headline and one sourced step out of three.
+    cited_set = set(citation_ids)
+    cited_evidence = [e for e in result.evidence if e.chunk_id in cited_set]
+    # The fallback cannot normally trigger: an answer with nothing cited becomes
+    # a NO_EVIDENCE abstention before it reaches here. It exists so a caller that
+    # scores a partially-built answer degrades rather than divides by zero.
+    window = (cited_evidence or result.evidence)[:AGREEMENT_WINDOW]
     both = sum(
         1 for e in window
         if e.dense_rank is not None and e.dense_rank < AGREEMENT_RANK_CUTOFF
@@ -127,11 +139,11 @@ def assess(
     agreement_score = both / len(window) if window else 0.0
     if both and window:
         reasons.append(
-            f"{both} of the top {len(window)} passages were independently ranked highly "
+            f"{both} of the {len(window)} cited passages were independently ranked highly "
             "by both semantic and keyword search"
         )
     elif window:
-        reasons.append("semantic and keyword search did not agree on any top passage")
+        reasons.append("semantic and keyword search did not agree on any cited passage")
 
     score = (
         W_STEPS * steps_score
@@ -147,13 +159,39 @@ def assess(
             "and were rejected"
         )
 
-    if rejected_ids and score >= HIGH_THRESHOLD:
+    # An answer whose substantive steps mostly could NOT be sourced is thin,
+    # whatever the arithmetic says. This is the reachability fix: without it the
+    # bottom bucket depends on three weighted components all failing at once,
+    # and in ~50 measured answers that never happened - the badge had two states
+    # rather than three, and the one it never used was the warning.
+    #
+    # A cap rather than a score adjustment, for the same reason as the
+    # single-source rule below: the reason stays legible instead of being
+    # smeared across a weighted sum.
+    thin_coverage = bool(substantive) and cited_steps * 2 <= len(substantive)
+
+    if thin_coverage:
+        level = ConfidenceLevel.LIMITED
+        reasons.append(
+            f"capped: only {cited_steps} of {len(substantive)} reasoning steps could be "
+            "sourced, so this answer is thinly supported whatever else held up"
+        )
+    elif rejected_ids and score >= HIGH_THRESHOLD:
         # Belt and braces alongside the subtractive penalty. An answer whose
         # author reached for a source that does not exist has demonstrated
         # exactly the failure mode this badge is supposed to warn about, so it
         # does not get the top label however well the rest held together.
         level = ConfidenceLevel.MODERATE
         reasons.append("capped: the model cited at least one source that failed verification")
+    elif score >= HIGH_THRESHOLD and cited_steps < len(substantive):
+        # A step that had to abstain is the answer telling you it ran out of
+        # support. Two of three steps sourced with two corroborating acts lands
+        # on exactly 0.75 - the top of the range - which would label an answer
+        # "Well supported" while one third of its reasoning was left blank.
+        level = ConfidenceLevel.MODERATE
+        reasons.append(
+            "capped: a reasoning step could not be sourced, so this is not fully supported"
+        )
     elif score >= HIGH_THRESHOLD and len(acts) < 2:
         # Full step coverage and tight retrieval agreement can push a
         # single-source answer over the line. One act corroborating itself is

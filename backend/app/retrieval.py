@@ -62,21 +62,121 @@ what which who whom whose when where why how not no need want help please tell e
 
 MIN_CONTENT_WORDS = 3
 
+# Words that OPEN a question. This is the discriminator that a bare word count
+# is not: "What is ABS?" and "patent?" carry the same single content word, and
+# only one of them is a question somebody can be answered.
+#
+# Auxiliaries are included because subject-auxiliary inversion is how English
+# asks a yes/no question - "Is a churna patentable?", "Do I need NBA approval?".
+_INTERROGATIVE_OPENERS = frozenset("""what which who whom whose when where why how
+is are was were do does did can could may might shall should will would must
+has have had am
+क्या कैसे कब कहाँ कहां क्यों कौन किस""".split())
+
+# The wh-subset, for a question that does not START with one: "GI tag - what is
+# it?". Auxiliaries are deliberately excluded here, or a trailing "?" would let
+# "patent?" back in through any stray "is" elsewhere in the fragment.
+_WH_WORDS = frozenset("""what which who whom whose when where why how
+क्या कैसे कब कहाँ कहां क्यों कौन किस""".split())
+
+
+# Python's `re` counts letters and digits as \w but NOT the combining marks that
+# attach to them (Unicode categories Mn/Mc), so an Indic word comes apart:
+# "क्या" tokenises as ['क', 'य'] because the virama and the matra between them
+# are treated as separators. Every piece is then one character long and dropped
+# by the two-character minimum below, so a Hindi question measured as having
+# ZERO content words and was refused as too vague - silently, and regardless of
+# what it asked. Letting marks attach to their letters fixes that.
+#
+# English is unaffected: its tokens carry no marks, so "at least two letters or
+# digits" is the same test it always was.
+_COMBINING_MARKS = (
+    "̀-ͯ"  # Latin/Greek/Cyrillic diacritics
+    "҃-҉"
+    "֑-ׇֽֿׁׂׅׄ"  # Hebrew
+    "ؐ-ًؚ-ٰٟۖ-ۜ"  # Arabic
+    "ऀ-ःऺ-ॏ॑-ॗॢॣ"  # Devanagari
+    "ঁ-ঃ়-্"  # Bengali
+    "ਁ-ਃ਼-ੑ"  # Gurmukhi
+    "ଁ-ଃ଼-ୗ"  # Odia
+    "ஂா-்"  # Tamil
+    "ఀ-ఄా-ౖ"  # Telugu
+    "ಁ-ಃ಼-್"  # Kannada
+    "ഀ-ഃ഻-്"  # Malayalam
+)
+_WORD_RE = re.compile(rf"[\w{_COMBINING_MARKS}]+", re.UNICODE)
+
 
 def content_words(question: str) -> list[str]:
-    """Topic-bearing words. Unicode-aware, so Hindi and other scripts count."""
-    return [w for w in re.findall(r"\w{2,}", question.lower(), re.UNICODE)
-            if w not in _STOPWORDS]
+    """Topic-bearing words. Unicode-aware, so Hindi and other scripts count.
+
+    A token needs two actual letters or digits to count; the marks ride along
+    with the letter they belong to rather than splitting it.
+    """
+    words = []
+    for token in _WORD_RE.findall(question.lower()):
+        if sum(ch.isalnum() for ch in token) >= 2 and token not in _STOPWORDS:
+            words.append(token)
+    return words
+
+
+def is_question_form(question: str) -> bool:
+    """True when the text is shaped like a question, not a bare fragment.
+
+    Two forms count, and a trailing "?" alone deliberately does not: "patent?"
+    is punctuation on a keyword, not an enquiry.
+    """
+    words = re.findall(r"\w+", question.lower(), re.UNICODE)
+    if not words:
+        return False
+    if words[0] in _INTERROGATIVE_OPENERS:
+        return True
+    return question.rstrip().endswith("?") and any(w in _WH_WORDS for w in words)
 
 
 def is_too_vague(question: str) -> bool:
     """Cheap deterministic guard for fragments that cannot be retrieved against.
 
-    "patent?", "ayurveda" and "help with my product" all previously sailed
-    through and were handed near-arbitrary evidence. Running before any LLM call
-    also keeps us inside free-tier request limits.
+    Running before any LLM call also keeps us inside free-tier request limits.
+
+    The rule this replaced was "fewer than 3 content words", and it refused
+    real questions: "What is a Geographical Indication?" survives stop-word
+    removal as ['geographical', 'indication'] and "What is ABS?" as ['abs'], so
+    both were told to rephrase. Those are among the first things anyone types.
+
+    **Corpus frequency was measured as an alternative discriminator and does not
+    work.** The idea was that a specific term is a rare one, but "abs" appears in
+    2 of 2,457 chunks (0.08%) and so does "something" - the corpus spells ABS out
+    as "Access and Benefit Sharing", so the acronym is as rare as a filler word.
+    Rarity cannot tell a precise question from an empty one.
+
+    Sentence form can. What separates the questions that must pass from the
+    fragments that must not is whether anything was actually *asked*:
+
+        "What is a Geographical Indication?"  what + 2 content words  -> ask
+        "What is ABS?"                        what + 1 content word   -> ask
+        "patent?"                             no question frame       -> fragment
+        "ayurveda"                            no question frame       -> fragment
+        "help with my product"                no question frame       -> fragment
+        "tell me about law"                   imperative, not a query -> fragment
+        "Why not?"                            asks, but names nothing -> fragment
+
+    So: nothing topic-bearing at all is always too vague (there is nothing to
+    search for, whatever the grammar). Three or more content words is never too
+    vague, as before. In between - the short, specific question - it comes down
+    to whether the user asked something.
+
+    Note the last line above: "Why not?" still refuses here, and should. Turning
+    an elliptical follow-up into a standalone question is contextualise()'s job,
+    and this guard runs after it precisely so a resolved follow-up is judged on
+    its resolved wording.
     """
-    return len(content_words(question)) < MIN_CONTENT_WORDS
+    content = content_words(question)
+    if not content:
+        return True
+    if len(content) >= MIN_CONTENT_WORDS:
+        return False
+    return not is_question_form(question)
 
 
 @dataclass
@@ -114,13 +214,19 @@ class RetrievalResult:
         return [e.chunk_id for e in self.evidence]
 
 
-EXPANSION_PROMPT = """Rewrite a user's question into search queries phrased the way an Indian statute or rule would phrase it.
+EXPANSION_PROMPT = """Rewrite a user's message into search queries phrased the way an Indian statute or rule would phrase it.
 
-Users ask in everyday words ("can my churna be patented?"). Legislation uses different vocabulary for the same idea ("invention which in effect is traditional knowledge or an aggregation of known properties"). Searching the user's words alone therefore misses the governing provision.
+Users write in everyday words ("can my churna be patented?"). Legislation uses different vocabulary for the same idea ("invention which in effect is traditional knowledge or an aggregation of known properties"). Searching the user's words alone therefore misses the governing provision.
 
-Produce 3 short queries using the statutory concepts and terms of art the question implicates. Do not answer the question. Do not invent section numbers.
+**Translate the vocabulary. Never change the question.** Keep the legal issue the user actually raised: asked about patenting, expand toward patentability; about a product name, toward trade marks; about selling or making it, toward licensing, standards and labelling.
 
-QUESTION: {question}
+**If the message raises no legal issue at all** - many are simply a description of a product - then the question is "what regime governs this product, and what does it require of me?". Expand toward classification, licensing, standards and labelling for that kind of product.
+
+In that case especially, **do not reach for patentability.** It is one regime among many, its vocabulary is the densest in this corpus, and importing it uninvited turns "I have made a neem face cream" into an answer about traditional-knowledge patent exclusions - which is not what was asked and buries the rules that actually apply.
+
+Produce 3 short queries using the statutory concepts and terms of art the message genuinely implicates. Do not answer it. Do not invent section numbers.
+
+MESSAGE: {question}
 
 Return ONLY JSON: {{"queries": ["...", "...", "..."]}}"""
 
@@ -237,15 +343,24 @@ def retrieve(
     lexical_rank: dict[str, int] = {}
     fused: dict[str, float] = {}
 
-    # queries[0] IS the user's question, so searching it separately for the
-    # threshold reading and then again inside the loop ran one redundant
-    # sentence-transformer encode and one redundant BM25 scan on every request.
-    # Compute each formulation once and reuse the first for the thresholds.
+    # The threshold readings must describe the search that ACTUALLY produced the
+    # evidence, which is every formulation fused - not the user's raw wording.
+    #
+    # They used to be taken from queries[0] alone, and that silently broke short
+    # questions whose whole point is that the user's wording is not the corpus's.
+    # Measured: "What is ABS?" scores 0.454 on its own wording, one thousandth
+    # past MAX_DENSE_DISTANCE, so assess_sufficiency refused it with "no
+    # sufficiently related provision was found in the corpus" - while all twelve
+    # retrieved chunks were the Biological Diversity Act and the ABS Guidelines.
+    # The expansion "Access and benefit sharing" matched at rank 0. Judging the
+    # discarded formulation and ignoring the one that worked is backwards.
     for position, q in enumerate(queries):
         dense_hits = _dense_candidates(q, jurisdiction)
         lexical_hits = _lexical_candidates(q)
-        if position == 0:
-            dense, lexical = dense_hits, lexical_hits
+        if dense_hits and (not dense or dense_hits[0][1] < dense[0][1]):
+            dense = dense_hits
+        if lexical_hits and (not lexical or lexical_hits[0][1] > lexical[0][1]):
+            lexical = lexical_hits
 
         for rank, (cid, _) in enumerate(dense_hits):
             fused[cid] = fused.get(cid, 0.0) + 1.0 / (RRF_K + rank + 1)
@@ -283,7 +398,8 @@ def retrieve(
     dense_best = dense[0][1] if dense else None
     lexical_best = lexical[0][1] if lexical else None
     sufficient, reason, kind = assess_sufficiency(
-        question, dense_best, lexical_best, evidence, use_llm_gate=use_llm_gate
+        question, dense_best, lexical_best, evidence,
+        use_llm_gate=use_llm_gate, formulations=queries,
     )
     return RetrievalResult(
         evidence, sufficient, reason, dense_best, lexical_best, kind,
@@ -305,6 +421,66 @@ def retrieve(
 MAX_DENSE_DISTANCE = 0.45
 CONFIDENT_DISTANCE = 0.30
 
+# How many retrieved passages the relevance gate reads. This is the FULL default
+# top_k, not a sample: see llm_relevance_gate for the measurement that forced it
+# up from 6. Section 6c raised the per-passage window from 320 to 900 characters
+# for the same class of reason - a gate that cannot see the governing provision
+# refuses things it should allow.
+GATE_PASSAGE_WINDOW = 12
+
+# Wording the gate must never put in front of a user. The prompt now forbids
+# claims about what the corpus holds, because the model can only see a handful
+# of retrieved passages and cannot know. This is the backstop for when it says
+# so anyway: measured, it told users "trademark law is not covered by the
+# provided corpus" and "the provided corpus contains no provisions regarding
+# copyright law" while holding 118 Trade Marks Act and 102 Copyright Act chunks.
+#
+# A false statement about our own holdings is worse than a vague one: the user
+# goes away believing the tool cannot help, and the claim is checkable.
+# Deliberately a containment test, not an attempt to parse the negation. A
+# reason that genuinely describes the QUESTION - "this is about baking a cake",
+# "this asks me to predict the outcome of a lawsuit" - never needs to mention
+# our holdings at all. So any mention of them is the tell, whichever way round
+# the sentence is turned, and there is no grammar left to get wrong.
+_CORPUS_REFERENCES = (
+    "corpus",
+    "these sources",
+    "our sources",
+    "the provided source",
+    "the provided document",
+    "the provided passage",
+    "the passages provided",
+    "the available source",
+    "the database",
+)
+
+_SCOPE_FALLBACK = (
+    "This question falls outside what these sources can settle. They cover Indian law "
+    "on Ayurveda: IP, drug and food regulation, biodiversity and ABS, and "
+    "pharmacopoeial standards."
+)
+
+
+def _scope_message(reason: str) -> str:
+    """The out-of-scope message, with claims about our own holdings filtered out.
+
+    The gate sees a dozen retrieved passages. It is in no position to say what
+    the corpus contains, and when it tried it was wrong in the most damaging
+    direction - telling users we hold no trade mark or copyright law while
+    holding 118 Trade Marks Act and 102 Copyright Act chunks. Keep its
+    reasoning when it describes the question; drop it when it describes us.
+    """
+    if not reason:
+        return _SCOPE_FALLBACK
+    lowered = reason.lower()
+    if any(term in lowered for term in _CORPUS_REFERENCES):
+        logger.warning(
+            "Gate reason made a claim about our holdings; substituting: %r", reason
+        )
+        return _SCOPE_FALLBACK
+    return reason
+
+
 RELEVANCE_PROMPT = """Screen a user's question against a legal corpus, on two dimensions.
 
 The corpus contains ONLY **Indian** law on Ayurveda: intellectual property (patents, GI, trade marks, copyright, designs, plant varieties), drug and cosmetic regulation, biodiversity/ABS, and pharmacopoeial standards. It holds **no** foreign law and no international treaty texts.
@@ -317,9 +493,21 @@ The corpus contains ONLY **Indian** law on Ayurveda: intellectual property (pate
 
 **2. Subject matter.** Do the passages bear on the question at all? This is a scope check, not a completeness check: answer true if any provision is relevant even partially, since a later stage refuses any claim it cannot cite. Answer false only when the question falls outside the corpus's subject matter entirely.
 
+**The passages are a search result, not an inventory of the corpus.** They are the handful of chunks that ranked highest for this one question, drawn from thousands. A body of law being absent from them is NOT evidence that the corpus lacks it - a question about trade marks can easily retrieve mostly drug-regulation passages, because the product words in the question outweigh the legal ones. The corpus's coverage is the list above and that list is authoritative. Judge whether the QUESTION falls inside that subject matter; never conclude from these passages that the corpus does not contain an area of law it says it contains. If the question is in scope but the passages are a poor match, that is still `relevant: true` - the later citation stage refuses anything it cannot source.
+
+**Judge the question as it was searched.** The "SEARCHED AS" lines below are how the question was restated for retrieval, and they are what actually found these passages. Use them to read the question: an acronym or shorthand the user typed ("ABS") may only appear in the passages spelled out ("Access and Benefit Sharing").
+
 **Passages that CONTRADICT the question are relevant.** A question can assume something the law does not provide - "cite the section that ALLOWS patenting a classical formulation", "which rule exempts me from NBA approval". The correct response is to state what the law actually says and cite it, so `relevant` is **true** whenever the passages settle the point, including when they settle it against the questioner. "There is no such provision, and here is the one that governs instead" is an answer, not a refusal. Answering false here would abstain on precisely the questions where correcting the user matters most.
 
+**3. Advice on the user's own dispute.** Is the user asking you to forecast how their particular case will come out, or to recommend what legal action they should take? Set `personal_advice` true for:
+- predicting an outcome - "will I win", "what are my chances in court", "do I have a strong case", "will they succeed against me";
+- recommending whether to act - "should I sue them", "should I settle", "is it worth taking them to court".
+
+Set it **false** for questions about what the law says, however close to a dispute they sit: "what remedies does the Patents Act give for infringement", "what defences are available to an infringement claim", "which court hears patent suits", "what is the limitation period", "what counts as infringement". Stating the law is information and we answer it; forecasting a case applies the law to facts we cannot see, and only a practitioner with the file can do that. Someone in the middle of a dispute is perfectly entitled to ask the first kind of question.
+
 QUESTION: {question}
+SEARCHED AS:
+{formulations}
 
 PASSAGES:
 {passages}
@@ -327,12 +515,15 @@ PASSAGES:
 Return ONLY JSON:
 {{"jurisdiction": "india" or "foreign" or "international",
   "relevant": true or false,
-  "reason": "<one short sentence>"}}"""
+  "personal_advice": true or false,
+  "reason": "<one short sentence about the QUESTION and these passages. Never state what the corpus does or does not contain.>"}}"""
 
 
 
 def llm_relevance_gate(
-    question: str, evidence: list[Evidence]
+    question: str,
+    evidence: list[Evidence],
+    formulations: list[str] | None = None,
 ) -> tuple[bool, str, AbstentionKind]:
     """Screen for subject matter AND jurisdiction before anything is answered.
 
@@ -350,13 +541,27 @@ def llm_relevance_gate(
     """
     from .llm import LLMUnavailable, complete_json
 
+    # Every retrieved passage, not the first six. Measured on "Can I trademark
+    # the name of my Ayurvedic product?": the Trade Marks Act chunks land at
+    # ranks 6 and 8, because "Ayurvedic product" pulls the 949-chunk Drugs and
+    # Cosmetics Rules up the list. A six-passage window therefore showed the
+    # gate five drug-regulation passages and asked whether the corpus covers
+    # trade marks - and it answered, reasonably but wrongly, that it does not.
+    # The governing statute has to be inside the window the gate reads.
     passages = "\n\n".join(
         f"[{i}] {e.metadata.get('act_name', '?')}: {e.text[:900]}"
-        for i, e in enumerate(evidence[:6], 1)
+        for i, e in enumerate(evidence[:GATE_PASSAGE_WINDOW], 1)
     )
+    # How the question was restated for retrieval. Without this the gate judges
+    # wording that never retrieved anything: "What is ABS?" against passages
+    # that only ever say "Access and Benefit Sharing".
+    searched_as = "\n".join(f"- {q}" for q in (formulations or [question]))
     try:
         data = complete_json(
-            RELEVANCE_PROMPT.format(question=question, passages=passages), max_tokens=250
+            RELEVANCE_PROMPT.format(
+                question=question, formulations=searched_as, passages=passages
+            ),
+            max_tokens=250,
         )
     except LLMUnavailable as exc:
         logger.error("Relevance gate unavailable (%s); refusing rather than guessing", exc)
@@ -370,6 +575,7 @@ def llm_relevance_gate(
     reason = str(data.get("reason") or "").strip()
     jurisdiction = str(data.get("jurisdiction") or "india").strip().lower()
     relevant = bool(data.get("relevant"))
+    personal_advice = bool(data.get("personal_advice"))
 
     # Jurisdiction is decided first, but only for questions that are legal at
     # all. "none" is what keeps a chocolate-cake question from being told it is
@@ -387,11 +593,29 @@ def llm_relevance_gate(
             "Ask about the Indian position and I can answer that."
         ), AbstentionKind.FOREIGN_JURISDICTION
 
+    # Checked before subject matter, because a question like "will I win my
+    # patent suit?" IS on-subject - the Patents Act governs infringement - and
+    # would otherwise sail through as relevant. It is the one refusal the
+    # evaluation caught the system getting wrong in the dangerous direction:
+    # measured on gemini-3.5-flash-lite it answered with litigation procedure
+    # and told the user "You may initiate a suit for infringement in a court not
+    # inferior to a District Court under Section 104". Every sentence was
+    # sourced, and it was still advice on a live dispute.
+    #
+    # Asking the model this EXPLICITLY is what makes the behaviour survive a
+    # model swap. Nothing previously asked it: minimax happened to refuse via
+    # `relevant: false` and gemini happened not to, and neither was following an
+    # instruction. An unasked question has no defined answer.
+    if personal_advice:
+        return False, (
+            "I can tell you what the law says, but not how your own case will turn out or "
+            "whether to bring one - that means applying the law to facts and evidence I "
+            "cannot see. Ask what the law provides on infringement, remedies, defences or "
+            "procedure and I will answer that with citations."
+        ), AbstentionKind.LEGAL_ADVICE
+
     if not relevant:
-        return False, reason or (
-            "The corpus does not cover this question. It holds Indian law on Ayurveda "
-            "IP, drug regulation, biodiversity/ABS and pharmacopoeial standards."
-        ), AbstentionKind.OUT_OF_SCOPE
+        return False, _scope_message(reason), AbstentionKind.OUT_OF_SCOPE
 
     return True, reason or "Evidence addresses the question.", AbstentionKind.NONE
 
@@ -402,13 +626,20 @@ def assess_sufficiency(
     lexical_best: float | None,
     evidence: list[Evidence],
     use_llm_gate: bool = True,
+    formulations: list[str] | None = None,
 ) -> tuple[bool, str, AbstentionKind]:
     """Decide whether retrieved evidence can support any answer at all."""
     if not evidence:
         return False, "No provisions were retrieved for this question.", AbstentionKind.NO_EVIDENCE
 
     if dense_best is not None and dense_best > MAX_DENSE_DISTANCE:
-        return False, ("No sufficiently related provision was found in the corpus."),               AbstentionKind.OUT_OF_SCOPE
+        # Phrased about the SEARCH, not the corpus. The old wording - "no
+        # sufficiently related provision was found in the corpus" - told the
+        # user a fact about our holdings that this check cannot establish: it
+        # only knows that nothing matched closely, which is as easily a wording
+        # mismatch as an absence.
+        return False, ("Nothing in the search came back closely enough related to answer "
+                       "this. Try naming the statute, the right, or the product."),               AbstentionKind.OUT_OF_SCOPE
 
     if not use_llm_gate:
         return True, "Evidence retrieved (relevance gate disabled).", AbstentionKind.NONE
@@ -417,4 +648,4 @@ def assess_sufficiency(
     # Skipping the gate on a tight match also skipped the jurisdiction check,
     # and the USA/FDA question scored 0.2980 - comfortably inside any fast path
     # we would have set. Jurisdiction has to be checked on every question.
-    return llm_relevance_gate(question, evidence)
+    return llm_relevance_gate(question, evidence, formulations)

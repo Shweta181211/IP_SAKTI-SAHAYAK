@@ -37,6 +37,7 @@ const ABSTENTION_HEADING: Record<AbstentionKind, string> = {
   foreign_jurisdiction: "Outside this jurisdiction",
   out_of_scope: "Outside this corpus",
   gate_unavailable: "Safety check unavailable",
+  legal_advice: "This needs a practitioner",
   // Never rendered through this panel — small talk has its own plain layout.
   conversational: "",
 };

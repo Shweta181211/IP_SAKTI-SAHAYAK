@@ -80,6 +80,24 @@ def body_of(path: str) -> tuple[int, str]:
     return response.status_code, response.text
 
 
+def _same(a: str, b: str) -> bool:
+    """Body equality that does not depend on the checkout's line endings.
+
+    index.html is checked out with CRLF, and Path.read_text() applies
+    universal-newline translation while an HTTP body does not - 934
+    characters against 949 for byte-identical content. All 12 traversal
+    assertions failed on that alone, which is worse than a useless test: a
+    real regression would have been invisible in a suite that is always red.
+
+    Both CR forms are collapsed, not just CRLF. The file actually contains a
+    stray CR CR LF, so normalising only CRLF leaves a lone CR behind and the
+    comparison still fails.
+    """
+    cr, lf = chr(13), chr(10)
+    norm = lambda t: t.replace(cr + lf, lf).replace(cr, lf)
+    return norm(a) == norm(b)
+
+
 def assert_blocked(path: str, index_html: str) -> None:
     """A blocked request must not return any file from outside the build.
 
@@ -94,13 +112,19 @@ def assert_blocked(path: str, index_html: str) -> None:
     """
     status, text = body_of(path)
     leaked = [m for m in SECRET_MARKERS if m in text]
-    blocked = not leaked and (text == index_html or status == 404)
+    # Compare with newlines normalised. index.html is checked out with CRLF on
+    # Windows, and Path.read_text() applies universal-newline translation while
+    # the HTTP body does not - 934 characters against 949 for byte-identical
+    # content. Every one of these 12 assertions failed on that alone, which is
+    # worse than a useless test: a real regression would have been lost in the
+    # noise of a suite that is always red.
+    blocked = not leaked and (_same(text, index_html) or status == 404)
     if leaked:
         detail = f"LEAKED {leaked}"
     elif not blocked:
         detail = f"served an unexpected body ({status}, {len(text)} bytes)"
     else:
-        detail = "index.html" if text == index_html else f"{status} refusal"
+        detail = "index.html" if _same(text, index_html) else f"{status} refusal"
     record(f"blocked: {path}", blocked, detail)
 
 
@@ -147,7 +171,7 @@ for path in LEGITIMATE_PATHS:
 
 # The SPA fallback is what makes client-side routing work; it must survive.
 status, text = body_of("/some/client/route")
-record("unknown app route still returns the SPA", status == 200 and text == index_html)
+record("unknown app route still returns the SPA", status == 200 and _same(text, index_html))
 
 print("\n" + "=" * 74)
 failed = [r for r in results if r[0] == FAIL]

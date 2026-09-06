@@ -182,14 +182,23 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                   ))}
                 </ul>
 
-                {answer.rejected_citation_ids.length > 0 && (
+                {(answer.rejected_citation_ids.length > 0 ||
+                  (answer.unsupported_provisions ?? []).length > 0) && (
                   <div className="mt-3 border-l-2 border-neem bg-neem-wash px-3 py-2">
                     <p className="eyebrow text-neem">Citation guard</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
-                      {answer.rejected_citation_ids.length} unverifiable reference
-                      {answer.rejected_citation_ids.length > 1 ? "s were" : " was"} rejected
-                      before this answer was shown.
-                    </p>
+                    {answer.rejected_citation_ids.length > 0 && (
+                      <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+                        {answer.rejected_citation_ids.length} unverifiable reference
+                        {answer.rejected_citation_ids.length > 1 ? "s were" : " was"} rejected
+                        before this answer was shown.
+                      </p>
+                    )}
+                    {(answer.unsupported_provisions ?? []).length > 0 && (
+                      <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+                        {answer.unsupported_provisions.join(", ")} was named without a source
+                        in the retrieved text, so that sentence was removed.
+                      </p>
+                    )}
                   </div>
                 )}
               </aside>

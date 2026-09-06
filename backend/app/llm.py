@@ -34,7 +34,7 @@ def client() -> OpenAI:
     if _client is None:
         _client = OpenAI(
             api_key=api_key(),
-            base_url=settings.openrouter_base_url,
+            base_url=settings.llm_base_url,
             timeout=settings.request_timeout_s,
             # We run our own backoff-and-fallback loop below. Leaving the SDK's
             # default retries on stacks a second, invisible retry layer inside

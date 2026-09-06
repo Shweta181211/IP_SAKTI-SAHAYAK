@@ -236,6 +236,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 9 | Benchmark + robustness hardening | **Done** |
 | 10 | Polish + demo rehearsal | **Done** |
 | 11 | Post-audit hardening (security, robustness, coverage) | **Done** — §6j |
+| 12 | Post-evaluation fixes (gate scope, fabricated provisions, subject scope, confidence) | **Done** — §6k |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -737,7 +738,7 @@ before trusting any chunk id written earlier in this file.
 
 ### Corpus: `About TKDL.pdf` was silently lost, and 115 chunks with it
 
-`build_chunks.py` dropped any page matching a bare `CONTENTS`. The single page of
+`build_chunks.py` dropped any page matching a bare `\bCONTENTS\b`. The single page of
 `About TKDL.pdf` contains the ordinary phrase *"the available **contents** of the ancient
 texts"*, so its only page was discarded and the document produced **zero chunks** - while the
 log still reported "processed" and flagged nothing. TKDL is central to the flagship answer,
@@ -865,14 +866,18 @@ See `README.md` for full setup. Quick reference (Windows):
 .venv\Scripts\python.exe pipeline\test_retrieval.py
 ```
 
-`OPENROUTER_API_KEY` must be set in `.env` (copy from `.env.example`) before any
-classification or generation phase will run.
+A generation key must be set in `.env` (copy from `.env.example`) before any
+classification or generation phase will run. **Which variable holds it is chosen by
+`IPSAKTI_API_KEY_ENV`** - currently `GEMINI_API_KEY`; set it to `OPENROUTER_API_KEY`
+to go back to OpenRouter. See §6k.
 
 **LLM access goes through OpenRouter**, not the Anthropic API directly:
 
 - Endpoint: `https://openrouter.ai/api/v1` (OpenAI-compatible `/chat/completions`)
 - Client library: `openai`, **not** `anthropic`
-- Default model: `minimax/minimax-m3:free` (free, 1M context)
+- Default model: **`gemini-3.5-flash-lite`** via Google's OpenAI-compatible endpoint.
+  Set in `.env`; comment those four lines out to return to OpenRouter. OpenRouter's
+  free tier was exhausted during the Phase 12 evaluation - see §6k.
 - Upgrade path: set `IPSAKTI_MODEL=anthropic/claude-sonnet-5` once the account has
   credits ($2/M in, $10/M out, roughly $0.03 per full query). No code change needed.
 
@@ -1159,3 +1164,166 @@ the suites before the demo rather than trusting a past green.**
   visible.
 - Audit log and human-escalation (PS "expected solution", Version B has both) — **not built**;
   deferred to the next-level pass along with the UI work.
+
+---
+
+## 6k. Phase 12 — the fixes from `TEST_RESULTS.md`
+
+A two-model evaluation (`TEST_RESULTS.md`, 6 Sep 2026) ran the 23-question manual
+checklist plus two system checks against MiniMax M3 and Gemini 3.5 Flash Lite. This
+section records what was fixed afterwards. **Three of the findings had a different root
+cause than the report concluded**, and those corrections are the most useful part of this
+section — the report's diagnoses are wrong in ways that would waste an afternoon.
+
+### The single most important correction: history never reaches the gate
+
+The report's headline finding was that the relevance gate "invents corpus gaps when
+conversation history is present", from an A/B where a trademark question was refused
+mid-session and answered standalone. **That mechanism does not exist.** `history` is
+consumed by exactly one function, `contextualise()` (`generation.py`), and the gate never
+sees it. Measured over four trials per arm:
+
+    trademark, standalone      3 refused / 1 answered
+    trademark, 6-turn history  2 refused / 2 answered
+    copyright, standalone      1 refused / 3 answered
+    copyright, 6-turn history  0 refused / 4 answered
+
+History made no difference. The A/B was one sample per arm of a nondeterministic failure.
+The real causes were three, all in **what the gate could see**:
+
+1. **The distance outer bound was computed on the user's raw wording**, not on the
+   formulations that actually retrieved the evidence. `"What is ABS?"` scores 0.454
+   against `MAX_DENSE_DISTANCE = 0.45` and was refused *before the LLM gate ran*, while
+   all twelve retrieved chunks were the Biological Diversity Act and the ABS Guidelines.
+   The expansion "Access and benefit sharing" matched at rank 0. `retrieve()` now takes
+   the best reading across all formulations.
+2. **The gate read only the first six passages.** For "can I trademark the name of my
+   Ayurvedic product?", the Trade Marks Act chunks land at ranks **6 and 8** — "Ayurvedic
+   product" pulls the 949-chunk D&C Rules above them — so the gate saw five
+   drug-regulation passages and was asked whether trade marks were in scope. Window is now
+   the full `GATE_PASSAGE_WINDOW = 12`.
+3. **The gate never saw the expansions**, so it judged wording that had retrieved nothing.
+   `RELEVANCE_PROMPT` now carries a `SEARCHED AS` block.
+
+The prompt also now states that **the passages are a search result, not an inventory**: a
+body of law missing from twelve retrieved chunks is not evidence the corpus lacks it.
+`_scope_message()` is the backstop — it drops any refusal reason mentioning our own
+holdings, because a reason describing the *question* never needs to.
+
+**Regression suite: `tests/test_gate_scope.py`** (16 checks), which asserts among other
+things that history does *not* change the verdict, so the wrong diagnosis cannot be
+re-adopted.
+
+### "The cited source" was our own code, not model chatter
+
+The report attributed the phrase spliced into answers on both models to model behaviour.
+It was `strip_chunk_ids()`, which **substituted the literal string `"the cited source"`**
+for any chunk id the model wrote inline — in exactly the mid-sentence position the id had
+occupied. Ids are now removed outright.
+
+The same three lines carried a second, invisible bug: the tidy-up replacement was a
+literal **`\x01` SOH byte** instead of the `\1` backreference, so cleaning `" ."` deleted
+the full stop and inserted a control character. Committed that way.
+
+A third instance of the same class was then found by sweeping the bytes:
+`comparison.py`'s `_CHUNK_ID` used literal **`\x08` BACKSPACE** bytes where `\b` word
+boundaries were intended, making the pattern **unmatchable** — so the chunk-id stripper
+§6i describes has been silently inert, and raw ids could reach the comparison cards.
+
+**`tests/test_units.py` now sweeps every backend module for control characters.** All
+three bugs were invisible in every rendering of the source; only the bytes showed them.
+
+### Tests 6 and 7 were an expansion failure, not a generation failure
+
+A neutral product description ("I've made a neem-based face cream for external use only")
+was answered with three steps of Section 3(p) patent law. The cause was `expand_query`,
+which rewrote it into *"patentability of neem based formulations"* and *"patent
+eligibility of cosmetic preparations"*. Retrieval then correctly returned patent law and
+generation correctly answered about patents — every stage faithful to a question the user
+never asked. Patent vocabulary is the densest in this corpus, so it wins any ambiguous
+rewrite.
+
+`EXPANSION_PROMPT` now says: translate the vocabulary, never change the question; and
+where a message raises no legal issue, expand toward the regime that *governs the product*
+rather than reaching for patentability.
+
+**`tests/test_subject_scope.py`** carries the positive controls that matter: the flagship
+must *stay* patent-framed, and a naming question must still reach trade mark law. A fix
+that merely suppressed patent vocabulary everywhere would break the demo.
+
+### Fabricated authority in prose — the guard nobody had written
+
+`validate_ids()` proves a citation **id** is real and was retrieved. Nothing proved that
+*"under Section 3(e)"* in the sentence beside it was backed by a chunk containing Section
+3(e). Measured on the flagship: **2 of 6 cold runs named Section 3(e), which appears in
+none of the retrieved evidence** (0 of 4 retrieval checks). The citations shown alongside
+were all valid, so the fabricated provision looked sourced — worse than an invalid id.
+
+`citations.provision_support()` / `strip_unsupported_provisions()` now remove the
+**sentence** carrying a provision no retrieved chunk contains (the smallest unit that can
+go without leaving a claim standing in a wreck of grammar), and report it as
+`Answer.unsupported_provisions`, rendered in the existing Citation-guard panel. Removal
+triggers only when the provision is absent from the **whole evidence set** — a provision
+retrieved but attributed to the wrong chunk is sloppy citing, not invention.
+
+Watch the false-positive direction: the first version deleted a good sentence because
+*"the Biological Diversity **Rules 2024**"* matched as "Rule 2024". Four-digit years are
+now excluded.
+
+### Other fixes
+
+| Finding | Fix |
+|---|---|
+| `is_too_vague` refused *"What is a Geographical Indication?"* and *"What is ABS?"* — deterministic, both models | Question **form**, not word count: no content words is always vague; 1-2 content words passes only if something was actually asked. Corpus frequency was measured as an alternative and does not separate — "abs" occurs in 2 of 2,457 chunks and so does "something". |
+| Hindi questions measured as having **zero** content words | Python's `\w` excludes combining marks, so "क्या" tokenised as `['क','य']` and both were dropped by the 2-character minimum. Marks now attach to their letters; English is bit-identical. |
+| Outcome-prediction questions answered on Gemini, refused on MiniMax | Nothing **asked**. `personal_advice` is now an explicit third dimension of the gate, checked before subject matter (the Patents Act does govern infringement, so it is on-subject), mapping to `AbstentionKind.LEGAL_ADVICE`, which escalates. Verified on two models. |
+| Flagship named TKDL inconsistently | Step 3 must re-read the evidence for a named register/authority/mechanism before concluding none exists. Also **restored the §6f relevance-ordering rule, which had been lost from the prompt entirely** — 3(p) citation went 3/5 → 5/6. |
+| `LIMITED` confidence unreachable across ~50 answers | Agreement was scored over the **retrieved** top-5, so an answer with two abstaining steps still collected the full 0.25 for passages nobody cited. It is now scored over **cited** passages, plus two caps: ≤half the steps sourced → `LIMITED`; any abstaining step → cannot be `HIGH`. |
+| `tests/test_security.py` reported 12 failures | Not a hole — the test compared an HTTP body against `read_text()`, which applies universal-newline translation. `index.html` also contains a stray `CR CR LF`, so normalising only CRLF was not enough. **25/25.** |
+
+### Provider configuration is now configuration
+
+OpenRouter's free tier (50/day) was exhausted during the evaluation, and
+`minimax-m3:free` additionally hit a provider-side daily cap that credits do not lift. The
+model was therefore switched to Gemini — but only via shell exports, which meant the
+documented start command still ran on a dead model.
+
+- `settings.llm_base_url` replaces `openrouter_base_url` (old env name kept as an alias).
+- `settings.api_key_env` names **which variable holds the key**, so running on Gemini no
+  longer requires putting a Gemini key in a variable called `OPENROUTER_API_KEY`.
+- `.env` carries the four lines; commenting them out returns to OpenRouter.
+
+**Use `gemini-3.5-flash-lite`, not `gemini-3.6-flash`.** 3.6 is a thinking model: at a
+300-token budget it returned `completion_tokens: 7` and `finish_reason: length`, so the
+gate's 250-token cap yields truncated JSON and every question fails closed. Flash Lite
+returns clean JSON in ~1.5 s.
+
+Free-tier Gemini enforces a per-minute limit; the run logged **13 automatic fallbacks** to
+`gemini-3.1-flash-lite` with backoff and **no request failed as a result**. The
+retry/fallback path §6j called "decorative" is now demonstrably load-bearing.
+
+### Suites as of this phase
+
+```
+tests/test_units.py         133   unit - includes the control-character sweep
+tests/test_security.py       25   traversal, anchor replacement (was 13/25)
+tests/test_gate_scope.py     16   scope refusals, 10-turn session, history-invariance
+tests/test_legal_advice.py   15   outcome prediction refused + controls still answered
+tests/test_subject_scope.py  11   right regime, with flagship/naming positive controls
+tests/test_flagship.py        4   5+ cold runs of the official benchmark
+frontend/src/useSessions.test.mjs  12   session titles and dates
+```
+
+### Still open
+
+- **`top_k` and the rank-23 outlier.** The Section 3(p) chunk is retrieved 8/8 but landed
+  at rank 23 once, outside `top_k = 12`. Capturing it needs `top_k >= 24`, doubling the
+  evidence in every prompt. Not taken — a global tuning change for a 1-in-8 case.
+- **Retrieval dilution on product-noun-heavy IP questions.** "Can I trademark the name of
+  my Ayurvedic product?" puts only 1-2 Trade Marks Act chunks in the top 12; the rest is
+  D&C Rules. The gate no longer refuses it, but a thin answer is still possible.
+- **Confidence remains uncalibrated** against labelled data. It is now demonstrably
+  *responsive* (0.5 on a corpus gap, 0.94 on the flagship) and all three levels are
+  reachable, which is more than could be said before. That is not calibration.
+- Duplicate Biological Diversity Rules 2024 (~184 chunks) — §6g decision stands.
+- Patents Act s.3(p) still unreachable by search (margin bleed, §6g).

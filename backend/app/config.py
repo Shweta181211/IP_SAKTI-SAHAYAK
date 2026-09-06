@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -29,8 +30,27 @@ class Settings(BaseSettings):
     # E5 needs "query: " / "passage: " prefixes; see embed helpers.
     embed_model: str = "intfloat/multilingual-e5-base"
 
-    # --- Generation (OpenRouter, OpenAI-compatible endpoint) ---------------
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # --- Generation (any OpenAI-compatible endpoint) -----------------------
+    #
+    # Not OpenRouter-specific any more. Google's Generative Language API exposes
+    # an OpenAI-compatible surface too, and during the September 2026 evaluation
+    # OpenRouter's free tier was exhausted while Gemini was not - so which
+    # provider answers has to be configuration, not a code edit under pressure.
+    #
+    # The old name is kept as an alias so existing .env files and shell exports
+    # keep working.
+    llm_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=AliasChoices(
+            "IPSAKTI_LLM_BASE_URL", "IPSAKTI_OPENROUTER_BASE_URL"
+        ),
+    )
+
+    # WHICH environment variable holds the key. The key itself never lives in
+    # this file. Point it at GEMINI_API_KEY to run on Gemini without renaming
+    # anybody's secret, which is what the alternative required and it was
+    # genuinely confusing: a Gemini key in a variable called OPENROUTER_API_KEY.
+    api_key_env: str = "OPENROUTER_API_KEY"
     # Free by default because the account has no credits. Swap to
     # anthropic/claude-sonnet-5 via IPSAKTI_MODEL once it does.
     model: str = "minimax/minimax-m3:free"
@@ -85,16 +105,21 @@ settings = Settings()
 
 
 def api_key() -> str:
-    """Read the OpenRouter key at call time so a missing key fails loudly here."""
+    """Read the generation key at call time so a missing key fails loudly here.
+
+    Which variable to read is `settings.api_key_env`, so switching provider is a
+    config change rather than a rename of somebody's secret.
+    """
     import os
 
     from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env")
-    key = os.getenv("OPENROUTER_API_KEY", "").strip().strip('"').strip("'")
+    name = settings.api_key_env
+    key = os.getenv(name, "").strip().strip('"').strip("'")
     if not key:
         raise RuntimeError(
-            "OPENROUTER_API_KEY is not set. Copy .env.example to .env and add your key "
-            "from https://openrouter.ai/keys"
+            f"{name} is not set (IPSAKTI_API_KEY_ENV selects it). Copy .env.example to "
+            ".env and add the key for whichever provider IPSAKTI_MODEL points at."
         )
     return key

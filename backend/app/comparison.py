@@ -36,7 +36,17 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-_CHUNK_ID = re.compile(r"DOC\d{3}_chunk_\d{3}")
+# NOTE: the pattern below uses regex word boundaries. They were committed as literal 0x08
+# BACKSPACE bytes, which look identical in every rendering of this file and
+# made the pattern unmatchable - so this stripper silently did nothing and
+# raw chunk ids could reach the comparison cards. tests/test_units.py now
+# sweeps every backend module for control characters so it cannot recur.
+# NOTE: those are \b word boundaries. They were committed as literal 0x08
+# BACKSPACE bytes, which render identically in every editor and made the
+# pattern unmatchable - so this stripper silently did nothing and raw chunk
+# ids could reach the comparison cards. test_units.py now sweeps every
+# backend module for control characters so it cannot recur.
+_CHUNK_ID = re.compile(r"\bDOC\d{3}_chunk_\d{3}\b")
 
 # The four categories whose IP posture genuinely differs. Cosmetic and
 # Ayurveda-Aahar are excluded: they are not drugs, so a patentability contrast

@@ -20,7 +20,8 @@ export type AbstentionKind =
   | "foreign_jurisdiction"
   | "out_of_scope"
   | "gate_unavailable"
-  | "conversational";
+  | "conversational"
+  | "legal_advice";
 
 export type ConfidenceLevel = "high" | "moderate" | "limited";
 
@@ -93,6 +94,9 @@ export interface Answer {
   abstention_message: string | null;
   clarifying_question: string | null;
   rejected_citation_ids: string[];
+  /** Provision references the model wrote that no retrieved chunk contains.
+   *  The sentence carrying them is removed server-side before the answer ships. */
+  unsupported_provisions: string[];
   /** Offer a human IP facilitator. Set only for a real legal need this system
    *  cannot meet — never for a vague, off-topic, or transiently failed one. */
   escalate: boolean;

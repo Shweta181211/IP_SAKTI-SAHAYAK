@@ -18,21 +18,21 @@
 */
 
 :root {
-  --paper: #faf7f0;
-  --paper-deep: #f3ede0;
-  --rule: #e0d7c4;
-  --ink: #24211c;
-  --ink-soft: #5c554a;
-  --ink-faint: #8a8175;
+  --paper: #f5eedd;
+  --paper-deep: #ece2c8;
+  --rule: #ddceac;
+  --ink: #16241e;
+  --ink-soft: #24382f;
+  --ink-faint: #5b6459;
 
-  --haldi: #b8860b;
-  --haldi-wash: #fdf4dd;
+  --haldi: #c98a2b;
+  --haldi-wash: #f3e6c4;
   --indigo: #2f4a63;
-  --indigo-wash: #eaf0f5;
-  --neem: #4f6b3a;
-  --neem-wash: #eef3e7;
-  --clay: #9c4a2f;
-  --clay-wash: #faece5;
+  --indigo-wash: #e8eef3;
+  --neem: #4f7d5c;
+  --neem-wash: #e1ebe1;
+  --clay: #a3402d;
+  --clay-wash: #f1ddd3;
 }
 
 @layer base {
@@ -46,12 +46,12 @@
         to bottom,
         transparent 0,
         transparent 31px,
-        rgba(224, 215, 196, 0.32) 31px,
-        rgba(224, 215, 196, 0.32) 32px
+        rgba(221, 206, 172, 0.38) 31px,
+        rgba(221, 206, 172, 0.38) 32px
       ),
       var(--paper);
     color: var(--ink);
-    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   ::selection {
@@ -68,7 +68,7 @@
   }
 
   .prose-legal {
-    font-family: "Spectral", ui-serif, Georgia, "Times New Roman", serif;
+    font-family: "IBM Plex Serif", ui-serif, Georgia, "Times New Roman", serif;
     @apply text-[15.5px] leading-[1.72];
     color: var(--ink);
   }
@@ -193,6 +193,127 @@
   box-shadow: 0 1px 0 rgba(36, 33, 28, 0.06);
 }
 
+/* --------------------------------------------------------------------------
+   Sidebar rail + composer interactivity.
+   -------------------------------------------------------------------------- */
+
+.rail {
+  background:
+    radial-gradient(560px 340px at -8% -12%, rgba(201, 138, 43, 0.18), transparent 60%),
+    var(--ink);
+}
+
+.rail::-webkit-scrollbar { width: 6px; }
+.rail::-webkit-scrollbar-thumb { background: rgba(245, 238, 221, 0.18); border-radius: 3px; }
+
+.brand-motif { color: var(--haldi); }
+.motif-path {
+  stroke-dasharray: 210;
+  stroke-dashoffset: 210;
+  animation: draw-line 1.3s ease-out forwards;
+}
+.motif-leaf {
+  opacity: 0;
+  transform-origin: center;
+  animation: leaf-in 0.5s ease-out forwards;
+}
+.motif-leaf:nth-of-type(2) { animation-delay: 0.45s; }
+.motif-leaf:nth-of-type(3) { animation-delay: 0.7s; }
+.motif-leaf:nth-of-type(4) { animation-delay: 0.95s; }
+
+@keyframes draw-line {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes leaf-in {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Mode / jurisdiction picker cards in the rail — lift + glow on hover, a warm
+   gradient wash when selected, exactly the affordance language of the rest
+   of the app but transplanted onto a dark surface. */
+.rail-card {
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.rail-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--haldi);
+}
+.rail-card[aria-checked="true"] {
+  background: linear-gradient(160deg, rgba(201, 138, 43, 0.24), rgba(201, 138, 43, 0.05));
+  border-color: var(--haldi);
+  box-shadow: 0 0 0 1px rgba(201, 138, 43, 0.35);
+}
+
+/* The backend-status dot breathes gently while pending, then settles. */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.status-dot--pending {
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+/* Mic button: idle state is quiet; the active (listening) state pulses an
+   expanding ring outward so it reads unmistakably as "recording", not just
+   "toggled on". */
+.mic-btn {
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 100ms ease;
+}
+.mic-btn:active { transform: scale(0.93); }
+.mic-btn--active {
+  position: relative;
+  background: var(--clay-wash);
+  border-color: var(--clay) !important;
+  color: var(--clay) !important;
+}
+.mic-btn--active::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--clay);
+  animation: mic-ring 1.4s ease-out infinite;
+}
+@keyframes mic-ring {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Each new transcript turn rises gently into place rather than popping in. */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.msg-in {
+  animation: msg-in 280ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+
+/* A hairline shimmer sweeps the send button so the composer never looks
+   static, even before the first question is typed. */
+.send-btn {
+  position: relative;
+  overflow: hidden;
+}
+.send-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.16) 50%, transparent 60%);
+  transform: translateX(-120%);
+  transition: transform 500ms ease;
+}
+.send-btn:hover:not(:disabled)::after { transform: translateX(120%); }
+
+.example-chip {
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+.example-chip:hover {
+  transform: translateY(-2px);
+  border-color: var(--indigo);
+  box-shadow: 0 3px 0 rgba(47, 74, 99, 0.08);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -202,9 +323,15 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .lift:hover {
+  .lift:hover,
+  .rail-card:hover,
+  .example-chip:hover {
     transform: none;
   }
+  .motif-path { stroke-dashoffset: 0; }
+  .motif-leaf { opacity: 1; transform: none; }
+  .mic-btn--active::after { animation: none; display: none; }
+  .send-btn::after { display: none; }
 }
 
 @media print {

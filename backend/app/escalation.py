@@ -27,6 +27,11 @@ And the positive ones:
     case for a human there is.
   * `no_evidence` - in scope, and we could not ground an answer. Exactly the gap
     a person fills.
+  * `legal_advice` - someone with a live dispute asking how it will go. This is
+    the strongest case of the three: they have a concrete legal problem, we are
+    structurally unable to answer it (we cannot see their facts), and a
+    practitioner can. Refusing without offering the path would leave them with
+    nothing, which is how the evaluation found this handled before.
   * answered, but `LIMITED` confidence - thin support. The answer stands and is
     cited, but a practitioner should confirm it before it is relied on.
 """
@@ -40,6 +45,7 @@ from .schemas import AbstentionKind, ConfidenceLevel
 ESCALATE_ON_ABSTENTION = {
     AbstentionKind.FOREIGN_JURISDICTION,
     AbstentionKind.NO_EVIDENCE,
+    AbstentionKind.LEGAL_ADVICE,
 }
 
 REASONS = {
@@ -50,6 +56,10 @@ REASONS = {
     AbstentionKind.NO_EVIDENCE: (
         "This is within scope, but the corpus did not contain a provision that answers it. "
         "A qualified IP practitioner can look beyond these sources."
+    ),
+    AbstentionKind.LEGAL_ADVICE: (
+        "This turns on your own facts and evidence, which no search of the law can settle. "
+        "A qualified IP practitioner can review the file and advise you directly."
     ),
 }
 

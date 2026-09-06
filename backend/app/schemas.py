@@ -73,6 +73,13 @@ class AbstentionKind(str, Enum):
     # Small talk answered without retrieval. Not a refusal - the UI should
     # render it as a plain reply, with no "not answered" framing.
     CONVERSATIONAL = "conversational"
+    # The user asked us to forecast their own case or to recommend whether to
+    # bring one. Distinct from out_of_scope on purpose: the SUBJECT is squarely
+    # in scope - the Patents Act does govern infringement suits - so refusing it
+    # as "off-topic" is both wrong and unhelpful. What we cannot do is apply the
+    # law to facts we cannot see. This is also the clearest case in the whole
+    # system for handing someone to a person, so it escalates.
+    LEGAL_ADVICE = "legal_advice"
 
 
 class ConfidenceLevel(str, Enum):
@@ -239,6 +246,14 @@ class Answer(BaseModel):
     # Citation ids the model produced that failed validation. Surfaced rather
     # than swallowed: it is evidence the guard is doing its job.
     rejected_citation_ids: list[str] = Field(default_factory=list)
+
+    # Provision references ("Section 3(e)") the model wrote into prose that no
+    # retrieved chunk contains. The sentence carrying them is removed before the
+    # answer ships. Surfaced for the same reason as rejected ids: a guard you
+    # can see is worth more than one you cannot, and this one catches the
+    # failure that looks MOST authoritative - a real-sounding section number
+    # sitting beside perfectly valid citations.
+    unsupported_provisions: list[str] = Field(default_factory=list)
 
     # Set when a supporting step ran in a degraded mode - today, when query
     # expansion could not run. Expansion is what bridges "can my churna be

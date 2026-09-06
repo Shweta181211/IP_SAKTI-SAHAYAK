@@ -4,18 +4,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        paper: { DEFAULT: "#faf7f0", deep: "#f3ede0" },
-        rule: "#e0d7c4",
-        ink: { DEFAULT: "#24211c", soft: "#5c554a", faint: "#8a8175" },
-        haldi: { DEFAULT: "#b8860b", wash: "#fdf4dd" },
-        indigo: { dye: "#2f4a63", wash: "#eaf0f5" },
-        neem: { DEFAULT: "#4f6b3a", wash: "#eef3e7" },
-        clay: { DEFAULT: "#9c4a2f", wash: "#faece5" },
+        // Warm parchment main pane.
+        paper: { DEFAULT: "#f5eedd", deep: "#ece2c8" },
+        rule: "#ddceac",
+        // Deep forest ink — also the sidebar's background colour.
+        ink: { DEFAULT: "#16241e", soft: "#24382f", faint: "#5b6459" },
+        // Turmeric / saffron — classification verdict, the one accent colour.
+        haldi: { DEFAULT: "#c98a2b", wash: "#f3e6c4" },
+        // Citations & sources.
+        indigo: { dye: "#2f4a63", wash: "#e8eef3" },
+        // Verified / grounded — sage.
+        neem: { DEFAULT: "#4f7d5c", wash: "#e1ebe1" },
+        // Abstention & scope limits — brick.
+        clay: { DEFAULT: "#a3402d", wash: "#f1ddd3" },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serif: ['Spectral', 'ui-serif', 'Georgia', 'serif'],
-        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ['"IBM Plex Serif"', "ui-serif", "Georgia", "serif"],
+        mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
       },
       maxWidth: { sheet: "78rem" },
     },

@@ -24,7 +24,12 @@ import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
-from .citations import citations_for, strip_chunk_ids, validate_ids
+from .citations import (
+    citations_for,
+    strip_chunk_ids,
+    strip_unsupported_provisions,
+    validate_ids,
+)
 from .conversation import EXAMPLE_QUESTIONS, conversational_reply
 from .classification import classify
 from .confidence import assess as assess_confidence
@@ -131,9 +136,19 @@ A four-step reasoning trail. Each step is short - two to four sentences of plain
 no legal jargon left unexplained.
 
 1. **Classification** - what kind of product or question this is, and why it matters here.
-2. **Legal position** - what the law actually says, from the evidence.
+2. **Legal position** - what the law actually says about **this** question, from the \
+evidence. The classification above names the regime that governs this product; where the user \
+has not raised some other issue, that regime's requirements ARE the legal position. Do not \
+switch to patentability unless the user asked about patents or protection - a person who says \
+"I have made a face cream" is asking what rules apply to selling it, not whether neem is an \
+invention.
 3. **Protection / action route** - what the user can concretely do: which route, register, \
-authority or defensive mechanism applies.
+authority or defensive mechanism applies. **Before writing that no route exists, re-read the \
+evidence for one.** If any passage names a register, registry, database, authority or defensive \
+mechanism, name it and say how it applies here. "The evidence provides no route" is correct only \
+when the evidence genuinely names none; it is not a way to restate step 2. A bar on one route \
+usually implies that a different one is the answer - that different route is what this step is \
+for.
 4. **Jurisdiction note** - state that this answers the position under **Indian law only**, \
 and that international regimes are outside this corpus.
 
@@ -149,12 +164,16 @@ what the law actually provides and cite it. Do not accept a false premise to be 
 - Steps 1-3 must cite. Step 4 is a statement about scope, so it needs no citation.
 - `headline_citation_ids` must contain the id(s) the headline itself rests on. The headline is the one sentence the user reads first, so it is held to the same standard as a step: if no evidence directly supports it, return an empty list rather than citing something loosely related.
 - When a piece of evidence carries a provision number, **name it in the sentence** ("under Section 3(p)...", "Rule 122-E provides..."). A reader should be able to see which provision a claim rests on without cross-referencing the source list.
+- The evidence is ordered by relevance, most relevant first. Where several provisions are \
+near-identical - statutory exclusion clauses usually are, because they sit in one list and share \
+their phrasing - cite the one that applies **directly** to this question, not a more general \
+neighbour that merely reads similarly.
 - Do not recommend a lawyer as a substitute for answering; answer what the evidence supports.
 
 ## Output
 
 Return ONLY a JSON object, no markdown fence and no commentary:
-{{"headline": "<one sentence, max 25 words, answering the question directly>",
+{{"headline": "<one sentence, max 25 words, answering the question the user actually asked - on the subject they raised, not a different regime>",
  "headline_citation_ids": ["<the id(s) that directly support the headline>"],
  "steps": [
   {{"step": 1, "content": "...", "citation_ids": ["..."], "abstained": false}},
@@ -210,8 +229,13 @@ def _abstention_answer(
     )
 
 
-def _build_steps(raw_steps: list[dict], allowed_ids: list[str]) -> tuple[list[ReasoningStep], list[str]]:
-    """Validate model output into steps, rejecting unverifiable citations."""
+def _build_steps(
+    raw_steps: list[dict], allowed_ids: list[str]
+) -> tuple[list[ReasoningStep], list[str], list[str]]:
+    """Validate model output into steps, rejecting unverifiable citations.
+
+    Returns (steps, rejected citation ids, provisions named without support).
+    """
     by_number = {}
     for raw in raw_steps or []:
         try:
@@ -223,12 +247,18 @@ def _build_steps(raw_steps: list[dict], allowed_ids: list[str]) -> tuple[list[Re
 
     steps: list[ReasoningStep] = []
     all_rejected: list[str] = []
+    all_unsupported: list[str] = []
 
     for number, title in STEP_TITLES.items():
         raw = by_number.get(number, {})
         # Same display-only cleanup the comparison path has always had. Its
         # absence here was an inconsistency, not a decision.
         content = strip_chunk_ids(str(raw.get("content") or ""))
+        # A section number the evidence does not contain is fabricated authority,
+        # however valid the citation ids beside it happen to be. Drop the
+        # sentence rather than let it stand looking sourced.
+        content, unsupported = strip_unsupported_provisions(content, allowed_ids)
+        all_unsupported.extend(unsupported)
         kept, rejected = validate_ids(raw.get("citation_ids") or [], allowed_ids)
         all_rejected.extend(rejected)
         abstained = bool(raw.get("abstained")) or not content
@@ -248,7 +278,7 @@ def _build_steps(raw_steps: list[dict], allowed_ids: list[str]) -> tuple[list[Re
                 citation_ids=kept, abstained=abstained,
             )
         )
-    return steps, all_rejected
+    return steps, all_rejected, all_unsupported
 
 
 def answer_question(
@@ -365,9 +395,14 @@ def answer_question(
     if classification.defining_source_id and classification.defining_source_id not in allowed:
         allowed.append(classification.defining_source_id)
 
-    steps, rejected = _build_steps(data.get("steps") or [], allowed)
+    steps, rejected, unsupported_provisions = _build_steps(data.get("steps") or [], allowed)
     if rejected:
         logger.warning("Rejected %d unverifiable citation ids: %s", len(rejected), rejected)
+    if unsupported_provisions:
+        logger.warning(
+            "Removed %d provision reference(s) no retrieved chunk contains: %s",
+            len(unsupported_provisions), unsupported_provisions,
+        )
 
     cited: list[str] = []
     for step in steps:
@@ -385,6 +420,13 @@ def answer_question(
         )
 
     headline = strip_chunk_ids(" ".join(str(data.get("headline") or "").split())) or None
+    # The headline names provisions as readily as a step does, and it is the one
+    # sentence most people read. Same rule: a section number the evidence does
+    # not contain does not ship.
+    if headline:
+        headline, headline_unsupported = strip_unsupported_provisions(headline, allowed)
+        unsupported_provisions.extend(headline_unsupported)
+        headline = headline or None
 
     # The headline gets the same treatment as a step. It is the sentence users
     # actually read - often the only one - and it was previously the single
@@ -432,6 +474,7 @@ def answer_question(
         steps=steps,
         citations=citations_for(cited),
         rejected_citation_ids=rejected,
+        unsupported_provisions=unsupported_provisions,
         escalate=escalate,
         escalation_reason=escalation_reason,
         disclaimer=settings.disclaimer,
