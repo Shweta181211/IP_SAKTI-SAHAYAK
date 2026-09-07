@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Session } from "../useSessions";
 import { relativeDay, titleFor } from "../useSessions";
 import type { UiLang } from "../i18n";
@@ -13,10 +14,15 @@ interface Props {
     questionCount: string;
     untitledSession: string;
     deleteSession: string;
+    deleteAll: string;
+    deleteAllConfirm: string;
+    deleteAllYes: string;
+    deleteAllNo: string;
   };
   onNew: () => void;
   onOpen: (id: string) => void;
   onRemove: (id: string) => void;
+  onClearAll: () => void;
 }
 
 /**
@@ -36,8 +42,28 @@ export function SessionList({
   onNew,
   onOpen,
   onRemove,
+  onClearAll,
 }: Props) {
   const withContent = sessions.filter((s) => s.turns.length > 0);
+
+  // Two-step, inline. `window.confirm` would be one line, but it drops a
+  // system dialog on top of a page whose whole identity is a printed sheet -
+  // and on a demo projector a native modal is the one element nobody can
+  // style, dismiss quickly, or screenshot cleanly. The arming state also
+  // gives the action a visible cost, which a destructive control should have.
+  const [arming, setArming] = useState(false);
+
+  // Never leave it armed: closing the menu and reopening it must not present a
+  // one-click wipe left over from last time.
+  useEffect(() => {
+    if (!arming) return;
+    const timer = setTimeout(() => setArming(false), 6000);
+    return () => clearTimeout(timer);
+  }, [arming]);
+
+  useEffect(() => {
+    if (withContent.length === 0) setArming(false);
+  }, [withContent.length]);
 
   return (
     <div className="pb-4">
@@ -104,6 +130,44 @@ export function SessionList({
               );
             })}
           </ul>
+
+          <div className="mt-2 border-t border-paper/10 pt-2">
+            {!arming ? (
+              <button
+                type="button"
+                onClick={() => setArming(true)}
+                className="rounded-[2px] px-1.5 py-1 text-[11.5px] text-paper/40 transition-colors hover:bg-clay/20 hover:text-paper"
+              >
+                {labels.deleteAll}
+              </button>
+            ) : (
+              <div className="rounded-[3px] border border-clay/45 bg-clay/15 px-2.5 py-2">
+                <p className="text-[12px] leading-snug text-paper/85">{labels.deleteAllConfirm}</p>
+                <p className="mt-0.5 text-[11px] lowercase text-paper/45">
+                  {withContent.length} {labels.consultations}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArming(false);
+                      onClearAll();
+                    }}
+                    className="rounded-[2px] bg-clay px-2.5 py-1 text-[11.5px] font-medium text-paper transition-opacity hover:opacity-85"
+                  >
+                    {labels.deleteAllYes}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArming(false)}
+                    className="rounded-[2px] px-2 py-1 text-[11.5px] text-paper/60 transition-colors hover:text-paper"
+                  >
+                    {labels.deleteAllNo}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

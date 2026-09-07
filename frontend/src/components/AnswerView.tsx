@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { Answer } from "../types";
 import { CitationCard } from "./CitationCard";
-import { ReasoningTrail, buildCitationIndex } from "./ReasoningTrail";
+import { ReasoningTrail, buildCitationIndex, buildCitationMap } from "./ReasoningTrail";
 import { Confidence } from "./Confidence";
 import { AbstentionPanel, Verdict } from "./Verdict";
 import { Escalate } from "./Escalate";
@@ -16,13 +16,56 @@ interface Props {
 
 export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
   const [open, setOpen] = useState(defaultOpen);
-  const [hovered, setHovered] = useState<string | null>(null);
+
+  // Two strengths of the same link, kept apart on purpose.
+  //   hovered - transient, follows the cursor, clears on leave
+  //   pinned  - sticky, set by clicking a step, survives the cursor leaving
+  // `hovered` wins while it is set, so a passing cursor previews another step
+  // without destroying the pin the reader deliberately placed.
+  const [hovered, setHovered] = useState<string[]>([]);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [pinnedStep, setPinnedStep] = useState<number | null>(null);
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const active = hovered.length > 0 ? hovered : pinned;
+
+  // Several answers share one page, so DOM ids must be scoped per instance.
+  const uid = useId();
+  const citationDomId = useCallback(
+    (chunkId: string) => `cit-${uid}-${chunkId}`.replace(/:/g, ""),
+    [uid],
+  );
+
+  const jumpToCitation = useCallback(
+    (chunkId: string) => {
+      setPinned([chunkId]);
+      setPinnedStep(null);
+      setFlashed(chunkId);
+      document
+        .getElementById(citationDomId(chunkId))
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
+    [citationDomId],
+  );
+
+  // Drop the flash once it has played, so the class can be re-applied if the
+  // reader jumps to the same card again.
+  useEffect(() => {
+    if (!flashed) return;
+    const timer = setTimeout(() => setFlashed(null), 700);
+    return () => clearTimeout(timer);
+  }, [flashed]);
 
   // A new answer arriving makes this the newest turn; reopen it.
   useEffect(() => setOpen(defaultOpen), [defaultOpen]);
 
   const citationIndex = useMemo(
     () => buildCitationIndex(answer.citations),
+    [answer.citations],
+  );
+  // The trail's back face quotes the statute in place, so it needs the whole
+  // citation, not just its display number.
+  const citationById = useMemo(
+    () => buildCitationMap(answer.citations),
     [answer.citations],
   );
 
@@ -160,8 +203,13 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                 <ReasoningTrail
                   answer={answer}
                   citationIndex={citationIndex}
-                  hovered={hovered}
-                  onHoverStep={(ids) => setHovered(ids?.[0] ?? null)}
+                  citationById={citationById}
+                  active={active}
+                  onHoverStep={(ids) => setHovered(ids ?? [])}
+                  onPinStep={(ids) => setPinned(ids ?? [])}
+                  onJumpToCitation={jumpToCitation}
+                  pinnedStep={pinnedStep}
+                  onPinnedStepChange={setPinnedStep}
                 />
               </div>
 
@@ -170,14 +218,34 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                   <h2 className="eyebrow">Sources cited</h2>
                   <span className="ref text-ink-faint">{answer.citations.length}</span>
                 </div>
+
+                {/* A pin is a mode, so it has to be visible and reversible from
+                    here too - otherwise a reader who scrolled down to the rail
+                    is looking at a filtered view with no way back. */}
+                {pinnedStep !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinnedStep(null);
+                      setPinned([]);
+                    }}
+                    className="eyebrow mb-2 flex w-full items-center justify-between rounded-[2px] bg-indigo-wash px-2 py-1 text-indigo-dye transition-colors hover:bg-indigo-dye hover:text-paper"
+                  >
+                    <span>Showing step {pinnedStep}</span>
+                    <span aria-hidden>✕</span>
+                  </button>
+                )}
+
                 <ul className="space-y-2">
                   {answer.citations.map((c, i) => (
                     <CitationCard
                       key={c.chunk_id}
                       citation={c}
                       index={i + 1}
-                      highlighted={hovered === c.chunk_id}
-                      onHover={setHovered}
+                      domId={citationDomId(c.chunk_id)}
+                      flash={flashed === c.chunk_id}
+                      highlighted={active.includes(c.chunk_id)}
+                      onHover={(id) => setHovered(id ? [id] : [])}
                     />
                   ))}
                 </ul>

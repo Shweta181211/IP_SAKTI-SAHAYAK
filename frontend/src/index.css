@@ -90,12 +90,191 @@
   position: absolute;
   left: 15px;
   top: 34px;
-  bottom: -22px;
+  bottom: -18px;
   width: 1px;
   background: var(--rule);
+  /* Drawn downward, just behind its own station, so the chain is seen being
+     built in the order the argument is made rather than appearing whole. */
+  transform-origin: top;
+  animation: trail-draw 340ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 200ms);
 }
 .trail-line:last-child::before {
   display: none;
+}
+
+@keyframes trail-draw {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reasoning-trail stations as cards.
+
+   Still stations on a rule, NOT chat bubbles - the numbered medallion and the
+   connecting line are the identity and both stay. What the card adds is a
+   surface you can act on, because the link between a claim and its evidence
+   had exactly one strength before this: hover. That is a mouse-only
+   affordance, so on a phone, and on a projector where a presenter cannot
+   hover precisely, the "every claim is traceable" demonstration did not exist
+   at all. Clicking now PINS a step's sources, and the pin has to be visible:
+   hence the left edge, which is the only part of the card that carries colour.
+
+   Colour stays semantic (6e): indigo means sources, clay means abstention.
+   Haldi is not used here - it belongs to the classification verdict alone,
+   and spending it on step 1 would dilute the one badge it identifies.
+   -------------------------------------------------------------------------- */
+
+.trail-card {
+  position: relative;
+  background: #fffdf8;
+  border: 1px solid var(--rule);
+  border-left-width: 3px;
+  border-radius: 3px;
+  padding: 0.8rem 1rem 0.85rem;
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 200ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    background-color 180ms ease-out;
+}
+
+/* A step with no surviving citation has no back face and nothing to pin, so
+   it must not offer either affordance. */
+.trail-card:not(.is-flat) {
+  cursor: pointer;
+}
+
+.trail-card:not(.is-flat):hover {
+  border-color: rgba(47, 74, 99, 0.35);
+  border-left-color: var(--indigo);
+  box-shadow: 0 2px 12px rgba(22, 36, 30, 0.07);
+  transform: translateY(-1px);
+}
+
+.trail-card.is-pinned {
+  border-color: var(--indigo);
+  border-left-color: var(--indigo);
+  box-shadow: 0 3px 16px rgba(47, 74, 99, 0.14);
+}
+
+.trail-card.is-abstained {
+  border-left-color: var(--clay);
+  background: var(--clay-wash);
+}
+
+.trail-medallion {
+  transition:
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+.trail-medallion:hover {
+  transform: scale(1.08);
+}
+
+.trail-chip {
+  transition:
+    background-color 140ms ease-out,
+    color 140ms ease-out,
+    transform 140ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+.trail-chip:hover {
+  transform: translateY(-1px);
+}
+
+/* The card a chip jumped to. One short flash, because a permanent marker on
+   the target would compete with the hover/pin highlight that is already
+   telling the reader the same thing. */
+@keyframes cite-hit {
+  0% {
+    box-shadow: 0 0 0 0 rgba(47, 74, 99, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 7px rgba(47, 74, 99, 0);
+  }
+}
+.cite-hit {
+  animation: cite-hit 620ms ease-out;
+}
+
+/* --------------------------------------------------------------------------
+   Turning a station over.
+
+   The two faces are the product's claim as one gesture: the front is what we
+   concluded, the back is the statute it came from, printed verbatim. So this
+   is the one place a flip is not decoration - it puts the law directly behind
+   the sentence relying on it, instead of asking the reader to trust a marker
+   and go hunting for the matching card in the rail.
+
+   Both faces are absolutely positioned so they can occupy the same space and
+   rotate past each other, which leaves the container with no intrinsic height.
+   It is measured in JS and transitions alongside the rotation: two sentences
+   of prose and an 800-token statutory chunk are nowhere near the same size, so
+   a fixed height would either clip the law or leave a hole under the answer.
+   -------------------------------------------------------------------------- */
+
+.trail-flip {
+  position: relative;
+  perspective: 1600px;
+  transition: height 380ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.trail-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.22, 0.72, 0.28, 1);
+}
+
+.trail-flip[data-flipped="true"] .trail-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.trail-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.trail-face--back {
+  transform: rotateY(180deg);
+}
+
+/* The back is the corpus speaking, so it takes the indigo that means "source"
+   everywhere else in this interface, and a slightly cooler ground than the
+   front's paper - enough that a glance tells you which side you are on. */
+.trail-card.is-back {
+  border-color: var(--indigo);
+  border-left-color: var(--indigo);
+  background: #fbfcfd;
+}
+
+.trail-back-scroll {
+  max-height: 19rem;
+  overflow-y: auto;
+  /* Room for the scrollbar so the quote rule does not sit under it. */
+  padding-right: 0.35rem;
+}
+
+.trail-turn {
+  border-radius: 2px;
+  padding: 1px;
+  transition:
+    color 160ms ease-out,
+    transform 320ms cubic-bezier(0.22, 0.72, 0.28, 1);
+}
+.trail-turn:hover {
+  color: var(--indigo);
+  transform: rotate(180deg);
 }
 
 /* --------------------------------------------------------------------------
@@ -316,7 +495,37 @@
   }
   .lift:hover,
   .rail-card:hover,
-  .example-chip:hover {
+  .example-chip:hover,
+  .trail-card:hover,
+  .trail-medallion:hover,
+  .trail-chip:hover,
+  .trail-turn:hover {
+    transform: none;
+  }
+  /* A 3D rotation is exactly the motion this query exists to suppress, so the
+     card does not turn - it swaps. The faces leave absolute positioning so the
+     container sizes itself and the measured height is ignored. */
+  .trail-flip {
+    height: auto !important;
+    perspective: none;
+  }
+  .trail-flip-inner {
+    transform: none !important;
+  }
+  .trail-face {
+    position: relative;
+    backface-visibility: visible;
+  }
+  .trail-face--back {
+    transform: none;
+  }
+  .trail-flip[data-flipped="false"] .trail-face--back,
+  .trail-flip[data-flipped="true"] .trail-face--front {
+    display: none;
+  }
+  /* scaleY at 0.01ms still lands on the final frame, so the rule is drawn -
+     but pin it explicitly rather than relying on `both` fill. */
+  .trail-line::before {
     transform: none;
   }
   .motif-path { stroke-dashoffset: 0; }
@@ -818,6 +1027,34 @@
   .trail-sweep {
     animation: none !important;
     opacity: 1 !important;
+  }
+  /* The connecting rule is drawn with scaleY; unanimated it would print at
+     zero height, breaking the chain the trail exists to show. */
+  .trail-line::before {
+    animation: none !important;
+    transform: none !important;
+  }
+  .trail-card {
+    box-shadow: none !important;
+  }
+  /* A card must never print face-down, and the absolutely-positioned faces
+     must return to flow or the page prints four empty boxes. */
+  .trail-flip {
+    height: auto !important;
+    perspective: none;
+  }
+  .trail-flip-inner {
+    transform: none !important;
+  }
+  .trail-face {
+    position: relative;
+    backface-visibility: visible;
+  }
+  .trail-face--back {
+    display: none;
+  }
+  .trail-turn {
+    display: none !important;
   }
   .reveal {
     grid-template-rows: 1fr !important;

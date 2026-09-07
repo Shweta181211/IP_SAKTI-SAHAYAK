@@ -971,6 +971,118 @@ The landing page was the engaging surface and the workspace was a form with a
 - `ACTS` moved to `src/data/acts.ts` so the landing page and the consultation
   cannot drift apart.
 
+### The reasoning trail became cards with two faces
+
+The trail is still four numbered stations on a rule - it is not chat
+bubbles and the medallion and connecting line are untouched. Each station
+is now a card that **turns over**:
+
+    front  what we concluded, in our words
+    back   the verbatim statute it came from
+
+That is the product's whole claim as one gesture, and it is the reason a
+flip is not decoration here: it puts the law directly behind the sentence
+relying on it, instead of asking the reader to trust a superscript and go
+hunting for the matching card in the rail. Front stays the default, so
+nothing is hidden - a reader who never turns a card loses nothing.
+
+Three things the flip forced:
+
+- **The container has no intrinsic height.** Both faces are absolutely
+  positioned so they can occupy one box and rotate past each other, so
+  the height is measured (`ResizeObserver` on the showing face) and
+  transitions alongside the rotation. Two sentences of prose and an
+  800-token statutory chunk are nowhere near the same size; a fixed
+  height would either clip the law or leave a hole under the answer.
+- **A 3D rotation is exactly what `prefers-reduced-motion` exists to
+  suppress**, and it is also exactly what must not reach a printer. Both
+  blocks return the faces to normal flow and show the front only -
+  otherwise the trail prints as four empty boxes, because absolutely
+  positioned backface-hidden faces contribute no height.
+- **The back needed the same nested-button guard as the front, and did
+  not have it.** Its own turn control fired `turn()` and then bubbled to
+  the card's `turn()`, toggling twice for a net change of nothing - a
+  control that looks broken while both handlers are working perfectly.
+  Caught by a Playwright assertion, not by looking at it. Both faces now
+  share one handler.
+
+Alongside the flip, the link to the citation rail gained a second
+strength, because it had exactly **one** before this: hover.
+
+Hover is a mouse-only affordance. On a phone, and on a projector where a
+presenter cannot hover precisely, the "every claim is traceable"
+demonstration - the thing 6e calls the demo's money shot - **did not
+exist at all**. So:
+
+| interaction | effect |
+|---|---|
+| hover a card | transient: lights that step's sources |
+| click the medallion | **pins** them; survives the cursor leaving |
+| click the card body | turns it over to the statute |
+| click a source chip | scrolls that card into view and rings it once |
+
+The medallion pins and the card turns, deliberately as two controls: "keep
+these lit while I read" and "show me the law itself" are two questions,
+and one overloaded control would answer neither well.
+
+`AnswerView` now holds `hovered` and `pinned` separately, with hover
+winning while set - a passing cursor previews another step without
+destroying a pin the reader deliberately placed. The rail carries a
+"Showing step N ✕" control, because a pin is a *mode* and a reader who
+scrolled down to the sources must be able to leave it from there.
+
+Three things that had to be got right rather than merely built:
+
+1. **`hovered` was a single id.** `onHoverStep` took `string[]` and
+   `AnswerView` did `ids?.[0] ?? null`, so a step citing two sources lit
+   exactly one of them - quietly undercutting the claim the interaction
+   exists to make. It is a `string[]` end to end now.
+2. **The ring flash is its own prop, not derived from `highlighted`.**
+   Tied to the highlight it fired on every passing cursor, which is noise
+   rather than signal. It fires only on a chip jump.
+3. **A step with no citation is not a pin target and has no back face.**
+   Step 4 is a scope statement and carries none by design; its medallion
+   is `disabled` and its card takes `.is-flat` (no pointer, no lift, no
+   turn control). A control that would light nothing, or turn over to an
+   empty face, advertises itself as broken.
+
+The connecting rule is now **drawn** downward (`scaleY`, delayed off the
+same `--i` as the station) so the chain is seen being built in the order
+the argument is made. That is a `transform`, so both the print block and
+the reduced-motion block must pin it to `none` explicitly - otherwise the
+rule prints at zero height and the trail arrives as four disconnected
+boxes. Verified: 132px rule under `prefers-reduced-motion: reduce`.
+
+Colour stays semantic. Cards use indigo (sources) and clay (abstention)
+only - **haldi is deliberately not used here** even though step 1 is the
+classification step, because haldi identifies the classification *verdict
+badge* and nothing else (6e). Spending it on a trail card dilutes the one
+thing it names.
+
+A click that ends a text selection is a drag, not a turn - people copy
+statute text out of the back face, so `getSelection().isCollapsed` gates
+the body click on both faces.
+
+Verified with Playwright, behaviour not screenshots: 16/16 flip checks and
+14/14 rail/menu checks at 1440x900 (turn and turn-back, measured height
+tracking the showing face, `inert` on the hidden one, selection-is-not-a-
+turn, flat step has neither control, pin persistence, hover-does-not-flash,
+real localStorage wipe) plus 4/4 on touch at 390px and under reduced
+motion. `printBriefing.ts` builds its own HTML from the `Answer` object and
+never reads this DOM, so the print path is unaffected by any of it.
+
+### Delete-all is inline and two-step, not `window.confirm`
+
+`useSessions.clearSessions()` rebuilds from `blankSession()` rather than
+removing the storage key: the hook writes state back on every change, so
+clearing the key directly is undone by the next render.
+
+The confirm is armed inline and disarms itself after 6s. `window.confirm`
+would have been one line, but it drops a system dialog on a page whose
+whole identity is a printed sheet, and on a demo projector a native modal
+is the one element nobody can style, dismiss quickly or screenshot. The
+arming state also gives a destructive action a visible cost.
+
 ### Next steps had to be enforced in code, not asked for in the prompt
 
 `NEXT_STEPS_PROMPT` already said, in as many words, "not a restatement of the

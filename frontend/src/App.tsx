@@ -74,6 +74,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
     startSession,
     openSession,
     removeSession,
+    clearSessions,
   } = useSessions();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -384,6 +385,10 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                       questionCount: t.questionCount,
                       untitledSession: t.untitledSession,
                       deleteSession: t.deleteSession,
+                      deleteAll: t.deleteAll,
+                      deleteAllConfirm: t.deleteAllConfirm,
+                      deleteAllYes: t.deleteAllYes,
+                      deleteAllNo: t.deleteAllNo,
                     }}
                     onNew={() => {
                       newConsultation();
@@ -394,6 +399,10 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                       setMenuOpen(false);
                     }}
                     onRemove={removeSession}
+                    onClearAll={() => {
+                      clearSessions();
+                      setMenuOpen(false);
+                    }}
                   />
 
                   {/* Cream on the dark panel, matching SessionList above it -

@@ -126,6 +126,10 @@ export const STRINGS: Record<UiLang, Dict> = {
     questionCount: "question",
     untitledSession: "New consultation",
     deleteSession: "Remove this consultation",
+    deleteAll: "Delete all",
+    deleteAllConfirm: "Delete all saved consultations?",
+    deleteAllYes: "Delete everything",
+    deleteAllNo: "Keep them",
     emptyTitle: "Ask about protecting or commercialising an Ayurvedic product.",
     emptySubtitle:
       "Every answer is built only from cited Indian statutes, rules and registry records — and shows how well-supported it is. When the corpus cannot answer, it says so rather than guessing.",
@@ -213,6 +217,10 @@ export const STRINGS: Record<UiLang, Dict> = {
     questionCount: "प्रश्न",
     untitledSession: "नया परामर्श",
     deleteSession: "यह परामर्श हटाएँ",
+    deleteAll: "सभी हटाएँ",
+    deleteAllConfirm: "सभी सहेजे गए परामर्श हटाएँ?",
+    deleteAllYes: "सब हटाएँ",
+    deleteAllNo: "रहने दें",
     emptyTitle: "आयुर्वेदिक उत्पाद की सुरक्षा या व्यावसायीकरण के बारे में पूछें।",
     emptySubtitle:
       "हर उत्तर केवल उद्धृत भारतीय क़ानूनों, नियमों और रजिस्ट्री रिकॉर्ड से बनाया गया है — और दिखाता है कि यह कितना सुसमर्थित है। जब कॉर्पस उत्तर नहीं दे सकता, तो वह अनुमान लगाने के बजाय यही बताता है।",

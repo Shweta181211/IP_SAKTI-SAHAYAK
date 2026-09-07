@@ -209,6 +209,19 @@ export function useSessions() {
     });
   }, []);
 
+  /**
+   * Wipe every stored consultation.
+   *
+   * Deliberately rebuilds from `blankSession()` rather than clearing the key
+   * and reloading: the effect above writes state back to localStorage on every
+   * change, so removing the key directly would be undone by the next render.
+   * One clean thread also means the caller never has to handle an empty list.
+   */
+  const clearSessions = useCallback(() => {
+    const session = blankSession();
+    setState({ activeId: session.id, sessions: [session] });
+  }, []);
+
   /** Newest first, and never show the empty thread you are already sitting in. */
   const listed = [...state.sessions]
     .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -222,5 +235,6 @@ export function useSessions() {
     startSession,
     openSession,
     removeSession,
+    clearSessions,
   };
 }
