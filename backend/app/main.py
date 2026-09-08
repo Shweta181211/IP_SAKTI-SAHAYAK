@@ -33,7 +33,7 @@ from .jurisdiction_compare import compare_jurisdictions
 from .next_steps import next_steps_for_answer, next_steps_for_comparison
 from .plain_language import apply_style
 from .generation import answer_question
-from .llm import endpoints as llm_endpoints
+from .llm import endpoints as llm_endpoints, served_counts
 from .ratelimit import RateLimiter, enforce
 from .schemas import (
     AbstentionKind,
@@ -146,6 +146,7 @@ def health() -> HealthResponse:
         embed_model=info["embed_model"],
         generation_model=active_model(),
         llm_chain=[str(e) for e in llm_endpoints()],
+        llm_served=served_counts(),
         anchor_problems=problems,
         graph=_state.get("graph", {}),
         graph_problems=_state.get("graph_problems", []),

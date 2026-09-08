@@ -306,6 +306,7 @@ def complete(prompt: str, *, max_tokens: int | None = None, strong: bool = False
                 )
                 text = (response.choices[0].message.content or "").strip()
                 if text:
+                    _record_served(endpoint)
                     return text
                 # Empty content is a real failure mode, not a quirk: a thinking
                 # model that spent its whole budget reasoning returns finish
@@ -347,6 +348,31 @@ def complete(prompt: str, *, max_tokens: int | None = None, strong: bool = False
 
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.MULTILINE)
+
+
+# Which endpoint actually SERVED each successful call, counted as it happens.
+#
+# Deliberately not read off `active_model()`, which reports the head of the
+# chain - "what a request would use right now". That is a different fact, and
+# using it to claim the failover chain moved would be asserting the very thing
+# it cannot show. This counts the endpoint that returned the text.
+_SERVED: dict[str, int] = {}
+_SERVED_LOCK = threading.Lock()
+
+
+def _record_served(endpoint: "Endpoint") -> None:
+    with _SERVED_LOCK:
+        _SERVED[str(endpoint)] = _SERVED.get(str(endpoint), 0) + 1
+
+
+def served_counts() -> dict[str, int]:
+    """Model calls answered per endpoint since this process started.
+
+    Calls, not requests: one question costs several. More than one endpoint here
+    is the chain having genuinely failed over, observed rather than promised.
+    """
+    with _SERVED_LOCK:
+        return dict(_SERVED)
 
 
 def complete_json(prompt: str, *, max_tokens: int | None = None,

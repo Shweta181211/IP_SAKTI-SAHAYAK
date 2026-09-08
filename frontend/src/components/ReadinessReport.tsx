@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { buildCitationIndex, buildCitationMap } from "./ReasoningTrail";
 import { Confidence } from "./Confidence";
+import { printReadiness } from "../printReadiness";
 import { Escalate } from "./Escalate";
 
 /**
@@ -253,12 +254,24 @@ export function ReadinessReport({ report }: { report: ExportReadinessReport }) {
             India <span aria-hidden>→</span> {report.target_country}
           </p>
         </div>
-        {report.classification && (
-          <div className="readiness-verdict">
-            <p className="eyebrow text-haldi">Classified as</p>
-            <p className="readiness-verdict-label">{report.classification.label}</p>
-          </div>
-        )}
+        <div className="readiness-head-side">
+          {report.classification && (
+            <div className="readiness-verdict">
+              <p className="eyebrow text-haldi">Classified as</p>
+              <p className="readiness-verdict-label">{report.classification.label}</p>
+            </div>
+          )}
+          {/* A startup does not act on a web page - it forwards a document. The
+              sheet carries every source verbatim at the back, so the reader can
+              check the checklist instead of trusting it. */}
+          <button
+            type="button"
+            onClick={() => printReadiness(report)}
+            className="readiness-print"
+          >
+            Print / save as PDF
+          </button>
+        </div>
       </header>
 
       {report.confidence && (

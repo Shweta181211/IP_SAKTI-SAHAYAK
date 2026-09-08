@@ -508,6 +508,10 @@ class HealthResponse(BaseModel):
     # provider is capped, seeing the fallback engage is how you tell a
     # degraded system from a broken one.
     llm_chain: list[str] = Field(default_factory=list)
+    #: Model calls answered per endpoint since this process started. Counted on
+    #: the way out of a successful call, so more than one entry is the failover
+    #: chain having actually moved - not the configured head being re-reported.
+    llm_served: dict[str, int] = Field(default_factory=dict)
     anchor_problems: list[str] = Field(default_factory=list)
     # Shape of the provision graph, plus anything wrong with it. Reported for
     # the same reason as anchor_problems: the graph resolves chunk ids, so a

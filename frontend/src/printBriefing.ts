@@ -68,10 +68,19 @@ export function printBriefing(answer: Answer) {
   ${answer.headline ? `<p><strong>${escapeHtml(answer.headline)}</strong></p>` : ""}
   ${answer.abstained ? `<p>${escapeHtml(answer.abstention_message || "Not answered.")}</p>` : `${steps}<h2>Sources</h2>${cites}`}
   <p class="disc">${escapeHtml(answer.disclaimer)}</p>
-  <script>window.onload = () => window.print();</script>
+  <script>window.opener = null; window.onload = () => window.print();</script>
 </body></html>`;
 
-  const win = window.open("", "_blank", "noopener,noreferrer");
+  // `noopener` is deliberately NOT in the features string, and it must not be
+  // added back. window.open() returns **null** when noopener is set, so the
+  // handle we need in order to write the sheet never arrives - the tab opens
+  // blank and the `if (!win)` guard below swallows it silently. Measured in
+  // Chromium: with "noopener,noreferrer" -> null; without -> a handle.
+  //
+  // The security property noopener exists to give is preserved a different way:
+  // the document is one we compose ourselves, it loads nothing external, and it
+  // severs its own `window.opener` on load before anything else runs.
+  const win = window.open("", "_blank");
   if (!win) return;
   win.document.write(html);
   win.document.close();

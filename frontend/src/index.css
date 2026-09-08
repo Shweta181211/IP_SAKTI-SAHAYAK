@@ -3987,3 +3987,152 @@ html[data-surface="dark"] {
   color: var(--ink-faint);
   margin-bottom: 2px;
 }
+
+/* The readiness header's right-hand column: the verdict badge and the print
+   control stacked, so the control sits with the document's identity rather
+   than floating in the checklist. */
+.readiness-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: none;
+}
+
+.readiness-print {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  border: 1px solid var(--indigo);
+  border-radius: 2px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out;
+}
+
+.readiness-print:hover {
+  background: var(--indigo);
+  color: var(--paper);
+}
+
+/* The sheet is the deliverable; the button that opens it is not. */
+@media print {
+  .readiness-print {
+    display: none;
+  }
+}
+
+/* ---- orchestration: the stages, and the endpoint chain ------------------- */
+
+.orch-sub {
+  font-family: "Spectral", ui-serif, Georgia, serif;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.orch-stages {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+@media (min-width: 860px) {
+  .orch-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.orch-stage {
+  display: flex;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+.orch-n {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--indigo);
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.orch-name {
+  font-family: "Spectral", ui-serif, Georgia, serif;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.orch-does {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* What stops this stage going wrong. Every stage has one, and saying so is the
+   difference between a pipeline diagram and an argument. */
+.orch-guard {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--neem);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+.orch-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.orch-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 2px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.orch-endpoint.is-primary {
+  border-color: var(--neem);
+  background: var(--neem-wash);
+}
+
+.orch-rank {
+  flex: none;
+  width: 16px;
+  text-align: right;
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
+.orch-endpoint-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.orch-served {
+  margin-left: auto;
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--neem);
+}

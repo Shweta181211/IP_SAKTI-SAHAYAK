@@ -256,6 +256,11 @@ def summary(limit: int = 500) -> dict[str, Any]:
     total = answered = abstained = escalated = rejected = consented = 0
     kinds: dict[str, int] = {}
     reasons: dict[str, int] = {}
+    # Which endpoint actually served each request. This is the only honest
+    # evidence that the fallback chain is load-bearing rather than decorative:
+    # more than one model in this breakdown means the chain really did move
+    # when a provider capped out, and nobody had to be told it did.
+    models: dict[str, int] = {}
     for entry in rows:
         total += 1
         kind = str(entry.get("kind") or "query")
@@ -272,6 +277,9 @@ def summary(limit: int = 500) -> dict[str, Any]:
         rejected += int(entry.get("rejected_citations") or 0)
         if any(field in entry for field in PERSONAL_FIELDS):
             consented += 1
+        served = entry.get("model")
+        if served:
+            models[str(served)] = models.get(str(served), 0) + 1
 
     return {
         "entries": total,
@@ -285,6 +293,7 @@ def summary(limit: int = 500) -> dict[str, Any]:
         "retained_question_text": consented,
         "kinds": kinds,
         "abstention_kinds": reasons,
+        "models": models,
         "first_entry": rows[0].get("ts"),
         "last_entry": rows[-1].get("ts"),
         "path": str(AUDIT_PATH),

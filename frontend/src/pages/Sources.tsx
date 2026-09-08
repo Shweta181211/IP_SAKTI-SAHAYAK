@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { OFFICIAL_SOURCES } from "../data/exportMarkets";
 import { AuditPanel } from "../components/AuditPanel";
 import { GraphFacts } from "../components/GraphFacts";
+import { OrchestrationPanel } from "../components/OrchestrationPanel";
 
 export function SourcesPage() {
   return (
@@ -35,6 +36,8 @@ export function SourcesPage() {
           </li>
         ))}
       </ul>
+      <OrchestrationPanel />
+
       <GraphFacts />
 
       <AuditPanel />

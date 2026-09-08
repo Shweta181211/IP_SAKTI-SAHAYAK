@@ -352,6 +352,28 @@ Four unit tests pin both directions, including the one that must never pass: a
 chunk that only *mentions* a section does not support its sub-clause.
 
 
+### 2.11 Both print paths opened a blank tab and did nothing
+
+Found while verifying the new readiness sheet, and the same bug was already
+shipped in the consultation briefing.
+
+```js
+window.open("", "_blank", "noopener,noreferrer")   // returns null
+```
+
+`noopener` makes `window.open` return **null** by specification, so the handle
+needed to write the sheet never arrived, `if (!win) return` swallowed it, and
+the user got an empty tab. Measured in Chromium: with `noopener,noreferrer`
+&rarr; `null`; without &rarr; a handle.
+
+The security property `noopener` exists to provide is kept a different way: the
+document is one we compose ourselves, it loads nothing external, and it severs
+its own `window.opener` before anything else runs.
+
+*Worth remembering: a feature that fails by doing nothing looks exactly like a
+feature nobody clicked.*
+
+
 ## 3. Current issues and known bugs
 
 Nothing here is hidden. Read this section before demoing.

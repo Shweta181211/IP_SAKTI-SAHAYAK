@@ -184,6 +184,10 @@ export interface Health {
   generation_model: string;
   /** Active (provider:model) fallback chain, best first. */
   llm_chain?: string[];
+  /** Model calls answered per endpoint since the server started. More than one
+   *  entry is the failover chain having actually moved — counted on the way out
+   *  of each successful call, not inferred from the configured head. */
+  llm_served?: Record<string, number>;
   anchor_problems: string[];
   /** Shape of the provision graph: nodes, edges, and how much of the corpus
    *  the cross-references actually reach. */
@@ -210,6 +214,9 @@ export interface AuditSummary {
   retained_question_text?: number;
   kinds?: Record<string, number>;
   abstention_kinds?: Record<string, number>;
+  /** Which endpoint was at the head of the chain when each row was written.
+   *  NOT which one served it — see Health.llm_served for that. */
+  models?: Record<string, number>;
   first_entry?: string | null;
   last_entry?: string | null;
   path?: string;
