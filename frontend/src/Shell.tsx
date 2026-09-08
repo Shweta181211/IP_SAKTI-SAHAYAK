@@ -4,9 +4,15 @@ import { PointerAura } from "./components/PointerAura";
 import { STRINGS, type UiLang } from "./i18n";
 import type { Health } from "./types";
 
+/** The surface every page is drawn on. Not a theme in the usual sense: no
+ *  content changes, only what it is drawn on. */
+export type Surface = "paper" | "dark";
+
 export interface ShellValue {
   uiLang: UiLang;
   setUiLang: (lang: UiLang) => void;
+  surface: Surface;
+  setSurface: (s: Surface) => void;
   logConsent: boolean;
   setLogConsent: (v: boolean) => void;
   health: Health | null;
@@ -41,11 +47,25 @@ export function Shell({
   const statusError = value.healthChecked && !value.health;
   const location = useLocation();
   const onExplore = location.pathname === "/";
+  const dark = value.surface === "dark";
 
   return (
     <ShellContext.Provider value={value}>
       <PointerAura />
-      <div className={`min-h-screen ${onExplore ? "explore-root" : ""}`}>
+      <div
+        className={`min-h-screen ${onExplore ? "explore-root" : ""} ${
+          dark ? "surface-dark" : ""
+        }`}
+      >
+        {/* Two slowly drifting washes plus a pointer-tracked one. A dark
+            surface that does not move looks switched off. Inert on paper,
+            and skipped entirely on the landing page, which brings its own. */}
+        {dark && !onExplore && (
+          <>
+            <div className="surface-wash" aria-hidden />
+            <div className="surface-glow" aria-hidden />
+          </>
+        )}
         <header className="no-print sticky top-0 z-30 border-b border-white/5 bg-[#0e1712]/80 backdrop-blur-md">
           <div className="mx-auto flex max-w-sheet items-center justify-between gap-4 px-5 py-3">
             <NavLink to="/" className="group flex items-center gap-3">
@@ -93,6 +113,41 @@ export function Shell({
                       : t.statusConnecting}
                 </span>
               </span>
+            {/* One control for one preference, in one place - the Consult
+                page used to carry its own copy. */}
+            <div
+              className="surface-switch"
+              role="radiogroup"
+              aria-label="Surface"
+              title="Surface — Shift+D"
+            >
+              {(["paper", "dark"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={value.surface === s}
+                  aria-label={s === "paper" ? "Paper surface" : "Dark surface"}
+                  onClick={() => value.setSurface(s)}
+                  className={`surface-switch-btn ${value.surface === s ? "is-on" : ""}`}
+                >
+                  {s === "paper" ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M6 3h8l4 4v14H6z" strokeLinejoin="round" />
+                      <path d="M14 3v4h4" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path
+                        d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+
             <div className="flex overflow-hidden rounded-full border border-white/15">
                 {(["en", "hi"] as const).map((lang) => (
                   <button

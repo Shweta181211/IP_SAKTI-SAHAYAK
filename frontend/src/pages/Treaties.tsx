@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useRef, type MouseEvent, type ReactNode } from "react";
+import { useRef, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { EXPORT_LANES } from "../data/exportMarkets";
 
 /**
@@ -43,6 +43,7 @@ export function TreatiesPage() {
         {EXPORT_LANES.map((lane, i) => (
           <TiltCard
             key={lane.id}
+            index={i}
             onClick={() =>
               navigate(`/ask?j=international&q=${encodeURIComponent(lane.question)}`)
             }
@@ -51,7 +52,7 @@ export function TreatiesPage() {
             <h2 className="mt-2 font-serif text-[20px] text-ink">{lane.treaty}</h2>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">{lane.use}</p>
             <p className="mt-3 font-mono text-[11px] text-ink-faint">{lane.file}</p>
-            <p className="mt-5 text-[12.5px] font-medium text-clay">Open in Consult →</p>
+            <p className="mt-5 text-[12.5px] font-medium text-indigo-dye">Open in Consult →</p>
           </TiltCard>
         ))}
       </div>
@@ -59,7 +60,15 @@ export function TreatiesPage() {
   );
 }
 
-function TiltCard({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+function TiltCard({
+  children,
+  onClick,
+  index,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  index: number;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
   const move = (e: MouseEvent) => {
     const el = ref.current;
@@ -79,7 +88,11 @@ function TiltCard({ children, onClick }: { children: ReactNode; onClick: () => v
       onClick={onClick}
       onMouseMove={move}
       onMouseLeave={leave}
-      className="tilt-card p-6 text-left"
+      // `data-index` is what the dark surface draws as the ghost numeral
+      // behind the card; `--i` staggers its entrance.
+      data-index={String(index + 1).padStart(2, "0")}
+      style={{ "--i": index } as CSSProperties}
+      className="tilt-card reveal-in p-6 text-left"
     >
       {children}
     </button>

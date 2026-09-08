@@ -163,7 +163,7 @@ function Section({
   }, {});
 
   return (
-    <section className="readiness-section">
+    <section className="readiness-section reveal-in">
       <header className="readiness-section-head">
         <div>
           <p className="eyebrow text-ink-faint">

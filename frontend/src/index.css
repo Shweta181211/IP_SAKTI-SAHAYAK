@@ -311,7 +311,7 @@
    inline per step (--i) rather than with nth-child, so the sequence still holds
    if a step is ever conditionally hidden. */
 .station-in {
-  animation: station-in 260ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  animation: station-in 260ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
@@ -1852,6 +1852,9 @@
 }
 
 .readiness-hint {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
   display: block;
   margin-top: 0.3rem;
   font-size: 11.5px;
@@ -1860,6 +1863,11 @@
 }
 
 .readiness-check {
+  /* Resets the .readiness-field label treatment above. This is a sentence the
+     user reads, not a field name, and it was rendering in letterspaced caps. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
@@ -2332,9 +2340,12 @@
    lifted in luminance so it survives on a dark field.
    ========================================================================== */
 
-.consult-dark {
+.surface-dark {
   position: relative;
   isolation: isolate;
+  /* Native controls and scrollbars follow this; without it the checkbox and
+     the scrollbar stay light on a dark page. */
+  color-scheme: dark;
 
   /* Re-mixed for a dark field. Overriding the tokens rather than every rule is
      what makes this uniform: components built on the vars re-skin themselves,
@@ -2360,15 +2371,15 @@
 
 /* ---- the ground: lit and slowly moving, never a flat fill ---- */
 
-.consult-dark-wash,
-.consult-dark-glow {
+.surface-wash,
+.surface-glow {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
 }
 
-.consult-dark-wash {
+.surface-wash {
   background:
     radial-gradient(46vmax 40vmax at 12% -6%, rgba(196, 92, 58, 0.22), transparent 60%),
     radial-gradient(40vmax 38vmax at 92% 4%, rgba(201, 138, 43, 0.16), transparent 58%),
@@ -2379,7 +2390,7 @@
 
 /* The pointer wash. Subtle on purpose - it should be felt at the edge of
    attention, not followed. */
-.consult-dark-glow {
+.surface-glow {
   background: radial-gradient(
     30vmax 30vmax at calc(var(--mxp, 0.5) * 100%) calc(var(--myp, 0.35) * 100%),
     rgba(227, 168, 68, 0.1),
@@ -2398,19 +2409,19 @@
 
 /* ---- structure: the sheet and its ruling are gone ---- */
 
-.consult-dark .ruled {
+.surface-dark .ruled {
   background: none;
 }
 
-.consult-dark > .ruled > main {
+.surface-dark .consult-page > .ruled > main {
   max-width: 74rem;
   padding-top: 2.2rem;
   padding-bottom: 2.6rem;
 }
 
 /* Header and composer are glass over the ground, not opaque bars. */
-.consult-dark > .ruled > header,
-.consult-dark > .ruled > div:last-child {
+.surface-dark .consult-topbar,
+.surface-dark .consult-composer {
   border-color: rgba(226, 214, 187, 0.1);
   background: rgba(13, 21, 18, 0.72);
   backdrop-filter: blur(14px) saturate(120%);
@@ -2421,12 +2432,12 @@
 /* NB: .support is deliberately absent. The gauge sits directly on the surface
    in both modes - giving it a panel here would re-introduce exactly the frame
    that made it look like a form field on paper. */
-.consult-dark .card,
-.consult-dark .step-card,
-.consult-dark .takeaway,
-.consult-dark .readiness-section,
-.consult-dark .readiness-plan,
-.consult-dark .readiness-sources {
+.surface-dark .card,
+.surface-dark .step-card,
+.surface-dark .takeaway,
+.surface-dark .readiness-section,
+.surface-dark .readiness-plan,
+.surface-dark .readiness-sources {
   border-color: rgba(226, 214, 187, 0.13);
   background: linear-gradient(
     180deg,
@@ -2438,17 +2449,17 @@
     0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
-.consult-dark .takeaway::before {
+.surface-dark .takeaway::before {
   background: var(--haldi);
   opacity: 0.75;
 }
 
-.consult-dark .step-card {
+.surface-dark .step-card {
   border-left-color: rgba(226, 214, 187, 0.13);
 }
 
-.consult-dark .step-card:hover,
-.consult-dark .step-card.is-linked {
+.surface-dark .step-card:hover,
+.surface-dark .step-card.is-linked {
   border-color: rgba(147, 184, 219, 0.4);
   border-left-color: var(--indigo);
   box-shadow:
@@ -2457,7 +2468,7 @@
     0 0 0 1px rgba(147, 184, 219, 0.12);
 }
 
-.consult-dark .step-card.is-abstained {
+.surface-dark .step-card.is-abstained {
   background: linear-gradient(
     180deg,
     rgba(226, 134, 108, 0.1) 0%,
@@ -2466,115 +2477,99 @@
   border-left-color: var(--clay);
 }
 
-.consult-dark .step-medallion,
-.consult-dark .step-provision,
-.consult-dark .step-source,
-.consult-dark .readiness-plan-n {
+.surface-dark .step-medallion,
+.surface-dark .step-provision,
+.surface-dark .step-source,
+.surface-dark .readiness-plan-n {
   background: rgba(255, 253, 248, 0.05);
   border-color: rgba(226, 214, 187, 0.16);
 }
 
 /* Two rules where a token is used as a FOREGROUND on an accent fill. Inverting
    --paper would have turned these dark-on-dark. */
-.consult-dark .step-card.is-pinned .step-medallion,
-.consult-dark .step-card.is-linked .step-medallion,
-.consult-dark .step-provision-n {
+.surface-dark .step-card.is-pinned .step-medallion,
+.surface-dark .step-card.is-linked .step-medallion,
+.surface-dark .step-provision-n {
   color: #0e1712;
 }
 
-.consult-dark .step-provision-n {
+.surface-dark .step-provision-n {
   background: var(--indigo);
 }
 
 /* ---- Tailwind utilities used in the components ---- */
 
-.consult-dark .text-ink { color: var(--ink); }
-.consult-dark .text-ink-soft { color: var(--ink-soft); }
-.consult-dark .text-ink-faint { color: var(--ink-faint); }
-.consult-dark .text-haldi { color: var(--haldi); }
-.consult-dark .text-clay { color: var(--clay); }
-.consult-dark .text-neem { color: var(--neem); }
-.consult-dark .text-indigo-dye { color: var(--indigo); }
-.consult-dark .border-rule { border-color: var(--rule); }
-.consult-dark .border-haldi { border-color: var(--haldi); }
-.consult-dark .border-clay { border-color: var(--clay); }
-.consult-dark .border-neem { border-color: var(--neem); }
-.consult-dark .border-indigo-dye { border-color: var(--indigo); }
-.consult-dark .bg-haldi-wash { background-color: var(--haldi-wash); }
-.consult-dark .bg-clay-wash { background-color: var(--clay-wash); }
-.consult-dark .bg-indigo-wash { background-color: var(--indigo-wash); }
-.consult-dark .bg-neem-wash { background-color: var(--neem-wash); }
-.consult-dark .bg-paper-deep { background-color: rgba(255, 253, 248, 0.07); }
+.surface-dark .text-ink { color: var(--ink); }
+.surface-dark .text-ink-soft { color: var(--ink-soft); }
+.surface-dark .text-ink-faint { color: var(--ink-faint); }
+.surface-dark .text-haldi { color: var(--haldi); }
+.surface-dark .text-clay { color: var(--clay); }
+.surface-dark .text-neem { color: var(--neem); }
+.surface-dark .text-indigo-dye { color: var(--indigo); }
+.surface-dark .border-rule { border-color: var(--rule); }
+.surface-dark .border-haldi { border-color: var(--haldi); }
+.surface-dark .border-clay { border-color: var(--clay); }
+.surface-dark .border-neem { border-color: var(--neem); }
+.surface-dark .border-indigo-dye { border-color: var(--indigo); }
+.surface-dark .bg-haldi-wash { background-color: var(--haldi-wash); }
+.surface-dark .bg-clay-wash { background-color: var(--clay-wash); }
+.surface-dark .bg-indigo-wash { background-color: var(--indigo-wash); }
+.surface-dark .bg-neem-wash { background-color: var(--neem-wash); }
+.surface-dark .bg-paper-deep { background-color: rgba(255, 253, 248, 0.07); }
 /* The feature chips on the empty state are bg-white/60 - a light wash that
    goes chalky on a dark ground. */
-.consult-dark .bg-white\/60 { background-color: rgba(255, 253, 248, 0.06); }
-.consult-dark .bg-indigo-dye { background-color: var(--indigo); color: #0e1712; }
-.consult-dark .bg-haldi { background-color: var(--haldi); color: #0e1712; }
-.consult-dark .bg-clay { background-color: var(--clay); }
-.consult-dark .bg-neem { background-color: var(--neem); }
+.surface-dark .bg-white\/60 { background-color: rgba(255, 253, 248, 0.06); }
+.surface-dark .bg-indigo-dye { background-color: var(--indigo); color: #0e1712; }
+.surface-dark .bg-haldi { background-color: var(--haldi); color: #0e1712; }
+.surface-dark .bg-clay { background-color: var(--clay); }
+.surface-dark .bg-neem { background-color: var(--neem); }
 
 /* The send button inverts: cream on the dark ground reads as the primary
    action, where a near-black button would disappear into it. */
-.consult-dark .send-btn {
+.surface-dark .send-btn {
   background: #efe4cb;
   color: #14201a;
 }
 
-.consult-dark .send-btn:hover {
+.surface-dark .send-btn:hover {
   background: #fffdf8;
 }
 
-.consult-dark .consult-pill-track {
+.surface-dark .consult-pill-track {
   border-color: rgba(226, 214, 187, 0.16);
   background: rgba(255, 253, 248, 0.05);
 }
 
-.consult-dark .consult-pill.is-on {
+.surface-dark .consult-pill.is-on {
   color: #0e1712;
 }
 
-.consult-dark .mic-btn,
-.consult-dark .ground-switch {
-  border-color: rgba(226, 214, 187, 0.18);
-}
-
-.consult-dark .ground-switch-btn {
-  color: rgba(241, 232, 213, 0.6);
-}
-
-.consult-dark .ground-switch-btn:hover {
-  color: var(--ink);
-}
-
-.consult-dark .ground-switch-btn.is-on {
-  background: var(--haldi);
-  color: #0e1712;
-}
+.surface-dark .mic-btn,
 
 /* The composer's field is glass too - a white box here would be a hole. */
-.consult-dark > .ruled > div:last-child .card {
+.surface-dark .consult-composer .card {
   background: rgba(255, 253, 248, 0.05);
 }
 
-.consult-dark textarea::placeholder {
+.surface-dark textarea::placeholder {
   color: rgba(241, 232, 213, 0.34);
 }
 
 /* ---- the gauge, re-lit ---- */
 
-.consult-dark .support-label {
+.surface-dark .support-label {
   color: var(--neem);
 }
 
-.consult-dark .support-label.is-thin {
+.surface-dark .support-label.is-thin {
   color: var(--clay);
 }
 
 /* ---- motion: the page should feel alive without becoming busy ---- */
 
 /* Each turn rises into place. */
-.consult-dark .msg-in {
-  animation: dark-rise 460ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+.surface-dark .msg-in {
+  animation: dark-rise 460ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
 }
 
 @keyframes dark-rise {
@@ -2589,8 +2584,8 @@
 }
 
 /* The four trail cards deal themselves out in reading order. */
-.consult-dark .step-card {
-  animation: dark-deal 480ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+.surface-dark .step-card {
+  animation: dark-deal 480ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
   animation-delay: calc(var(--i, 0) * 90ms);
 }
 
@@ -2606,12 +2601,12 @@
 }
 
 /* A slow sheen crosses the takeaway once, the way light moves over glass. */
-.consult-dark .takeaway {
+.surface-dark .takeaway {
   position: relative;
   overflow: hidden;
 }
 
-.consult-dark .takeaway::after {
+.surface-dark .takeaway::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2633,14 +2628,14 @@
 }
 
 /* The citation rail lights as it is referenced. */
-.consult-dark aside li .card {
+.surface-dark aside li .card {
   transition:
     border-color 180ms ease-out,
     box-shadow 180ms ease-out,
     transform 180ms ease-out;
 }
 
-.consult-dark aside li .card:hover {
+.surface-dark aside li .card:hover {
   transform: translateY(-2px);
   border-color: rgba(147, 184, 219, 0.45);
   box-shadow:
@@ -2649,93 +2644,211 @@
 }
 
 /* Example chips on the empty state breathe on hover rather than just tinting. */
-.consult-dark .example-chip {
+.surface-dark .example-chip {
   transition:
     transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1),
     border-color 200ms ease-out,
     box-shadow 200ms ease-out;
 }
 
-.consult-dark .example-chip:hover {
+.surface-dark .example-chip:hover {
   transform: translateY(-3px);
   border-color: rgba(227, 168, 68, 0.5);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
 }
 
-.consult-dark .consult-leaf {
+.surface-dark .consult-leaf {
   filter: drop-shadow(0 8px 22px rgba(227, 168, 68, 0.22));
 }
 
 /* The waiting skeleton glows instead of greying, so a 20-second wait looks
    like something warming up rather than something stalled. */
-.consult-dark .trail-sweep .h-2\.5,
-.consult-dark .trail-sweep > div {
+.surface-dark .trail-sweep .h-2\.5,
+.surface-dark .trail-sweep > div {
   background: rgba(255, 253, 248, 0.09);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .consult-dark-wash,
-  .consult-dark .msg-in,
-  .consult-dark .step-card,
-  .consult-dark .takeaway::after {
+  .surface-wash,
+  .surface-dark .msg-in,
+  .surface-dark .step-card,
+  .surface-dark .takeaway::after {
     animation: none;
   }
-  .consult-dark .step-card:hover,
-  .consult-dark .example-chip:hover,
-  .consult-dark aside li .card:hover {
+  .surface-dark .step-card:hover,
+  .surface-dark .example-chip:hover,
+  .surface-dark aside li .card:hover {
     transform: none;
   }
 }
 
 /* A dark surface is a screen preference. Print is always the paper sheet. */
 @media print {
-  .consult-dark {
+  .surface-dark {
     background: #fff;
     --paper: #f5eedd;
     --ink: #16241e;
     --ink-soft: #24382f;
     --rule: #ddceac;
   }
-  .consult-dark-wash,
-  .consult-dark-glow {
+  .surface-wash,
+  .surface-glow {
+    display: none;
+  }
+}
+
+/* The composer's field is glass too - a white box here would be a hole. */
+.surface-dark .consult-composer .card {
+  background: rgba(255, 253, 248, 0.05);
+}
+
+.surface-dark textarea::placeholder {
+  color: rgba(241, 232, 213, 0.34);
+}
+
+/* ---- the gauge, re-lit ---- */
+
+.surface-dark .support-label {
+  color: var(--neem);
+}
+
+.surface-dark .support-label.is-thin {
+  color: var(--clay);
+}
+
+/* ---- motion: the page should feel alive without becoming busy ---- */
+
+/* Each turn rises into place. */
+.surface-dark .msg-in {
+  animation: dark-rise 460ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+}
+
+@keyframes dark-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The four trail cards deal themselves out in reading order. */
+.surface-dark .step-card {
+  animation: dark-deal 480ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+@keyframes dark-deal {
+  from {
+    opacity: 0;
+    transform: translateY(16px) rotateX(6deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A slow sheen crosses the takeaway once, the way light moves over glass. */
+.surface-dark .takeaway {
+  position: relative;
+  overflow: hidden;
+}
+
+.surface-dark .takeaway::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 253, 248, 0.09) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  animation: dark-sheen 1500ms ease-out 320ms 1 both;
+}
+
+@keyframes dark-sheen {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+/* The citation rail lights as it is referenced. */
+.surface-dark aside li .card {
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.surface-dark aside li .card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(147, 184, 219, 0.45);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.08) inset,
+    0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+/* Example chips on the empty state breathe on hover rather than just tinting. */
+.surface-dark .example-chip {
+  transition:
+    transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    border-color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.surface-dark .example-chip:hover {
+  transform: translateY(-3px);
+  border-color: rgba(227, 168, 68, 0.5);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+}
+
+.surface-dark .consult-leaf {
+  filter: drop-shadow(0 8px 22px rgba(227, 168, 68, 0.22));
+}
+
+/* The waiting skeleton glows instead of greying, so a 20-second wait looks
+   like something warming up rather than something stalled. */
+.surface-dark .trail-sweep .h-2\.5,
+.surface-dark .trail-sweep > div {
+  background: rgba(255, 253, 248, 0.09);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface-wash,
+  .surface-dark .msg-in,
+  .surface-dark .step-card,
+  .surface-dark .takeaway::after {
+    animation: none;
+  }
+  .surface-dark .step-card:hover,
+  .surface-dark .example-chip:hover,
+  .surface-dark aside li .card:hover {
+    transform: none;
+  }
+}
+
+/* A dark surface is a screen preference. Print is always the paper sheet. */
+@media print {
+  .surface-dark {
+    background: #fff;
+    --paper: #f5eedd;
+    --ink: #16241e;
+    --ink-soft: #24382f;
+    --rule: #ddceac;
+  }
+  .surface-wash,
+  .surface-glow {
     display: none;
   }
 }
 
 /* ---- the surface switch ---- */
-
-.ground-switch {
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-}
-
-.ground-switch-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.85rem;
-  height: 1.6rem;
-  color: var(--ink-faint);
-  transition:
-    background-color 150ms ease-out,
-    color 150ms ease-out;
-}
-
-.ground-switch-btn svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.ground-switch-btn:hover {
-  color: var(--ink);
-}
-
-.ground-switch-btn.is-on {
-  background: var(--haldi);
-  color: var(--ink);
-}
 
 /* Export readiness -> treaty routes. A pointer to a sibling page, not a
    section: the two answer different questions. */
@@ -2766,8 +2879,6 @@
   border-color: var(--indigo);
   background: var(--indigo-wash);
 }
-
-
 
 /* ============================================================================
    THE POINTER IS A LEAF
@@ -2815,4 +2926,263 @@
 .has-aura textarea,
 .has-aura select {
   cursor: auto;
+}
+
+/* ============================================================================
+   THE DARK SURFACE, EVERYWHERE ELSE
+   Export readiness, Treaty routes and Sources are the same surface as Consult.
+   They inherit the tokens from `.surface-dark` already, so this is only what
+   those pages draw for themselves: their stage, their cards, their headings.
+   ========================================================================== */
+
+/* The document element too, or overscroll reveals cream under a dark app. */
+html[data-surface="dark"] {
+  background: #0d1512;
+}
+
+.surface-dark .export-stage {
+  background:
+    radial-gradient(60vmax 40vmax at 0% -10%, rgba(201, 138, 43, 0.11), transparent 55%),
+    transparent;
+  color: var(--ink);
+}
+
+/* The em in a page title is clay, which is a limit on paper and would read as a
+   warning here; on the dark surface it lifts to the haldi the identity uses. */
+.surface-dark .explore-page-title {
+  color: var(--ink);
+}
+
+.surface-dark .explore-page-title em {
+  color: var(--haldi);
+}
+
+.surface-dark .explore-kicker--ink {
+  color: var(--haldi);
+}
+
+.surface-dark .tilt-card {
+  border-color: rgba(226, 214, 187, 0.13);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 248, 0.055) 0%,
+    rgba(255, 253, 248, 0.022) 100%
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.06) inset,
+    0 12px 32px rgba(0, 0, 0, 0.34);
+}
+
+.surface-dark .tilt-card:hover {
+  border-color: rgba(227, 168, 68, 0.42);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.1) inset,
+    0 26px 52px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(227, 168, 68, 0.12);
+}
+
+/* A ghost numeral behind each treaty card. The lane number is already printed
+   small at the top; drawn large and nearly invisible it gives the grid a
+   rhythm to scan by, the way a numbered plate does in a printed index. */
+.surface-dark .tilt-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.surface-dark .tilt-card::before {
+  content: attr(data-index);
+  position: absolute;
+  right: -0.18em;
+  bottom: -0.42em;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: 8.5rem;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 253, 248, 0.035);
+  pointer-events: none;
+  transition: color 240ms ease-out;
+}
+
+.surface-dark .tilt-card:hover::before {
+  color: rgba(227, 168, 68, 0.09);
+}
+
+.surface-dark .readiness-crosslink {
+  border-color: rgba(226, 214, 187, 0.18);
+}
+
+.surface-dark .readiness-crosslink-cta {
+  border-color: rgba(226, 214, 187, 0.18);
+  background: rgba(255, 253, 248, 0.05);
+  color: var(--indigo);
+}
+
+.surface-dark .readiness-crosslink-cta:hover {
+  border-color: var(--indigo);
+  background: var(--indigo-wash);
+}
+
+.surface-dark .readiness-form {
+  border-color: rgba(226, 214, 187, 0.13);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 248, 0.055) 0%,
+    rgba(255, 253, 248, 0.02) 100%
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.06) inset,
+    0 14px 36px rgba(0, 0, 0, 0.3);
+}
+
+.surface-dark .readiness-field input,
+.surface-dark .readiness-field textarea,
+.surface-dark .readiness-field select {
+  border-color: rgba(226, 214, 187, 0.16);
+  background: rgba(255, 253, 248, 0.05);
+  color: var(--ink);
+}
+
+.surface-dark .readiness-field input::placeholder,
+.surface-dark .readiness-field textarea::placeholder {
+  color: rgba(241, 232, 213, 0.32);
+}
+
+.surface-dark .readiness-field select option {
+  background: #16211c;
+  color: #f1e8d5;
+}
+
+.surface-dark .readiness-submit {
+  background: #efe4cb;
+  color: #14201a;
+}
+
+.surface-dark .readiness-submit:hover:not(:disabled) {
+  background: #fffdf8;
+}
+
+.surface-dark .readiness-gap {
+  border-color: rgba(226, 214, 187, 0.2);
+  background: rgba(255, 253, 248, 0.03);
+}
+
+.surface-dark .readiness-skel-head,
+.surface-dark .readiness-skel-row {
+  background: rgba(255, 253, 248, 0.07);
+}
+
+/* Sources: the registry links become plates rather than boxes on paper. */
+.surface-dark .source-card {
+  border-color: rgba(226, 214, 187, 0.13);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 248, 0.055) 0%,
+    rgba(255, 253, 248, 0.022) 100%
+  );
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- entrance: cards arrive in reading order ---------------------------- */
+
+/* Used on every grid of cards outside Consult. Deliberately the same easing and
+   step as the reasoning trail, so one motion vocabulary runs through the app. */
+/* `backwards`, never `both`. An entrance that ends on `transform: none` and
+   fills forwards keeps winning the cascade after it finishes - animations
+   outrank inline styles - so the tilt cards' pointer transform and the step
+   cards' hover lift would both be silently dead. `backwards` applies the
+   opening frame during the delay and then gets out of the way. */
+.reveal-in {
+  animation: reveal-in 500ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A hairline of light travels the top edge of a hovered plate. Cheap, and it
+   makes a grid of ten feel responsive rather than static. */
+.surface-dark .tilt-card::after,
+.surface-dark .source-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(227, 168, 68, 0.65),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+
+.surface-dark .tilt-card:hover::after,
+.surface-dark .source-card:hover::after {
+  opacity: 1;
+}
+
+.surface-dark .source-card {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---- the switch in the site header ------------------------------------- */
+
+.surface-switch {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+
+.surface-switch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.5rem;
+  color: rgba(245, 238, 221, 0.5);
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out;
+}
+
+.surface-switch-btn svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.surface-switch-btn:hover {
+  color: var(--paper);
+}
+
+.surface-switch-btn.is-on {
+  background: var(--haldi);
+  color: #16241e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-in {
+    animation: none;
+  }
+}
+
+@media print {
+  .reveal-in {
+    animation: none;
+  }
+  .surface-dark .tilt-card::before,
+  .surface-dark .tilt-card::after,
+  .surface-dark .source-card::after {
+    display: none;
+  }
 }

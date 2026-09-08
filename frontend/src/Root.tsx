@@ -8,6 +8,7 @@ import { SourcesPage } from "./pages/Sources";
 import { TreatiesPage } from "./pages/Treaties";
 import { Shell } from "./Shell";
 import type { UiLang } from "./i18n";
+import type { Surface } from "./Shell";
 import type { Health } from "./types";
 
 // These three preferences are read on every page, not only inside the
@@ -15,6 +16,10 @@ import type { Health } from "./types";
 // Keeping a second copy inside App would give the header and the rail two
 // sources of truth for the same toggle.
 const UI_LANG_KEY = "ipsakti.uilang.v1";
+// The surface every page is drawn on. Owned here for the same reason the
+// language is: two copies of one preference is two sources of truth, and
+// the Consult page used to hold its own.
+const SURFACE_KEY = "ipsakti.surface.v1";
 const CONSENT_KEY = "ipsakti.logconsent.v1";
 
 /** Carry the query string across a redirect, so /consult?q=... still boots. */
@@ -30,6 +35,19 @@ export function Root() {
     } catch {
       return "en";
     }
+  });
+  const [surface, setSurface] = useState<Surface>(() => {
+    try {
+      const saved = localStorage.getItem(SURFACE_KEY) as Surface | null;
+      if (saved === "paper" || saved === "dark") return saved;
+      // First visit follows the system. Someone whose machine is in dark mode
+      // has already said what they want; asking them to find a toggle is
+      // making them say it twice.
+      if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
+    } catch {
+      /* a private window just means the default */
+    }
+    return "paper";
   });
   const [logConsent, setLogConsent] = useState<boolean>(() => {
     try {
@@ -68,8 +86,36 @@ export function Root() {
     }
   }, [logConsent]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SURFACE_KEY, surface);
+    } catch {
+      /* same */
+    }
+    // The page behind the app shell is painted by the document element, so it
+    // has to be told too - otherwise overscroll reveals cream under a dark app.
+    document.documentElement.dataset.surface = surface;
+  }, [surface]);
+
+  // Shift+D anywhere that is not a text field. A preference this cheap to
+  // change should not require finding a button first.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.key.toLowerCase() !== "d" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (el?.isContentEditable) return;
+      e.preventDefault();
+      setSurface((v) => (v === "dark" ? "paper" : "dark"));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <Shell value={{ uiLang, setUiLang, logConsent, setLogConsent, health, healthChecked }}>
+    <Shell
+      value={{ uiLang, setUiLang, surface, setSurface, logConsent, setLogConsent, health, healthChecked }}
+    >
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/ask" element={<Workspace lockedMode="ask" />} />

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { OFFICIAL_SOURCES } from "../data/exportMarkets";
 
 export function SourcesPage() {
@@ -13,8 +14,12 @@ export function SourcesPage() {
         subscriptions and will not do so without explicit, logged permission.
       </p>
       <ul className="mt-10 grid gap-4 sm:grid-cols-2">
-        {OFFICIAL_SOURCES.map((src) => (
-          <li key={src.href} className="card p-5">
+        {OFFICIAL_SOURCES.map((src, i) => (
+          <li
+            key={src.href}
+            style={{ "--i": i } as CSSProperties}
+            className="card source-card reveal-in p-5"
+          >
             <a
               href={src.href}
               target="_blank"
