@@ -16,8 +16,10 @@ guessing.
 
 ## Quick start
 
-**Prerequisites:** Python 3.11+, Node 18+ (for the frontend, from Phase 6), and an
-[OpenRouter API key](https://openrouter.ai/keys).
+**Prerequisites:** Python 3.11+, Node 18+ (for the frontend, from Phase 6), and at
+least one generation API key with daily headroom - a free
+[Google AI Studio key](https://aistudio.google.com/apikey) is enough. See
+`.env.example` for the full three-provider fallback chain.
 
 ```
 # 1. Dependencies
@@ -25,10 +27,15 @@ guessing.
 
 # 2. API key
 copy .env.example .env
-#    then edit .env and set OPENROUTER_API_KEY=sk-or-v1-...
+#    then edit .env and set GEMINI_API_KEY=... (or GROQ_ / OPENROUTER_).
+#    At least one key must have daily quota left, or every question refuses
+#    with "Safety check unavailable" - see .env.example.
 
 # 3. Build the vector database
-#    First run downloads the embedding model (~1.1 GB) and takes a few minutes.
+#    REQUIRED. data/vector_db/ is gitignored (70 MB, rebuildable), so a fresh
+#    clone has none and the backend REFUSES TO START without it - which the
+#    browser then shows as "Request failed (500)" from the Vite proxy.
+#    First run downloads the embedding model (~1.1 GB) and takes ~28 min on CPU.
 .venv\Scripts\python.exe pipeline\build_vector_db.py
 
 # 4. Sanity-check retrieval
@@ -113,7 +120,7 @@ Citation accuracy is the graded criterion, so it is enforced structurally rather
 | Command | What it covers |
 |---|---|
 | `tests\demo_check.py` | Pre-demo readiness + cache warm-up |
-| `testsenchmarks.py` | Part F benchmarks scored on the brief's 4 criteria, plus an off-script robustness suite (**94/94**) |
+| `tests/benchmarks.py` | Part F benchmarks scored on the brief's 4 criteria, plus an off-script robustness suite (**94/94**) |
 | `tests\e2e_api.py` | Every UI state over HTTP: answers, each abstention kind, validation, citation integrity (**24/24**) |
 | `tests\probe_phase1.py` | Raw retrieval quality and abstention-threshold calibration |
 | `tests\stress_phase3.py` | 19 adversarial cases — corpus boundaries, false premises, other languages, injection |
