@@ -53,8 +53,13 @@ export function Shell({
     <ShellContext.Provider value={value}>
       <PointerAura />
       <div
+        // The landing page is a fixed composition, not a switchable surface:
+        // its hero is dark and its garden section is deliberately light, with
+        // its own cream ground. Applying the dark tokens there turned that
+        // section's ink into cream ON cream - text present, contrast gone. It
+        // keeps its own design in both modes.
         className={`min-h-screen ${onExplore ? "explore-root" : ""} ${
-          dark ? "surface-dark" : ""
+          dark && !onExplore ? "surface-dark" : ""
         }`}
       >
         {/* Two slowly drifting washes plus a pointer-tracked one. A dark
