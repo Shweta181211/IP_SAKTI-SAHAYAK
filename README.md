@@ -120,7 +120,7 @@ Citation accuracy is the graded criterion, so it is enforced structurally rather
 | Command | What it covers |
 |---|---|
 | `tests\demo_check.py` | Pre-demo readiness + cache warm-up |
-| `tests/benchmarks.py` | Part F benchmarks scored on the brief's 4 criteria, plus an off-script robustness suite (**94/94**) |
+| `tests/benchmarks.py` | Part F benchmarks scored on the brief's 4 criteria, plus an off-script robustness suite (**92/94** on the last cold run; free-model variance moves the last point or two, so re-run rather than trusting this number) |
 | `tests\e2e_api.py` | Every UI state over HTTP: answers, each abstention kind, validation, citation integrity (**24/24**) |
 | `tests\probe_phase1.py` | Raw retrieval quality and abstention-threshold calibration |
 | `tests\stress_phase3.py` | 19 adversarial cases — corpus boundaries, false premises, other languages, injection |

@@ -72,25 +72,25 @@ function Volume({
   step,
   index,
   isOpen,
+  isShrunk,
   onToggle,
   citationIndex,
   citationById,
   active,
   isPinned,
   onHoverStep,
-  onTogglePin,
   onJumpToCitation,
 }: {
   step: ReasoningStep;
   index: number;
   isOpen: boolean;
+  isShrunk: boolean;
   onToggle: () => void;
   citationIndex: Map<string, number>;
   citationById: Map<string, Citation>;
   active: string[];
   isPinned: boolean;
   onHoverStep: (ids: string[] | null) => void;
-  onTogglePin: () => void;
   onJumpToCitation: (chunkId: string) => void;
 }) {
   const [showSource, setShowSource] = useState(false);
@@ -110,8 +110,10 @@ function Volume({
   return (
     <article
       className={`step-card volume ${isOpen ? "is-open" : ""} ${
-        step.abstained ? "is-abstained" : ""
-      } ${isPinned ? "is-pinned" : ""} ${isLinked ? "is-linked" : ""}`}
+        isShrunk ? "is-shrunk" : ""
+      } ${step.abstained ? "is-abstained" : ""} ${isPinned ? "is-pinned" : ""} ${
+        isLinked ? "is-linked" : ""
+      }`}
       style={{ "--i": index } as React.CSSProperties}
       onMouseEnter={() => onHoverStep(step.citation_ids)}
       onMouseLeave={() => onHoverStep(null)}
@@ -127,16 +129,26 @@ function Volume({
         }}
         aria-expanded={isOpen}
         aria-label={`${isOpen ? "Collapse" : "Expand"} step ${step.step}: ${step.title}`}
+        data-roman={ROMAN[index] ?? step.step}
       >
-        <span className="volume-roman" aria-hidden>
-          {ROMAN[index] ?? step.step}
-        </span>
-        <span className="volume-seal" aria-hidden>
-          <LeafSeal />
+        {/* Seal, numeral and the step's own glyph on one line. Stacked, the
+            plate's contents outgrew a closed row and flex shrank the title -
+            which has `overflow: hidden`, giving it an automatic minimum size of
+            zero - to nothing. */}
+        <span className="volume-mark" aria-hidden>
+          <span className="volume-seal">
+            <LeafSeal />
+          </span>
+          <span className="volume-roman">{ROMAN[index] ?? step.step}</span>
+          <span className="volume-cue">
+            <StepIcon step={step.step} />
+          </span>
         </span>
         <span className="volume-title">{step.title}</span>
-        <span className="volume-cue" aria-hidden>
-          <StepIcon step={step.step} />
+        {/* Only on hover, and only on a closed plate: the shelf should read as
+            four titles at rest, not four buttons shouting to be pressed. */}
+        <span className="volume-hint" aria-hidden>
+          {hasSources ? `Open · ${sources.length} source${sources.length === 1 ? "" : "s"}` : "Open"}
         </span>
       </button>
 
@@ -153,18 +165,9 @@ function Volume({
             <h3 className="volume-head-title">{step.title}</h3>
 
             {hasSources && (
-              // Pinning keeps this step's sources lit in the rail while the
-              // reader looks away from the volume. Hover cannot do that, and on
-              // a touch screen hover does not exist at all.
-              <button
-                type="button"
-                onClick={onTogglePin}
-                aria-pressed={isPinned}
-                title="Keep this step's sources highlighted"
-                className={`volume-pin ${isPinned ? "is-on" : ""}`}
-              >
-                {isPinned ? "Pinned" : "Pin sources"}
-              </button>
+              <span className="volume-tracing" aria-hidden>
+                {sources.length} source{sources.length === 1 ? "" : "s"} lit
+              </span>
             )}
             <button
               type="button"
@@ -285,35 +288,54 @@ export function ReasoningTrail({
     spines[(next + spines.length) % spines.length]?.focus();
   };
 
+  // Two rows of two rather than one row of four. Four abreast made each volume
+  // a sliver, and opening one left the other three as bookends down the side of
+  // the page; paired, a closed volume is a plate wide enough to carry its title
+  // horizontally, and an opened one takes most of its own row instead of a
+  // quarter of the page.
+  const rows: ReasoningStep[][] = [];
+  for (let i = 0; i < answer.steps.length; i += 2) {
+    rows.push(answer.steps.slice(i, i + 2));
+  }
+
   return (
-    <div
-      ref={shelfRef}
-      className="trail-shelf"
-      onKeyDown={onKeyDown}
-      data-open={openStep !== null}
-    >
-      {answer.steps.map((step, i) => (
-        <Volume
-          key={step.step}
-          step={step}
-          index={i}
-          isOpen={openStep === step.step}
-          onToggle={() =>
-            setOpenStep((current) => (current === step.step ? null : step.step))
-          }
-          citationIndex={citationIndex}
-          citationById={citationById}
-          active={active}
-          isPinned={pinnedStep === step.step}
-          onHoverStep={onHoverStep}
-          onTogglePin={() => {
-            const next = pinnedStep === step.step ? null : step.step;
-            onPinnedStepChange(next);
-            onPinStep(next === null ? null : step.citation_ids);
-          }}
-          onJumpToCitation={onJumpToCitation}
-        />
-      ))}
+    <div ref={shelfRef} className="trail-shelf" onKeyDown={onKeyDown}>
+      {rows.map((row, r) => {
+        // Only the row holding the open volume changes shape. The other row
+        // stays exactly as it was, so opening something moves as little of the
+        // page as possible.
+        const rowIsOpen = row.some((step) => step.step === openStep);
+        return (
+          <div key={r} className={`shelf-row ${rowIsOpen ? "has-open" : ""}`}>
+            {row.map((step, c) => (
+              <Volume
+                key={step.step}
+                step={step}
+                index={r * 2 + c}
+                isOpen={openStep === step.step}
+                isShrunk={rowIsOpen && openStep !== step.step}
+                onToggle={() => {
+                  // Opening a volume IS the act of focusing on it, so it lights
+                  // that step's sources in the rail and dims the rest. This used
+                  // to need a separate "Pin sources" button beside the title -
+                  // two controls for one intention, and the one that mattered
+                  // was the one nobody pressed.
+                  const next = openStep === step.step ? null : step.step;
+                  setOpenStep(next);
+                  onPinnedStepChange(next);
+                  onPinStep(next === null ? null : step.citation_ids);
+                }}
+                citationIndex={citationIndex}
+                citationById={citationById}
+                active={active}
+                isPinned={pinnedStep === step.step}
+                onHoverStep={onHoverStep}
+                onJumpToCitation={onJumpToCitation}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

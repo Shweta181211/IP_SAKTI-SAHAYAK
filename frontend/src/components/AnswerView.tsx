@@ -154,7 +154,7 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                 message={answer.abstention_message}
                 clarifying={answer.clarifying_question}
               />
-              {answer.escalate && <Escalate reason={answer.escalation_reason} />}
+              {answer.escalate && <Escalate reason={answer.escalation_reason} answer={answer} />}
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -261,6 +261,9 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                       domId={citationDomId(c.chunk_id)}
                       flash={flashed === c.chunk_id}
                       highlighted={active.includes(c.chunk_id)}
+                      // The whole claim of this product, made visible: while a
+                      // step is open, the sources it does NOT rest on recede.
+                      dimmed={active.length > 0 && !active.includes(c.chunk_id)}
                       onHover={(id) => setHovered(id ? [id] : [])}
                     />
                   ))}
@@ -295,7 +298,7 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
               reads as a next step, not as a warning about what you just read. */}
           {!answer.abstained && answer.escalate && (
             <div className="max-w-3xl">
-              <Escalate reason={answer.escalation_reason} />
+              <Escalate reason={answer.escalation_reason} answer={answer} />
             </div>
           )}
 

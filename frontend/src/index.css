@@ -1448,15 +1448,33 @@
 
 .trail-shelf {
   display: flex;
+  flex-direction: column;
   gap: 0.55rem;
-  height: 23.5rem;
   perspective: 1400px;
+}
+
+/* Two rows of two. Four abreast made each volume a sliver and left the other
+   three as bookends down the side of the page when one opened; paired, a closed
+   volume is a plate wide enough to carry its title horizontally, and an opened
+   one takes most of its own row rather than a quarter of the page.
+
+   Only the row holding the open volume changes height, so opening something
+   moves as little of the page as possible. */
+.shelf-row {
+  display: flex;
+  gap: 0.55rem;
+  height: 8.5rem;
+  transition: height 560ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.shelf-row.has-open {
+  height: 21rem;
 }
 
 .volume {
   position: relative;
-  flex: 0 1 5.5rem;
-  min-width: 5.5rem;
+  flex: 1 1 0;
+  min-width: 4.5rem;
   overflow: hidden;
   border: 1px solid var(--rule);
   border-radius: 3px;
@@ -1468,28 +1486,11 @@
     box-shadow 240ms ease-out;
 }
 
-/* With nothing open the four share the row equally, so the shelf fills its
-   column and the closed state is a composition rather than four tabs pushed to
-   one side. The moment one opens, the others fall back to spine width. */
-.trail-shelf[data-open="false"] .volume {
-  flex-grow: 1;
-}
-
-.trail-shelf[data-open="false"] .volume-roman {
-  font-size: 1.6rem;
-}
-
-.trail-shelf[data-open="false"] .volume-seal {
-  width: 3.1rem;
-  height: 3.1rem;
-  opacity: 0.72;
-}
-
-/* The longest title, "Protection / action route", has to fit the spine's
-   height at this tracking. 0.24em truncated it; the shelf is only as tall as
-   the answer above it can spare. */
-.trail-shelf[data-open="false"] .volume-title {
-  letter-spacing: 0.15em;
+/* The row-mate of an open volume. This is the only state that turns a title on
+   its side - a closed plate is wide and reads horizontally, and a shrunk one has
+   no width to read across. */
+.volume.is-shrunk {
+  flex: 0 0 4.5rem;
 }
 
 .volume.is-open {
@@ -1517,9 +1518,11 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 1.05rem 0.5rem;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.15rem;
+  text-align: left;
   background: linear-gradient(180deg, #fffdf8 0%, var(--paper-deep) 210%);
   transition:
     opacity 300ms ease-out,
@@ -1541,8 +1544,8 @@
 }
 
 .volume-seal {
-  width: 2.15rem;
-  height: 2.15rem;
+  width: 1.9rem;
+  height: 1.9rem;
   color: var(--haldi);
   opacity: 0.55;
   transition:
@@ -1552,9 +1555,6 @@
 
 /* The title runs down the spine, the way it does on a book. */
 .volume-title {
-  flex: 1;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.18em;
@@ -1589,6 +1589,103 @@
 .volume-spine:focus-visible {
   outline: 2px solid var(--indigo);
   outline-offset: -3px;
+}
+
+
+
+/* Seal, numeral and glyph on one line. */
+.volume-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* `flex: none` so the title can never be the item flex chooses to shrink. An
+   element with `overflow: hidden` has an automatic minimum size of ZERO, so
+   when the plate's contents outgrew the row the title collapsed to 0px while
+   everything around it stayed put - a title present in the DOM, readable to a
+   screen reader, and invisible on screen. */
+.volume-title {
+  flex: none;
+}
+
+/* ---- the shrunk row-mate: the only vertical state ---- */
+
+.volume.is-shrunk .volume-spine {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.7rem;
+  padding: 0.9rem 0.4rem;
+}
+
+.volume.is-shrunk .volume-title {
+  flex: 1 1 auto;
+  min-height: 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+}
+
+.volume.is-shrunk .volume-roman {
+  font-size: 0.95rem;
+}
+
+.volume.is-shrunk .volume-seal {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.volume.is-shrunk .volume-mark {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.volume.is-shrunk .volume-cue {
+  display: none;
+}
+
+/* A closed plate carries a ghost numeral, the way the treaty lanes do - it
+   gives the shelf a rhythm to scan without adding another line of text. */
+.volume:not(.is-open):not(.is-shrunk) .volume-spine::after {
+  content: attr(data-roman);
+  position: absolute;
+  right: 0.2rem;
+  bottom: -1.1rem;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: 5.5rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.045;
+  pointer-events: none;
+  transition: opacity 260ms ease-out;
+}
+
+.volume:not(.is-open):not(.is-shrunk) .volume-spine:hover::after {
+  opacity: 0.09;
+}
+
+.volume-hint {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms ease-out;
+}
+
+.volume-spine:hover .volume-hint,
+.volume-spine:focus-visible .volume-hint {
+  opacity: 1;
+  transform: none;
+}
+
+.volume.is-shrunk .volume-hint {
+  display: none;
 }
 
 /* ---- the leaf ---- */
@@ -1758,6 +1855,23 @@
     display: block;
     height: auto;
     perspective: none;
+  }
+
+  .shelf-row {
+    display: block;
+    height: auto;
+  }
+
+  .volume.is-shrunk {
+    flex: none;
+  }
+
+  .volume.is-shrunk .volume-spine,
+  .volume.is-shrunk .volume-title {
+    writing-mode: horizontal-tb;
+    align-items: center;
+    justify-content: flex-start;
+    flex-direction: row;
   }
 
   .volume {
@@ -3399,4 +3513,31 @@ html[data-surface="dark"] {
   .surface-dark .source-card::after {
     display: none;
   }
+}
+
+/* While a volume is open, the sources it does not rest on recede. This is the
+   product's whole claim rendered as one gesture: you can see, without reading a
+   word, exactly which provisions the sentence in front of you stands on. Kept
+   as opacity rather than display, so the rail neither reflows nor loses its
+   scroll position as the reader moves between steps. */
+.card.is-dimmed {
+  opacity: 0.34;
+  filter: saturate(0.6);
+  transition:
+    opacity 260ms ease-out,
+    filter 260ms ease-out;
+}
+
+.card.is-dimmed:hover {
+  opacity: 0.75;
+  filter: none;
+}
+
+/* Replaces the old Pin-sources button: opening a volume already lights its
+   sources, so this states what happened rather than offering to do it. */
+.volume-tracing {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--indigo);
 }
