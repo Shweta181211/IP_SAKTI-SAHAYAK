@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ROOT, active_model, settings
-from .schemas import Answer, ComparisonResult
+from .schemas import ExportReadinessReport, Answer, ComparisonResult
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +156,47 @@ def log_comparison(
         "contrasts": len(result.contrasts),
         "citations": len(result.citations),
         "search_degraded": result.search_degraded,
+        "model": active_model(),
+        "elapsed_s": round(elapsed_s, 2) if elapsed_s is not None else None,
+    }
+    if consent:
+        entry["product"] = product
+    _write(entry)
+
+
+@never_fails
+def log_readiness(
+    product: str,
+    report: "ExportReadinessReport",
+    *,
+    consent: bool = False,
+    elapsed_s: float | None = None,
+) -> None:
+    """Record one export readiness report.
+
+    The target country is retained even without consent: it is not user content
+    in the way a question is - it is a market name, and knowing which markets
+    are asked for is the operational fact that says where the corpus needs to
+    grow next.
+    """
+    india = report.india.items if report.india else []
+    target = report.target.items if report.target else []
+    entry: dict[str, Any] = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "kind": "export_readiness",
+        "question_id": _fingerprint(product),
+        "question_chars": len(product),
+        "target_country": report.target_country,
+        "abstained": report.abstained,
+        "india_items": len(india),
+        "target_items": len(target),
+        "target_covered": bool(report.target and report.target.covered),
+        "blockers": sum(1 for i in india + target if i.status.value == "blocker"),
+        "not_covered": sum(1 for i in india + target if i.status.value == "not_covered"),
+        "citations": len(report.citations),
+        "citations_rejected": len(report.rejected_citation_ids),
+        "confidence": report.confidence.value if report.confidence else None,
+        "escalated": report.escalate,
         "model": active_model(),
         "elapsed_s": round(elapsed_s, 2) if elapsed_s is not None else None,
     }

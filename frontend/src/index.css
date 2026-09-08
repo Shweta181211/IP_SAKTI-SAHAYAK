@@ -1216,3 +1216,1117 @@
   box-shadow: 0 18px 44px rgba(10, 16, 12, 0.5);
   animation: fade-up 220ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
 }
+
+/* ============================================================================
+   TAKEAWAY BANNER
+   The one-line orientation above the reasoning trail.
+
+   Deliberately not haldi / neem / clay. Each of those hues means exactly one
+   thing in this interface — the classification verdict, "verified", and "we
+   declined" respectively. A takeaway is none of them: it is a preliminary
+   reading that always needs checking, and painting it in a colour that already
+   means "verified" would assert precisely what the hedged label vocabulary
+   exists to avoid. So it is ink on the deep paper ground, and recognition
+   comes from the intent glyph and the type, not from a colour.
+   ========================================================================== */
+
+.takeaway {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.15rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  /* A quiet gradient rather than a flat fill, so the banner reads as a raised
+     plate on the sheet without needing a shadow that would make it float. */
+  background:
+    linear-gradient(180deg, #fffdf8 0%, var(--paper-deep) 210%);
+}
+
+/* A hairline of ink down the left edge: the same "this is a marked passage"
+   gesture the rest of the sheet uses, without borrowing a semantic hue. */
+.takeaway::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--ink);
+  border-radius: 3px 0 0 3px;
+}
+
+.takeaway-glyph {
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-top: 0.15rem;
+  padding: 0.45rem;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: #fffdf8;
+}
+
+.takeaway-label {
+  margin-top: 0.15rem;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: clamp(1.15rem, 2.1vw, 1.45rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+/* Full width beneath both columns — it qualifies the whole banner, and it is
+   here rather than in the page footer because a reader who takes one line away
+   from this page takes this one. */
+.takeaway-caveat {
+  flex-basis: 100%;
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+@media print {
+  .takeaway {
+    background: none;
+    break-inside: avoid;
+  }
+}
+
+/* ============================================================================
+   EVIDENCE SUPPORT GAUGE
+   Replaces the old "Partly supported (internal score 0.83, uncalibrated)" line.
+
+   A semicircular instrument rather than a bar: this sits on a page styled as a
+   printed legal opinion, where a dial reads as a measuring instrument engraved
+   on the sheet, and a progress bar reads as a download.
+
+   The needle rests on the MIDDLE OF A BAND, never between two. The underlying
+   score is ordinal and uncalibrated, so a needle at an arbitrary angle would
+   imply a resolution this measurement does not have.
+
+   Named for what it measures. It says how well anchored the answer is in what
+   it cited, and nothing about whether the law was applied correctly, so
+   "Confidence" and "Certainty" are both the wrong word.
+
+   Filled arc is neem, which already means grounded/verified here; the bottom
+   band is clay, which means a limit. Haldi is deliberately absent — it names
+   the classification verdict and nothing else.
+   ========================================================================== */
+
+.support {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fffdf8;
+  padding: 0.8rem 1rem 0.7rem;
+}
+
+.support-gauge {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.support-dial {
+  flex: none;
+  width: 118px;
+  height: 74px;
+  overflow: visible;
+}
+
+.support-readout {
+  min-width: 0;
+}
+
+.support-label {
+  margin-top: 0.1rem;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: clamp(1.05rem, 1.9vw, 1.3rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+  color: var(--neem);
+}
+
+.support-label.is-thin {
+  color: var(--clay);
+}
+
+/* The scale printed as words, so the dial is readable without decoding it. */
+.support-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  opacity: 0.6;
+}
+
+.support-scale .is-current {
+  color: var(--ink);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.support-caption {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.support-why {
+  margin-top: 0.35rem;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  transition: color 150ms ease-out;
+}
+
+.support-why:hover {
+  color: var(--ink);
+}
+
+.support-reasons {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.support-reasons li::before {
+  content: "\B7";
+  margin-right: 0.4rem;
+  color: var(--ink-faint);
+}
+
+.support-reasons .is-note {
+  padding-top: 0.25rem;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+.support-reasons .is-note::before {
+  content: none;
+}
+
+/* A swinging needle is exactly what this setting suppresses; the gauge still
+   reads correctly, it simply arrives already pointing at its band. */
+@media (prefers-reduced-motion: reduce) {
+  .support-dial g,
+  .support-dial path {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .support-gauge {
+    gap: 0.7rem;
+  }
+  .support-dial {
+    width: 96px;
+    height: 60px;
+  }
+}
+
+/* ============================================================================
+   REASONING TRAIL — 2x2 CARDS
+   Replaces the single vertical column of two-faced cards. The column read as a
+   transcript and pushed the citation rail far down the page; four compact
+   cards show the whole shape of the argument at once.
+
+   A card grows IN ITS OWN COLUMN. Spanning the grid when open looks richer for
+   one frame and then shoves every sibling sideways, which the eye reads as a
+   glitch. Growing in place moves nothing but the row below it.
+   ========================================================================== */
+
+.trail-grid {
+  display: grid;
+  /* minmax(0, 1fr), not the implicit `auto`. A single implicit column is sized
+     to its content, and the provision chips inside carry non-wrapping act
+     names — so on a 390px phone the grid grew to 404px and the whole page
+     scrolled sideways. The explicit minimum of 0 lets the column shrink and
+     makes the children responsible for wrapping. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+  /* start, not stretch: an open card must not drag its neighbour's height with
+     it, or half the grid becomes whitespace. */
+  align-items: start;
+}
+
+@media (min-width: 640px) {
+  .trail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.step-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #fffdf8;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.85rem 1rem 0.9rem;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.step-card:hover,
+.step-card.is-linked {
+  border-color: rgba(47, 74, 99, 0.35);
+  border-left-color: var(--indigo);
+  box-shadow: 0 2px 12px rgba(22, 36, 30, 0.07);
+  transform: translateY(-1px);
+}
+
+.step-card.is-open {
+  border-left-color: var(--indigo);
+  box-shadow: 0 3px 18px rgba(22, 36, 30, 0.09);
+  transform: none;
+}
+
+.step-card.is-pinned {
+  border-color: var(--indigo);
+  border-left-color: var(--indigo);
+  box-shadow: 0 3px 16px rgba(47, 74, 99, 0.14);
+}
+
+/* Clay is abstention everywhere else in this interface; it means the same
+   thing here. */
+.step-card.is-abstained {
+  border-left-color: var(--clay);
+  background: var(--clay-wash);
+}
+
+.step-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+/* The numeral is set in the display serif at a size that carries the sequence
+   on its own. In a grid there is no connecting rule to do that job, so the
+   number has to be legible as an ordinal at a glance. */
+.step-medallion {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-faint);
+  transition:
+    background-color 180ms ease-out,
+    border-color 180ms ease-out,
+    color 180ms ease-out;
+}
+
+.step-medallion:not(:disabled):hover {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+
+.step-medallion:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.step-card.is-pinned .step-medallion,
+.step-card.is-linked .step-medallion {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: var(--paper);
+}
+
+.step-card.is-abstained .step-medallion {
+  border-color: var(--clay);
+  color: var(--clay);
+  background: var(--paper);
+}
+
+.step-numeral {
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.step-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.step-card-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+}
+
+.step-chevron {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: 0.2rem;
+  color: var(--ink-faint);
+  transition:
+    transform 220ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    color 150ms ease-out;
+}
+
+.step-chevron:hover {
+  color: var(--indigo);
+}
+
+.step-card.is-open .step-chevron {
+  transform: rotate(180deg);
+  color: var(--indigo);
+}
+
+.step-lead {
+  margin-top: 0.55rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.step-lead.is-abstained,
+.step-full.is-abstained {
+  font-style: italic;
+  color: var(--clay);
+}
+
+/* Measured height, not `auto` — the source panel inside changes size while it
+   is open, and a grid-rows 1fr trick snaps when that happens. */
+.step-body {
+  overflow: hidden;
+  transition: height 260ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.step-body-inner {
+  padding-top: 0.6rem;
+}
+
+.step-full {
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.step-provisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* The provision, named. This is the part a reader checks, so it carries the
+   act and the section rather than a bare superscript number. */
+.step-provision {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink-soft);
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.step-provision:hover,
+.step-provision.is-active {
+  border-color: var(--indigo);
+  background: var(--indigo-wash);
+}
+
+.step-provision-n {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 2px;
+  background: var(--indigo);
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+}
+
+.step-provision-act {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Cap in ch so it shrinks with the card rather than holding a fixed 15rem
+     open on a narrow screen. */
+  max-width: min(15rem, 46vw);
+}
+
+.step-provision-sec {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--indigo);
+  white-space: nowrap;
+}
+
+.step-source-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  transition: color 150ms ease-out;
+}
+
+.step-source-toggle:hover {
+  color: var(--ink);
+}
+
+/* Capped and scrollable: a statutory chunk runs to ~800 tokens, and an
+   uncapped panel would make one card taller than the viewport. */
+.step-source {
+  margin-top: 0.55rem;
+  max-height: 15rem;
+  overflow-y: auto;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.step-source-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.step-source blockquote {
+  margin-top: 0.3rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid rgba(47, 74, 99, 0.35);
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.step-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--rule);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-card,
+  .step-chevron,
+  .step-body {
+    transition: none;
+  }
+  .step-card:hover {
+    transform: none;
+  }
+}
+
+/* A printed opinion sheet shows the whole reasoning: an animated height of 0
+   would print four empty boxes. */
+@media print {
+  .trail-grid {
+    grid-template-columns: 1fr;
+  }
+  .step-card {
+    break-inside: avoid;
+    box-shadow: none;
+    transform: none;
+  }
+  .step-body {
+    height: auto !important;
+    overflow: visible;
+  }
+  .step-chevron,
+  .step-source-toggle {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   EXPORT READINESS
+   The form, and the report it produces.
+
+   The status states carry the palette's existing meanings rather than a traffic
+   light: neem is verified/grounded, haldi marks a decision needing attention,
+   clay is a limit or a refusal. `not_covered` is drawn as a dashed outline in
+   ink-faint - a stated boundary, deliberately not an error, because a market
+   the corpus does not reach is an honest finding, and the alternative (generic
+   advice) is the one thing this feature must never produce.
+   ========================================================================== */
+
+.readiness-form {
+  display: grid;
+  gap: 0.9rem 1.1rem;
+  margin-top: 2rem;
+  padding: 1.3rem 1.4rem 1.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fffdf8 0%, var(--paper-deep) 260%);
+}
+
+@media (min-width: 720px) {
+  .readiness-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .readiness-field--wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.readiness-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.readiness-field input,
+.readiness-field textarea,
+.readiness-field select {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fffdf8;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.readiness-field input:focus,
+.readiness-field textarea:focus,
+.readiness-field select:focus {
+  outline: none;
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(47, 74, 99, 0.12);
+}
+
+.readiness-hint {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.readiness-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.readiness-check input {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: 0.2rem;
+  accent-color: var(--haldi);
+}
+
+.readiness-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+}
+
+.readiness-submit {
+  padding: 0.6rem 1.15rem;
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13.5px;
+  font-weight: 500;
+  transition:
+    background-color 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.readiness-submit:hover:not(:disabled) {
+  background: var(--ink-soft);
+}
+
+.readiness-submit:disabled {
+  opacity: 0.35;
+}
+
+.readiness-stop {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.readiness-stop:hover {
+  border-color: var(--clay);
+  background: var(--clay-wash);
+  color: var(--clay);
+}
+
+/* ---- the skeleton: the shape of the report, not a spinner ---- */
+
+.readiness-skeleton {
+  display: grid;
+  gap: 1.2rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 860px) {
+  .readiness-skeleton {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.readiness-skel-head {
+  height: 12px;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--paper-deep);
+}
+
+.readiness-skel-row {
+  height: 34px;
+  margin-top: 0.6rem;
+  border-radius: 3px;
+  background: var(--paper-deep);
+  animation: trail-sweep 1.6s ease-in-out infinite;
+}
+
+/* ---- the report ---- */
+
+.readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 1.3rem;
+  margin-top: 2.2rem;
+}
+
+.readiness-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.readiness-product {
+  margin-top: 0.2rem;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: clamp(1.35rem, 2.6vw, 1.85rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+}
+
+.readiness-route {
+  margin-top: 0.35rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--indigo);
+}
+
+.readiness-verdict {
+  padding: 0.5rem 0.8rem;
+  border-left: 3px solid var(--haldi);
+  background: var(--haldi-wash);
+}
+
+.readiness-verdict-label {
+  margin-top: 0.15rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.readiness-framing {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--indigo);
+  border-radius: 3px;
+  background: var(--indigo-wash);
+}
+
+.readiness-framing-body {
+  margin-top: 0.3rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.readiness-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .readiness-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.readiness-section {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fffdf8;
+  padding: 0.95rem 1.05rem 1.1rem;
+}
+
+.readiness-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.readiness-section-title {
+  margin-top: 0.15rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.readiness-tally {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.readiness-tally > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.readiness-tally-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.readiness-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.readiness-item {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.readiness-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.readiness-icon {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+}
+
+.readiness-item.is-verified .readiness-icon,
+.readiness-tally .is-verified {
+  color: var(--neem);
+}
+
+.readiness-item.is-check .readiness-icon,
+.readiness-tally .is-check {
+  color: var(--haldi);
+}
+
+.readiness-item.is-blocker .readiness-icon,
+.readiness-tally .is-blocker {
+  color: var(--clay);
+}
+
+.readiness-item.is-gap .readiness-icon,
+.readiness-tally .is-gap {
+  color: var(--ink-faint);
+}
+
+.readiness-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.readiness-title {
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.readiness-status {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.readiness-item.is-verified .readiness-status {
+  color: var(--neem);
+}
+
+.readiness-item.is-check .readiness-status {
+  color: var(--haldi);
+}
+
+.readiness-item.is-blocker .readiness-status {
+  color: var(--clay);
+}
+
+.readiness-item.is-gap .readiness-status {
+  color: var(--ink-faint);
+}
+
+.readiness-detail {
+  margin-top: 0.3rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* The sentence that makes a status icon a finding rather than decoration. */
+.readiness-reason {
+  margin-top: 0.3rem;
+  font-size: 11.5px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.readiness-provisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.readiness-gap {
+  margin-top: 0.8rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+.readiness-gap-body {
+  margin-top: 0.3rem;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.readiness-gap-note {
+  margin-top: 0.5rem;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.readiness-plan {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fffdf8;
+}
+
+.readiness-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+}
+
+.readiness-plan-list li {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.readiness-plan-n {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.readiness-plan-text {
+  display: block;
+  font-family: "IBM Plex Serif", ui-serif, Georgia, serif;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+/* Every step says which body of law it follows from, so a treaty-derived step
+   can never be read as an Indian duty. */
+.readiness-plan-side {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--neem);
+}
+
+.readiness-plan-side.is-intl {
+  color: var(--indigo);
+}
+
+.readiness-sources {
+  padding: 0.9rem 1.05rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+.readiness-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.readiness-source-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.readiness-guard {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  color: var(--neem);
+}
+
+.readiness-disclaimer {
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .readiness-skel-row {
+    animation: none;
+  }
+}
+
+@media print {
+  .readiness-form,
+  .readiness-skeleton,
+  .step-source-toggle {
+    display: none;
+  }
+  .readiness-section,
+  .readiness-plan {
+    break-inside: avoid;
+  }
+}

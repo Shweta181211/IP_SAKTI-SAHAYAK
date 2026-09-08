@@ -23,7 +23,12 @@ from __future__ import annotations
 import logging
 import re
 
-from .citations import citations_for, strip_chunk_ids, validate_ids
+from .citations import (
+    citations_for,
+    normalise_institutions,
+    strip_chunk_ids,
+    validate_ids,
+)
 from .config import settings
 from .llm import LLMUnavailable, complete_json
 from .retrieval import Expansion, expand_query, is_too_vague, retrieve
@@ -127,6 +132,17 @@ knowledge", "Possible, with inventive step".
 the product, and what it requires.
 - Name provision numbers inline where the evidence gives them ("under Section 3(a)...").
 - **Never write a chunk id such as DOC003_chunk_234 in the prose.** Ids belong only in `citation_ids`; the interface renders them as source cards. Refer to sources by their act and section instead.
+- **Section 3(p) is not a blanket bar on everything Ayurvedic.** It bars an invention that IS \
+traditional knowledge or an aggregation of known properties of traditionally known components. A \
+traditional INGREDIENT used in a genuinely new formulation or process is not automatically caught \
+by it - that is assessed on novelty and inventive step like any other application. Reserve the 3(p) \
+verdict for a formulation actually documented in a classical or authoritative text; this contrast is \
+worthless if every category comes back barred because the product is herbal.
+- **TKDL confers no rights.** It is a defensive prior-art database that patent examiners search in \
+order to REFUSE wrongful applications. Never present it as a protection or registration route a user \
+can file with.
+- **There is no "International Patent Office".** Name a real body the evidence names, or write \
+"patent offices in other countries".
 - Be concrete about the DIFFERENCE. The value here is the contrast, not four \
 interchangeable paragraphs.
 
@@ -246,7 +262,7 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
             logger.warning("Comparison rejected unverifiable ids: %s", rejected)
         # Models mention ids in prose despite being told not to; the citation
         # cards already carry them, and "DOC003_chunk_234 shows..." is noise.
-        posture = strip_chunk_ids(str(raw.get("posture") or ""))
+        posture = normalise_institutions(strip_chunk_ids(str(raw.get("posture") or "")))
         if not posture:
             posture = "The retrieved sources do not say enough about this category to compare it."
             kept = []
@@ -255,7 +271,9 @@ def compare_categories(product: str, top_k: int | None = None) -> ComparisonResu
                 category=category,
                 label=CATEGORY_LABELS[category],
                 posture=posture,
-                patentable=str(raw.get("patentable") or "Not stated in the evidence").strip(),
+                patentable=normalise_institutions(
+                    str(raw.get("patentable") or "Not stated in the evidence").strip()
+                ),
                 citation_ids=kept,
             )
         )

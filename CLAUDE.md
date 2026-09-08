@@ -241,6 +241,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 12 | Post-evaluation fixes (gate scope, fabricated provisions, subject scope, confidence) | **Done** — §6k |
 | 13 | International corpus, progressive jurisdiction flow, frontend merge | **Done** — §6l |
 | 14 | Outage triage: key staleness, per-minute vs daily caps, comparison retrieval | **Done** — §6m |
+| 15 | Citation depth, evidence-support meter, takeaway banner, card trail, export readiness | **Done** — §6n |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -1097,8 +1098,8 @@ consequence, never the provision. Measured after: *"You cannot patent this,
 because Section 3(p) ... treats"* rather than *"Under Section 3(p) ..."*.
 
 **And writing that guard reproduced 6k's bug exactly.** The regex went in as
-`r")"` - a literal BACKSPACE - because the patch string was non-raw, so
-`` became the escape while `\s` survived (it is not a valid escape). The
+`r")\x08"` - a literal BACKSPACE - because the patch string was non-raw, so
+`\x08` became the escape while `\s` survived (it is not a valid escape). The
 guard was inert and looked perfect in every rendering. Found only by counting
 control bytes. **`test_units.py`'s control-character sweep exists for this; run
 it after any regex edit.**
@@ -1142,6 +1143,270 @@ every step's prose different.
   another. Start the server with `IPSAKTI_RATE_LIMIT_QUERY=0` to run them.
 - Confidence is still uncalibrated.
 - The OpenRouter key exposed by the 6j traversal bug has still not been rotated.
+
+---
+
+## 6n. Phase 15 - citation depth, a four-band meter, the takeaway, cards, and export readiness
+
+Seven phases run in order, each verified before the next. The corrections worth
+carrying forward are the ones where the obvious diagnosis was wrong.
+
+### The D&C Rules cited a provision on 11% of its chunks, and the regex was not why
+
+Reported as "most Drugs and Cosmetics Rules citations show *provision not
+identified*", and the first guess - a heading-format mismatch - was only a small
+part of it. Measured, the causes were three, in ascending order of damage:
+
+1. **Bracketed headings.** Indian Kanoon wraps any amended provision in square
+   brackets: `31. [ Standard for certain imported drugs. [Substituted by...`.
+   `HEADING` required `[A-Z]` straight after the number's stop and got `[`.
+2. **The footnote filter fired on the amendment note.** `_heading_number`
+   rejected a heading if a footnote cue appeared within 160 characters *after*
+   it - and in this document an amendment note follows almost every heading. The
+   discriminator is not whether a cue is present but **where it sits**: a
+   footnote block opens with its cue (`2. Ins. by Act 21 of 1962`), a real
+   heading puts its title first. `FOOTNOTE_LEAD_CHARS = 6`.
+3. **`_unreliable_numbers` banned the numbers 1-14 and 23 outright**, because
+   the schedules reuse them. That discarded **316 correctly detected real
+   rules** to suppress schedule paragraphs, and it was by far the biggest cause.
+
+The replacement is structural, not a keyword list: **a statute's provision
+numbers ascend through the document while schedule numbering restarts**, so
+`_provision_spine` builds the longest non-decreasing chain of detected headings
+under a positional bound, and that chain is the provision body. Chunks between
+two chain members inherit the earlier number.
+
+Four guards, each added because the unguarded version produced a real
+mis-citation:
+
+| guard | what it stopped |
+|---|---|
+| `SPINE_MAX_LINK_GAP = 40` | the chain hopping 289 chunks into Schedule H and citing drug names as Rules 230, 285, 342, 393, 444 |
+| same printed page | `Section 1` inherited onto an Ayurvedic Formulary *recipe* |
+| `STRUCTURAL_DIVIDER` | a lone `CHAPTER VI FARMERS' RIGHTS` chunk inheriting the section above it |
+| `MAX_NUMBERED_ENTRIES = 4` | the First Schedule *book list* cited as "Section 1", and 60+ blocks of pure footnote text |
+
+The spine is **strictly additive**: `_repeated_numbers` is kept as the fallback,
+so every citation the previous implementation produced is still produced.
+
+```
+Drugs & Cosmetics Rules 1945   11.2% -> 20.3%   (provision body alone 58.4%)
+patents act 1970               62.1% -> 92.3%
+Geographical Indications Act   77.6% -> 95.5%
+Trade Marks Act 1999           74.6% -> 89.8%
+Drugs and Cosmetics Act 1940   43.9% -> 68.3%
+corpus total                   50.7% -> 55.9%
+```
+
+Two acts went *down* and both are correctness gains: AFI ingredient lists
+("3. Bala (Rt.) 144 g.") were being cited as "Section 3".
+
+**No vector-DB rebuild was needed.** The displayed provision is derived at
+request time from `chunk_text`; `section_or_clause` is still ignored. A rebuild
+would have renumbered every chunk id for nothing - which is precisely the
+6g/6l hazard.
+
+*General lesson: 70% of this document is Schedules and Forms, where a Rule
+number would be **wrong**. The ceiling here is low on purpose.*
+
+### Confidence: the missing component was citation specificity
+
+Every sampled answer sat in the middle band, and the cause was that nothing in
+the score could tell `Geographical Indications Act, Section 11` from
+`D&C Rules 1945, provision not identified, p.1`. Both are "a surviving citation
+from one act".
+
+- **`W_SPECIFICITY = 0.25`** - the fraction of citations that resolve to a named
+  provision. Worth scoring only *after* the fix above; before it, this component
+  would have measured the extractor's blind spots.
+- **Breadth is counted in distinct PROVISIONS, not acts.** Counting acts
+  punished correctly focused answers: a GI registration question citing
+  Sections 2, 3 and 11 of the GI Act - three pinpointed provisions of exactly
+  the governing statute - was capped for "resting on a single source".
+- **Caps became ceilings.** Every cap used to dump to MODERATE, so an answer
+  with three acts, four provision-specific citations and one abstaining step
+  landed in the same band as one resting on a single unpinpointed page. Each
+  weakness now costs what it is worth, and a reason is recorded only when a
+  ceiling actually bites.
+- **A fourth band, `STRONG`.** Reserved for answers where EVERY citation names
+  its provision.
+
+Same captured inputs, rescored: GI `0.80 Partly supported -> 0.95 Strongly
+supported`; phytopharmaceutical (the known corpus gap) `0.50 -> 0.367 Thin
+evidence`. Before, four of eight answers sat at exactly 0.80.
+
+`assess()` now takes built `Citation` objects rather than chunk ids, which
+removes a corpus lookup from the scorer and is what makes it unit-testable.
+
+### "International Patent Office" needed a code guard, because it is in the corpus
+
+`About TKDL.pdf` reads "prevent its misappropriation at International Patent
+Offices". A model answering faithfully from that evidence reproduces the phrase,
+and did in 2 of 6 probe questions including the flagship. A prompt rule alone
+would not hold, so `citations.normalise_institutions()` rewrites it - over model
+prose only. **Citation excerpts stay verbatim: if the source says it, the source
+card shows it saying it.** 2/6 -> 0/6.
+
+Alongside it, two prompt corrections measured before and after:
+
+- **TKDL confers no rights.** Now "operates as a defensive prior-art mechanism
+  ... examiners use it to refuse invalid applications", and on a patent question
+  "rather than being a registration route for your own rights".
+- **Section 3(p) is not a blanket bar on anything Ayurvedic.** Before, a
+  self-invented turmeric emulsion got *"no patent protection route is available
+  for this formulation"*. After, the three situations are distinguished and it
+  reads *"not automatically barred by Section 3(p) ... assessed on its own
+  novelty, inventive step, and ... 3(d) ... 3(e)"*, with the Indian Patent
+  Office named as the route.
+
+### The takeaway banner: a closed vocabulary is the enforcement
+
+`schemas.TAKEAWAY_LABELS` is a per-intent table of hedged labels, and
+`generation._build_takeaway` replaces anything outside it with "Requires
+verification". A model returning "Yes, patentable" therefore *cannot* put those
+words on the page - the never-bare-yes/no rule is structural, not advisory.
+
+The reason sentence is citation-checked like a step, and a reason naming an
+unretrieved provision drops the whole banner. That is the 6j headline lesson
+applied on the way in: **any new prose channel to the user needs its own
+validation, or it becomes the hole in the guard.**
+
+Definitional questions get no banner ("What is a GI?", "What is TKDL?" -> none),
+because there is no matter to take a view on and a label would invent one.
+
+### Evidence support, not confidence
+
+The raw score is gone from the user-facing view - including from the
+accessibility tree, where it had survived as "(internal score 0.87,
+uncalibrated)", showing screen-reader users a two-decimal false precision that
+sighted users were spared. It now sits behind `localStorage.ipsakti.dev = "1"`.
+
+Rendered as a **semicircular gauge** whose needle rests on the middle of a band
+and never between two: the scale is ordinal and uncalibrated, so a needle at an
+arbitrary angle would imply a resolution this measurement does not have.
+
+Palette correction: the meter used **haldi** for its middle band. Haldi
+identifies the classification verdict and nothing else. Filled arc is now neem
+(grounded), the bottom band clay (a limit).
+
+### The trail is a 2x2 grid that opens in place
+
+Four compact cards - number, icon, title, one sentence - each expanding to the
+full reasoning, the named provisions, and the verbatim statute.
+
+- **A card grows in its own column.** Spanning the grid looks richer for one
+  frame and then shoves every sibling sideways, which reads as a glitch.
+  `align-items: start` keeps the neighbour its natural height (measured: card 2
+  170px -> 341px, card 1 unchanged at 170px).
+- **The collapsed sentence is the step's own first sentence**, and the expanded
+  body shows only the *remainder*. Rendering the full content there printed the
+  opening sentence twice - caught by screenshot, not by reading the code.
+- **`grid-template-columns: minmax(0, 1fr)` is load-bearing on mobile.** A
+  single implicit column sizes to content, and the non-wrapping act names in the
+  provision chips grew the grid to 404px inside a 390px viewport.
+
+### Export readiness (`export_readiness.py`, `/export`)
+
+India-side and target-market readiness for one product, reusing `classify`,
+`retrieve` (with its gate), `validate_ids`, `strip_unsupported_provisions`,
+`confidence.assess` and `escalation.assess`. Three properties are enforced in
+code rather than requested in the prompt:
+
+- **Nothing about a country is hardcoded.** No market table, no pre-written
+  paragraphs. `tests/test_units.py` greps the module for country and regulator
+  names and fails if one appears.
+- **Status is derived.** `_settle_status` overrides the model: no surviving
+  citation forces `NOT_COVERED`, and nothing reaches `VERIFIED` without one.
+- **Separation is validated per item.** A real, retrieved chunk from the wrong
+  corpus is dropped, and an item left with nothing becomes `NOT_COVERED`.
+
+Measured, and the contrast is the feature:
+
+```
+Germany  EU Directive 2004/24 -> simplified registration, applicant
+         establishment, labelling. 11 sources, 0 rejected, 0 leaks.
+Brazil   target section NOT COVERED - "does not contain any instruments,
+         treaties, or regional frameworks that reach Brazil".
+```
+
+One prompt defect found by comparing two runs: Germany came back covered once
+and "does not specifically mention Germany" the next. **An instrument reaches a
+market when the market falls within the instrument's own stated scope** - a
+regional instrument binds its member states without naming them.
+
+### The off-domain refusal was broken, and expansion was why
+
+Found during the Phase 7 regression, reproducible **0/5**, not variance:
+
+```
+Q:           What is the best marketing strategy for my ayurvedic startup?
+SEARCHED AS: compliance standards for advertising and claims of ayurvedic drugs
+GATE:        relevant=True - "asks for business strategy and regulatory compliance"
+```
+
+`expand_query` manufactured a legal question out of a business one, and 6k's own
+fix - showing the gate the SEARCHED AS lines - is what made the gate trust the
+rewrite. This is the Tests 6/7 defect in a new guise.
+
+Fixed at the gate, where the user's question is authoritative: the rewrites are
+search vocabulary, and **the subject matter is the user's question, never the
+rewrites**. 0/5 -> 5/5 refused as `out_of_scope`, with the positive controls
+intact (trade mark 4/4 answered from the Trade Marks Act).
+
+*Pre-existing, not introduced by this phase - 6m recorded it as "free-model
+variance" after a lucky re-measurement. It is not variance.*
+
+### Verified at the close of this phase
+
+Cold backend, rate limiting disabled:
+
+```
+tests/test_units.py            168/168   (+35: specificity, takeaway, readiness, institutions)
+tests/test_security.py          25/25
+tests/test_gate_scope.py        15/16    (retrieval variance on a 3-trial check)
+tests/test_legal_advice.py      15/15
+tests/test_jurisdiction.py      10/10
+tests/test_jurisdiction_compare.py 12/12
+tests/test_style_and_steps.py   21/21
+tests/test_subject_scope.py     10/11    (retrieval variance on a 2-trial check)
+tests/test_flagship.py           4/4
+tests/e2e_api.py                39/39 then 32/34 on a later run (one flagship variance run)
+tests/benchmarks.py             92/94
+UI regression (Playwright)      21/21
+frontend tsc --noEmit clean     npm run build clean
+
+flagship, 5 cold runs: Section 3(p) 5/5 | TKDL 5/5 | classical_generic 5/5
+```
+
+**The answer cache makes a suite lie.** A bad flagship run in `e2e_api`
+populated the cache, and `benchmarks` then scored that same answer at `0.0s`.
+Any suite reporting a sub-second answer is reusing one; restart before quoting a
+number.
+
+### Known still open
+
+- **Retrieval dilution on compound questions.** "Can I patent it, and what
+  licence do I need?" retrieves only D&C licensing rules, so the (now correctly
+  ordered) patentability sentence has to say the evidence is silent. A *pure*
+  patentability question retrieves 3(d)/3(e)/3(o)/3(p) correctly. The fix is
+  6m's reserved-slots pattern applied to expansion formulations; not taken here
+  because it is a change to core retrieval and needs its own measurement.
+- **"What is ABS?" retrieves food and drug regulation** rather than the
+  Biological Diversity Act on roughly 1 in 3 runs.
+- **Hardcoded legal claims still in the frontend**, flagged not fixed:
+  `pages/Home.tsx` `BLOOMS[].tease` states six uncited propositions of law (the
+  strongest: *"Prior approval of the National Biodiversity Authority is required
+  before IPR on biological resources"*), and `data/exportMarkets.ts`
+  `EXPORT_LANES[].use` carries ten hand-written treaty summaries.
+- **`Escalate.tsx` opens a `mailto:` with an empty recipient.** The human
+  facilitator path is a draft addressed to nobody.
+- Confidence is still uncalibrated - now demonstrably *responsive* across four
+  bands, which is not the same thing.
+- Gemini's daily quota was exhausted during this phase; the chain failed over
+  and one probe run returned `gate_unavailable`, which is the fail-closed
+  behaviour working.
+- The OpenRouter key exposed by the 6j traversal bug has still not been rotated.
+
 
 ---
 

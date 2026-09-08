@@ -17,6 +17,7 @@ Run:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -30,11 +31,18 @@ from pydantic import ValidationError  # noqa: E402
 
 from app import audit  # noqa: E402
 from app.citations import (  # noqa: E402
+    normalise_institutions,
     provision_support,
     strip_chunk_ids,
     strip_unsupported_provisions,
 )
 from app.confidence import assess  # noqa: E402
+from app.export_readiness import (  # noqa: E402
+    _build_items,
+    _describe,
+    _settle_status,
+)
+from app.generation import _build_takeaway  # noqa: E402
 from app.corpus_index import all_chunks  # noqa: E402
 from app.comparison import _CHUNK_ID as _COMPARISON_CHUNK_ID  # noqa: E402
 from app.conversation import EXAMPLE_QUESTIONS, conversational_reply  # noqa: E402
@@ -50,11 +58,16 @@ from app.retrieval import (  # noqa: E402
 from app.schemas import (  # noqa: E402
     AbstentionKind,
     Answer,
+    Citation,
     HISTORY_TURNS,
     MAX_QUESTION_CHARS,
     CompareRequest,
     ConfidenceLevel,
+    ExportReadinessRequest,
     QueryRequest,
+    ReadinessStatus,
+    TAKEAWAY_LABELS,
+    TakeawayIntent,
     ReasoningStep,
 )
 
@@ -86,6 +99,11 @@ def evidence(chunk_id: str, act: str, dense: int | None, lexical: int | None) ->
 
 def result_of(items: list[Evidence]) -> RetrievalResult:
     return RetrievalResult(items, True, "ok", 0.30, 20.0)
+
+
+def cit(chunk_id: str, act: str, section: str | None = None) -> Citation:
+    """A built citation, as confidence.assess now receives them."""
+    return Citation(chunk_id=chunk_id, act_name=act, section=section, excerpt="...")
 
 
 def steps(cited: int) -> list[ReasoningStep]:
@@ -242,6 +260,153 @@ record("empty evidence marks provisions unsupported",
 record("empty text is handled", strip_unsupported_provisions("", []) == ("", []))
 
 
+section("TAKEAWAY - a hedged label, or nothing")
+# --------------------------------------------------------------------------
+# The banner is the line a reader is most likely to act on, so the closed
+# vocabulary is enforced in code. A model that returns "Yes, patentable" must
+# not be able to put those words on the page.
+
+_allowed = [_MANUAL_3P]
+
+_good, _rej = _build_takeaway(
+    {"intent": "patent", "label": "Likely excluded",
+     "reason": "It is a formulation documented in a classical text.",
+     "citation_ids": [_MANUAL_3P]}, _allowed)
+record("a valid takeaway survives", _good is not None and _good.label == "Likely excluded")
+record("its citations are kept", _good.citation_ids == [_MANUAL_3P])
+record("it is not marked unsourced", _good.unsourced is False)
+
+_bare, _ = _build_takeaway(
+    {"intent": "patent", "label": "Yes, patentable",
+     "reason": "This can be patented.", "citation_ids": [_MANUAL_3P]}, _allowed)
+record("a bare yes/no label is replaced with a hedge",
+       _bare is not None and _bare.label == "Requires verification", _bare.label)
+
+_wrong_regime, _ = _build_takeaway(
+    {"intent": "gi", "label": "Potentially patentable",
+     "reason": "Origin matters here.", "citation_ids": [_MANUAL_3P]}, _allowed)
+record("a label borrowed from another regime is rejected",
+       _wrong_regime.label == "Requires verification", _wrong_regime.label)
+
+_bad_intent, _ = _build_takeaway(
+    {"intent": "trademark", "label": "Requires verification",
+     "reason": "Naming is a separate regime.", "citation_ids": []}, _allowed)
+record("an unknown intent falls back to 'other'",
+       _bad_intent.intent is TakeawayIntent.OTHER, _bad_intent.intent.value)
+
+_none, _ = _build_takeaway(None, _allowed)
+record("no takeaway means no banner", _none is None)
+_empty, _ = _build_takeaway({"intent": "patent", "label": "Likely excluded",
+                             "reason": "  "}, _allowed)
+record("an empty reason means no banner", _empty is None)
+
+_unsourced, _bad_ids = _build_takeaway(
+    {"intent": "abs", "label": "Unlikely to apply", "reason": "Nothing engages here.",
+     "citation_ids": ["DOC999_chunk_999"]}, _allowed)
+record("an unretrieved citation is rejected", _bad_ids == ["DOC999_chunk_999"])
+record("and the banner is flagged unsourced", _unsourced.unsourced is True)
+
+# A fabricated provision in the reason is fabricated authority, exactly as it
+# would be in a step - and the sentence is the whole reason, so the banner goes.
+_fabricated, _ = _build_takeaway(
+    {"intent": "patent", "label": "Likely excluded",
+     "reason": "Section 3(zz) of the Patents Act bars this outright.",
+     "citation_ids": [_MANUAL_3P]}, _allowed)
+record("a reason naming an unretrieved provision is dropped", _fabricated is None)
+
+record("every permitted label is hedged - none is a bare verdict",
+       all(not lbl.lower().startswith(("yes", "no ", "no,"))
+           for labels in TAKEAWAY_LABELS.values() for lbl in labels))
+
+
+section("EXPORT READINESS - status is derived, and nothing is hardcoded")
+# --------------------------------------------------------------------------
+
+# A status is only as good as the evidence behind it, so validation overrides
+# whatever the model claimed.
+record("no surviving citation forces not_covered",
+       _settle_status("verified", [])[0] is ReadinessStatus.NOT_COVERED)
+record("...and says why",
+       "no source" in _settle_status("verified", [])[1],
+       _settle_status("verified", [])[1])
+record("a claimed status with citations is kept",
+       _settle_status("verified", ["a1"])[0] is ReadinessStatus.VERIFIED)
+record("an unrecognised status degrades to needs_verification",
+       _settle_status("definitely fine", ["a1"])[0] is ReadinessStatus.NEEDS_VERIFICATION)
+record("claiming not_covered while citing evidence is incoherent, so it is raised",
+       _settle_status("not_covered", ["a1"])[0] is ReadinessStatus.NEEDS_VERIFICATION)
+record("a blocker survives", _settle_status("blocker", ["a1"])[0] is ReadinessStatus.BLOCKER)
+
+# Separation is enforced per item, not requested in a prompt: a real, retrieved
+# chunk from the other corpus is still dropped.
+_national_id = next(c["chunk_id"] for c in all_chunks() if c.get("jurisdiction") == "national")
+_intl_id = next(c["chunk_id"] for c in all_chunks() if c.get("jurisdiction") == "international")
+
+_items, _rej = _build_items(
+    [{"title": "Cross-cited", "detail": "x", "status": "verified",
+      "citation_ids": [_national_id, _intl_id]}],
+    [_national_id, _intl_id], "national")
+record("an international id is dropped from a national item",
+       _items[0].citation_ids == [_national_id],
+       f"{_items[0].citation_ids}")
+
+_items2, _ = _build_items(
+    [{"title": "Wrong side only", "detail": "x", "status": "verified",
+      "citation_ids": [_national_id]}],
+    [_national_id, _intl_id], "international")
+record("an item left with nothing after the drop becomes not_covered",
+       _items2[0].status is ReadinessStatus.NOT_COVERED, _items2[0].status.value)
+
+_items3, _rej3 = _build_items(
+    [{"title": "Unretrieved", "detail": "x", "status": "verified",
+      "citation_ids": ["DOC999_chunk_999"]}], [_national_id], "national")
+record("an unretrieved id is rejected", _rej3 == ["DOC999_chunk_999"])
+
+# The whole no-hardcoding promise, asserted structurally: if a country or a
+# market ever gets special-cased in this module, this fails.
+_source = (Path(__file__).resolve().parents[1] / "backend" / "app"
+           / "export_readiness.py").read_text(encoding="utf-8")
+_MARKETS = ("germany", "france", "japan", "brazil", "china", "canada", "australia",
+            "united states", "usa", "u.s.", "uk", "united kingdom", "singapore",
+            "fda", "ema", "mhra", "anvisa")
+# Word boundaries, or "schemas" matches "ema" and the test lies to you.
+_leaks = [m for m in _MARKETS
+          if re.search(r"\b" + re.escape(m) + r"\b", _source, re.IGNORECASE)]
+record("no country or regulator is named in the readiness module", not _leaks, str(_leaks))
+
+# The form is turned into a description and nothing else - no regime is chosen
+# from a checkbox.
+_req = ExportReadinessRequest(product="A churna", ingredients="ashwagandha",
+                              target_country="Anywhere", health_claims=True)
+record("the claims flag is stated, not mapped to a regime",
+       "claims are made" in _describe(_req) and "Ayurveda" not in _describe(_req))
+_req2 = _req.model_copy(update={"health_claims": False})
+record("and its absence is stated too", "No health or medical claims" in _describe(_req2))
+
+
+section("LEGAL ACCURACY - institutions that do not exist")
+# --------------------------------------------------------------------------
+# "International Patent Office" is not a body. The phrase needs a code guard
+# and not just a prompt rule because it is IN the corpus - About TKDL.pdf uses
+# it - so a model answering faithfully from evidence reproduces it.
+
+record("the fictional office is replaced",
+       "International Patent Office" not in
+       normalise_institutions("filed at the International Patent Office"))
+record("the plural form is replaced too",
+       "International Patent Offices" not in
+       normalise_institutions("for use by International Patent Offices."))
+record("a leading 'the' is consumed so the sentence still reads",
+       normalise_institutions("filed at the International Patent Office today")
+       == "filed at patent offices in other countries today")
+record("real offices are untouched",
+       normalise_institutions("the European Patent Office grants patents")
+       == "the European Patent Office grants patents")
+record("the Indian Patent Office is untouched",
+       "Indian Patent Office" in normalise_institutions("the Indian Patent Office"))
+record("empty text is handled", normalise_institutions("") == "")
+
+
 section("CONFIDENCE - the badge must discriminate, and must not flatter")
 # --------------------------------------------------------------------------
 
@@ -252,17 +417,45 @@ strong = result_of([
     evidence("DOC004_chunk_004", "GI Act", 3, 2),
     evidence("DOC005_chunk_005", "Copyright Act", 4, 4),
 ])
-cited_ids = [f"DOC00{i}_chunk_00{i}" for i in (1, 2, 3)]
+cited_ids = [
+    cit("DOC001_chunk_001", "Patents Act", "Section 3(p)"),
+    cit("DOC002_chunk_002", "D&C Rules", "Rule 122-E"),
+    cit("DOC003_chunk_003", "BD Act", "Section 6"),
+]
 
 best = assess(steps(3), cited_ids, [], strong)
-record("fully cited, 3 sources, both retrievers agree -> high",
-       best.level is ConfidenceLevel.HIGH, f"{best.level.value} {best.score}")
+record("fully cited, 3 pinpointed provisions, retrievers agree -> strong",
+       best.level is ConfidenceLevel.STRONG, f"{best.level.value} {best.score}")
+
+# The whole point of the recalibration: the SAME answer, cited to pages rather
+# than provisions, must not reach the top band.
+vague = assess(steps(3),
+               [cit("DOC001_chunk_001", "Patents Act"),
+                cit("DOC002_chunk_002", "D&C Rules"),
+                cit("DOC003_chunk_003", "BD Act")],
+               [], strong)
+record("same answer without named provisions cannot be strong",
+       vague.level is not ConfidenceLevel.STRONG, f"{vague.level.value} {vague.score}")
+record("specificity actually moves the score",
+       vague.score < best.score - 0.2, f"{best.score} -> {vague.score}")
+record("the specificity cap explains itself",
+       any("provision" in r for r in vague.reasons))
+
+# The middle of the new scale: broad, fully sourced, but one citation only
+# reaches a page. Strong is out; "well supported" is right.
+partly = assess(steps(3),
+                [cit("DOC001_chunk_001", "Patents Act", "Section 3(p)"),
+                 cit("DOC002_chunk_002", "D&C Rules", "Rule 122-E"),
+                 cit("DOC003_chunk_003", "BD Act")],
+                [], strong)
+record("one unpinpointed citation lands it at high, not strong",
+       partly.level is ConfidenceLevel.HIGH, f"{partly.level.value} {partly.score}")
 
 # The case that motivated the change: a perfect answer that also produced an
 # unverifiable citation used to keep its "Well supported" badge.
 with_rejection = assess(steps(3), cited_ids, ["DOC999_chunk_999"], strong)
 record("a rejected citation drops it below high",
-       with_rejection.level is not ConfidenceLevel.HIGH,
+       with_rejection.level not in (ConfidenceLevel.HIGH, ConfidenceLevel.STRONG),
        f"{with_rejection.level.value} {with_rejection.score}")
 record("rejected-citation cap is explained in the reasons",
        any("failed verification" in r for r in with_rejection.reasons))
@@ -283,9 +476,25 @@ record("deep-but-present lexical ranks no longer count as agreement",
        weak.score < best.score, f"{best.score} -> {weak.score}")
 
 single = result_of([evidence("DOC001_chunk_001", "Patents Act", 0, 0)])
-capped = assess(steps(3), ["DOC001_chunk_001"], [], single)
-record("a single source can never be high",
-       capped.level is not ConfidenceLevel.HIGH, capped.level.value)
+capped = assess(steps(3), [cit("DOC001_chunk_001", "Patents Act", "Section 3")], [], single)
+record("a single provision can never be high",
+       capped.level not in (ConfidenceLevel.HIGH, ConfidenceLevel.STRONG), capped.level.value)
+
+# ...but three provisions of the ONE act that governs the question is real
+# corroboration, and used to be punished as "a single source".
+one_act = result_of([
+    evidence("DOC012_chunk_002", "GI Act 1999", 0, 0),
+    evidence("DOC012_chunk_066", "GI Act 1999", 1, 1),
+    evidence("DOC012_chunk_011", "GI Act 1999", 2, 2),
+])
+focused = assess(steps(3),
+                 [cit("DOC012_chunk_002", "GI Act 1999", "Section 2"),
+                  cit("DOC012_chunk_066", "GI Act 1999", "Section 3"),
+                  cit("DOC012_chunk_011", "GI Act 1999", "Section 11")],
+                 [], one_act)
+record("three provisions of one governing act is not 'a single source'",
+       focused.level in (ConfidenceLevel.HIGH, ConfidenceLevel.STRONG),
+       f"{focused.level.value} {focused.score}")
 
 nothing = assess(steps(0), [], [], strong)
 record("no step could be sourced -> limited",
@@ -322,7 +531,7 @@ def _step(number, cited, abstained=False):
 # "Partly supported". This is the case the bottom bucket exists for.
 _weak = assess(
     steps=[_step(1, ["a1"]), _step(2, [], abstained=True), _step(3, [], abstained=True)],
-    citation_ids=["a1"],
+    citations=[cit("a1", "D&C Rules", "Rule 3")],
     rejected_ids=[],
     result=_result([_ev("a1", "D&C Rules", 0, 0), _ev("a2", "D&C Rules", 1, 1),
                     _ev("a3", "D&C Rules", 2, 2), _ev("a4", "D&C Rules", 3, 3),
@@ -337,7 +546,7 @@ record("the cap explains itself",
 # 2 of 3 sourced is NOT thin - the cap must not swallow ordinary answers.
 _ok = assess(
     steps=[_step(1, ["a1"]), _step(2, ["a2"]), _step(3, [], abstained=True)],
-    citation_ids=["a1", "a2"],
+    citations=[cit("a1", "Patents Act", "Section 3(p)"), cit("a2", "Manual", "Section 3(o)")],
     rejected_ids=[],
     result=_result([_ev("a1", "Patents Act", 0, 0), _ev("a2", "Manual", 1, 1)]),
 )
@@ -350,7 +559,7 @@ record("...but an abstaining step also cannot be 'well supported'",
 # corroborated chunk must not inherit the agreement of four it never cited.
 _uncorroborated = assess(
     steps=[_step(1, ["a1"]), _step(2, ["a1"]), _step(3, ["a1"])],
-    citation_ids=["a1"],
+    citations=[cit("a1", "D&C Rules", "Rule 3")],
     rejected_ids=[],
     result=_result([
         _ev("a1", "D&C Rules", 0, 99),          # cited, but lexical never ranked it
@@ -369,18 +578,20 @@ record("agreement reason talks about cited passages",
 # useless in the other direction.
 _strong = assess(
     steps=[_step(1, ["a1"]), _step(2, ["a2"]), _step(3, ["a3"])],
-    citation_ids=["a1", "a2", "a3"],
+    citations=[cit("a1", "Patents Act", "Section 3(p)"), cit("a2", "Manual", "Section 3(o)"),
+               cit("a3", "About TKDL", "Section 1")],
     rejected_ids=[],
     result=_result([_ev("a1", "Patents Act", 0, 0), _ev("a2", "Manual", 1, 1),
                     _ev("a3", "About TKDL", 2, 2)]),
 )
-record("a fully sourced, corroborated, multi-source answer is still high",
-       _strong.level is ConfidenceLevel.HIGH, f"{_strong.level.value} {_strong.score}")
+record("a fully sourced, corroborated, multi-provision answer reaches the top",
+       _strong.level is ConfidenceLevel.STRONG, f"{_strong.level.value} {_strong.score}")
 
-record("all three levels are reachable",
-       {_weak.level, _ok.level, _strong.level} == {
-           ConfidenceLevel.LIMITED, ConfidenceLevel.MODERATE, ConfidenceLevel.HIGH},
-       f"{_weak.level.value}/{_ok.level.value}/{_strong.level.value}")
+record("all four levels are reachable",
+       {_weak.level, _ok.level, partly.level, best.level} == {
+           ConfidenceLevel.LIMITED, ConfidenceLevel.MODERATE,
+           ConfidenceLevel.HIGH, ConfidenceLevel.STRONG},
+       f"{_weak.level.value}/{_ok.level.value}/{partly.level.value}/{best.level.value}")
 
 
 section("CONVERSATION - small talk answered, real questions untouched")

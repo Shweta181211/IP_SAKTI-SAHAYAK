@@ -16,6 +16,7 @@ So confidence here is computed from evidence that the answer actually held
 together, all of it downstream of validation:
 
   * how many of the three substantive steps kept a citation after validation
+  * how SPECIFIC those citations are - a named section or rule, or just a page
   * how many distinct sources back the answer
   * whether dense and lexical retrieval independently agreed on the evidence
   * whether the model tried to cite anything that failed validation
@@ -29,13 +30,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .retrieval import RetrievalResult
-from .schemas import ConfidenceLevel, ReasoningStep
+from .schemas import Citation, ConfidenceLevel, ReasoningStep
 
-# Weights sum to 1.0. Citation survival dominates because it is the signal most
-# directly tied to the thing we care about: a claim that could be sourced.
-W_STEPS = 0.45
-W_BREADTH = 0.30
-W_AGREEMENT = 0.25
+# Weights sum to 1.0. Citation survival still leads, because it is the signal
+# most directly tied to the thing we care about: a claim that could be sourced.
+#
+# SPECIFICITY is new, and it is the component the previous version was missing.
+# Measured across sampled answers, an answer citing "Geographical Indications
+# Act, Section 11" and one citing "Drugs and Cosmetics Rules 1945, provision not
+# identified, p.1" scored identically - both had a surviving citation from one
+# act, and nothing in the score could tell a pinpoint reference from a gesture
+# at a page. That is exactly the discrimination a reader needs, so it now
+# carries real weight.
+#
+# It became worth scoring only once citations.py could actually resolve
+# provisions reliably: before that fix the D&C Rules named a provision on 11%
+# of its chunks, so this component would have been measuring the extractor's
+# blind spots rather than the answer's quality.
+W_STEPS = 0.35
+W_SPECIFICITY = 0.25
+W_BREADTH = 0.20
+W_AGREEMENT = 0.20
 
 # A model that cited something unverifiable was guessing, even if other
 # citations survived.
@@ -50,17 +65,29 @@ W_AGREEMENT = 0.25
 REJECTION_PENALTY_PER_ID = 0.15
 MAX_REJECTION_PENALTY = 0.45
 
-HIGH_THRESHOLD = 0.75
+STRONG_THRESHOLD = 0.85
+HIGH_THRESHOLD = 0.70
 MODERATE_THRESHOLD = 0.45
 
-# Three distinct sources is "well supported"; beyond that adds little.
-BREADTH_TARGET = 3
+# Four distinct provisions is the top of the breadth scale. Three saturated it:
+# almost every answered question cites three provisions, so the component sat at
+# 1.0 and stopped discriminating - the same way the agreement component once did.
+BREADTH_TARGET = 4
 # Agreement is measured over at most this many top evidence items.
 AGREEMENT_WINDOW = 5
 # A passage counts as "both retrievers agreed" only if BOTH ranked it this high
 # among their own candidates. Mere presence in a 40-deep candidate list is not
 # agreement - see the comment in assess().
 AGREEMENT_RANK_CUTOFF = 12
+
+# Weakest to strongest. Used to apply ceilings without hard-coding comparisons
+# between enum members, which are strings and would compare alphabetically.
+LEVEL_ORDER = [
+    ConfidenceLevel.LIMITED,
+    ConfidenceLevel.MODERATE,
+    ConfidenceLevel.HIGH,
+    ConfidenceLevel.STRONG,
+]
 
 
 @dataclass
@@ -72,11 +99,20 @@ class ConfidenceAssessment:
 
 def assess(
     steps: list[ReasoningStep],
-    citation_ids: list[str],
+    citations: list[Citation],
     rejected_ids: list[str],
     result: RetrievalResult,
 ) -> ConfidenceAssessment:
-    """Score how well-supported an answer is. Never raises."""
+    """Score how well-supported an answer is. Never raises.
+
+    Takes the BUILT citations rather than bare chunk ids. Specificity and
+    breadth both need to know whether a citation resolved to a named provision,
+    and that is decided by citations.py when the citation is constructed - so
+    passing the finished objects avoids resolving every chunk a second time and
+    keeps this module free of any corpus lookup, which is also what makes it
+    unit-testable without a vector database.
+    """
+    citation_ids = [c.chunk_id for c in citations]
     reasons: list[str] = []
 
     # 1. Did the substantive steps keep a citation through validation?
@@ -93,20 +129,57 @@ def assess(
     else:
         reasons.append("no reasoning step could be backed by a citation")
 
-    # 2. How many distinct sources, not just how many citations?
+    # 2. How many distinct PROVISIONS, not how many citations and not how many
+    #    acts.
+    #
+    # This counted distinct act names, and that penalised correctly focused
+    # answers. Measured: a Geographical Indication registration question cited
+    # Sections 2, 3 and 11 of the GI Act 1999 - three pinpointed provisions of
+    # exactly the statute that governs the question - and was capped to the
+    # middle band for "resting on a single source". Meanwhile an answer citing
+    # one page each of three unrelated documents scored full breadth.
+    #
+    # Three sections of the governing act ARE corroboration; the same page cited
+    # by three steps is not. So the unit is the provision: (act, section), or
+    # (act, chunk) where no provision could be resolved. Act diversity still
+    # helps, because different acts necessarily give different provisions.
+    provisions = set()
     acts = set()
-    for chunk_id in citation_ids:
-        for item in result.evidence:
-            if item.chunk_id == chunk_id:
-                acts.add(str(item.metadata.get("act_name", chunk_id)))
-                break
-    breadth_score = min(len(acts), BREADTH_TARGET) / BREADTH_TARGET
-    if len(acts) >= BREADTH_TARGET:
-        reasons.append(f"supported by {len(acts)} independent sources")
-    elif len(acts) == 1:
-        reasons.append("rests on a single source")
+    for citation in citations:
+        acts.add(citation.act_name)
+        provisions.add((citation.act_name, citation.section or citation.chunk_id))
+    breadth_score = min(len(provisions), BREADTH_TARGET) / BREADTH_TARGET
+    if len(provisions) >= BREADTH_TARGET:
+        reasons.append(
+            f"supported by {len(provisions)} distinct provisions"
+            + (f" across {len(acts)} sources" if len(acts) > 1 else " of one source")
+        )
+    elif len(provisions) == 1:
+        reasons.append("rests on a single provision")
 
-    # 3. Did two independent retrieval methods agree on this evidence?
+    # 3. How specific are the citations - a pinpointed provision, or a page?
+    #
+    # `Citation.section` is only ever set when citations.py could verify the
+    # provision against the chunk's own text or place it in the document's
+    # provision sequence, so a non-null section is a checked fact rather than a
+    # model claim. An answer that can say "Section 11" is anchored in a way one
+    # that can only say "page 1" is not, and a reader can go and read it.
+    specific = sum(1 for c in citations if c.section)
+    specificity_score = specific / len(citations) if citations else 0.0
+    if citations and specific == len(citations):
+        reasons.append("every citation resolves to a named provision")
+    elif specific:
+        reasons.append(
+            f"{specific} of {len(citations)} citations resolve to a named provision; "
+            "the rest cite the source and page only"
+        )
+    elif citations:
+        reasons.append(
+            "no citation resolves to a named provision - each points at a document "
+            "and page rather than a specific section or rule"
+        )
+
+    # 4. Did two independent retrieval methods agree on this evidence?
     #
     # This used to test `dense_rank is not None and lexical_rank is not None`,
     # i.e. "did each retriever see this chunk anywhere in its 40-deep candidate
@@ -147,6 +220,7 @@ def assess(
 
     score = (
         W_STEPS * steps_score
+        + W_SPECIFICITY * specificity_score
         + W_BREADTH * breadth_score
         + W_AGREEMENT * agreement_score
     )
@@ -159,51 +233,91 @@ def assess(
             "and were rejected"
         )
 
-    # An answer whose substantive steps mostly could NOT be sourced is thin,
-    # whatever the arithmetic says. This is the reachability fix: without it the
-    # bottom bucket depends on three weighted components all failing at once,
-    # and in ~50 measured answers that never happened - the badge had two states
-    # rather than three, and the one it never used was the warning.
+    # ---- level, then ceilings -------------------------------------------
     #
-    # A cap rather than a score adjustment, for the same reason as the
-    # single-source rule below: the reason stays legible instead of being
-    # smeared across a weighted sum.
-    thin_coverage = bool(substantive) and cited_steps * 2 <= len(substantive)
+    # The arithmetic proposes a band; specific structural weaknesses cap it.
+    # Ceilings rather than jumps: with four bands, each weakness should cost
+    # what it is worth. The previous version sent every capped answer straight
+    # to MODERATE, so an answer with three acts, four provision-specific
+    # citations and one abstaining step landed in the same band as one resting
+    # on a single unpinpointed page - which is the flattening this scoring was
+    # supposed to cure.
+    #
+    # A reason is recorded only when a ceiling actually bites, so `reasons`
+    # never lists a cap that changed nothing.
+    level = (
+        ConfidenceLevel.STRONG if score >= STRONG_THRESHOLD
+        else ConfidenceLevel.HIGH if score >= HIGH_THRESHOLD
+        else ConfidenceLevel.MODERATE if score >= MODERATE_THRESHOLD
+        else ConfidenceLevel.LIMITED
+    )
 
-    if thin_coverage:
-        level = ConfidenceLevel.LIMITED
-        reasons.append(
+    ceilings: list[tuple[ConfidenceLevel, str]] = []
+
+    # An answer whose substantive steps mostly could NOT be sourced is thin,
+    # whatever the arithmetic says. Without this the bottom band depends on
+    # several weighted components failing at once, and in ~50 measured answers
+    # that never happened - the badge had two usable states rather than three,
+    # and the one it never used was the warning.
+    if substantive and cited_steps * 2 <= len(substantive):
+        ceilings.append((
+            ConfidenceLevel.LIMITED,
             f"capped: only {cited_steps} of {len(substantive)} reasoning steps could be "
-            "sourced, so this answer is thinly supported whatever else held up"
-        )
-    elif rejected_ids and score >= HIGH_THRESHOLD:
-        # Belt and braces alongside the subtractive penalty. An answer whose
-        # author reached for a source that does not exist has demonstrated
-        # exactly the failure mode this badge is supposed to warn about, so it
-        # does not get the top label however well the rest held together.
-        level = ConfidenceLevel.MODERATE
-        reasons.append("capped: the model cited at least one source that failed verification")
-    elif score >= HIGH_THRESHOLD and cited_steps < len(substantive):
-        # A step that had to abstain is the answer telling you it ran out of
-        # support. Two of three steps sourced with two corroborating acts lands
-        # on exactly 0.75 - the top of the range - which would label an answer
-        # "Well supported" while one third of its reasoning was left blank.
-        level = ConfidenceLevel.MODERATE
-        reasons.append(
-            "capped: a reasoning step could not be sourced, so this is not fully supported"
-        )
-    elif score >= HIGH_THRESHOLD and len(acts) < 2:
-        # Full step coverage and tight retrieval agreement can push a
-        # single-source answer over the line. One act corroborating itself is
-        # not "well supported", however cleanly the steps were cited - so this
-        # is capped rather than scored down, to keep the reason honest.
-        level = ConfidenceLevel.MODERATE
-        reasons.append("capped: a single source cannot make an answer well supported")
-    elif score >= HIGH_THRESHOLD:
-        level = ConfidenceLevel.HIGH
-    elif score >= MODERATE_THRESHOLD:
-        level = ConfidenceLevel.MODERATE
-    else:
-        level = ConfidenceLevel.LIMITED
+            "sourced, so this answer is thinly supported whatever else held up",
+        ))
+
+    # Reaching for a source that does not exist is exactly the failure this
+    # badge warns about, and no amount of other evidence cancels it.
+    if rejected_ids:
+        ceilings.append((
+            ConfidenceLevel.MODERATE,
+            "capped: the model cited at least one source that failed verification",
+        ))
+
+    # One provision cited by every step is not corroboration. Note this is
+    # deliberately NOT "one act": see the breadth block above for why that
+    # version punished an answer for citing the right statute three times.
+    if len(provisions) < 2:
+        ceilings.append((
+            ConfidenceLevel.MODERATE,
+            "capped: a single provision cannot make an answer well supported",
+        ))
+
+    # Nothing cited resolves to a provision. The answer may be perfectly sound,
+    # but every reference points at a document and a page, so a reader cannot
+    # check any single claim against a specific rule. This is precisely the
+    # case that used to score the same as a pinpointed citation.
+    if citations and specificity_score == 0.0:
+        ceilings.append((
+            ConfidenceLevel.MODERATE,
+            "capped: no citation names a provision, so nothing here can be checked "
+            "against a specific section or rule",
+        ))
+
+    # The top band is reserved for answers where EVERY citation names its
+    # provision. This is the discrimination the whole recalibration is for: an
+    # answer a reader can check line by line against named sections is not the
+    # same as one where some references only reach a page, even when both are
+    # broad and both survived validation.
+    if specificity_score < 1.0:
+        ceilings.append((
+            ConfidenceLevel.HIGH,
+            "capped: not every citation resolves to a named provision",
+        ))
+
+    # A step that had to abstain is the answer telling you it ran out of
+    # support. An answer carrying a blank step should not be labelled "well
+    # supported" however well the rest of it held together, so this caps to the
+    # middle band rather than merely excluding the top one.
+    if cited_steps < len(substantive):
+        ceilings.append((
+            ConfidenceLevel.MODERATE,
+            "capped: a reasoning step could not be sourced, so this is not fully supported",
+        ))
+
+    for ceiling, reason in ceilings:
+        if LEVEL_ORDER.index(level) > LEVEL_ORDER.index(ceiling):
+            level = ceiling
+            reasons.append(reason)
 
     return ConfidenceAssessment(level=level, score=round(score, 3), reasons=reasons)

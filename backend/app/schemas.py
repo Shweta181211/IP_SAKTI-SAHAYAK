@@ -100,22 +100,38 @@ class ResponseStyle(str, Enum):
 
 
 class ConfidenceLevel(str, Enum):
-    """How well-supported an answer is.
+    """How well the cited sources support an answer.
 
-    Deliberately three coarse buckets, not a percentage: a two-decimal number
-    implies a precision this cannot have. See confidence.py for why the score
-    is built on citation survival rather than vector distance.
+    Deliberately coarse buckets, not a percentage: a two-decimal number implies
+    a precision this cannot have. See confidence.py for why the score is built
+    on citation survival and specificity rather than vector distance.
+
+    Four buckets rather than three. With three, the top one had to cover
+    everything from "three acts agree and each names its provision" to "two
+    steps cited the same page of one document", and measurement showed the
+    middle bucket swallowing most real answers. STRONG separates an answer
+    whose sources are broad AND provision-specific from one that is merely
+    adequately sourced.
+
+    This is an ordinal scale and nothing more. It is NOT calibrated against
+    labelled outcomes, and it says nothing about whether the law was applied
+    correctly - only about how well the answer is anchored in what was cited.
     """
 
+    STRONG = "strong"
     HIGH = "high"
     MODERATE = "moderate"
     LIMITED = "limited"
 
 
+# Phrased as statements about the EVIDENCE, never about correctness or legal
+# certainty. "Confident" would be a claim about the outcome; these are claims
+# about how much the cited sources carry.
 CONFIDENCE_LABELS: dict[ConfidenceLevel, str] = {
+    ConfidenceLevel.STRONG: "Strongly supported",
     ConfidenceLevel.HIGH: "Well supported",
-    ConfidenceLevel.MODERATE: "Partly supported",
-    ConfidenceLevel.LIMITED: "Thinly supported",
+    ConfidenceLevel.MODERATE: "Some support",
+    ConfidenceLevel.LIMITED: "Thin evidence",
 }
 
 
@@ -194,6 +210,82 @@ class ClassificationResult(BaseModel):
         )
 
 
+class TakeawayIntent(str, Enum):
+    """What the question is actually asking for, which decides the vocabulary.
+
+    Determined by the model as part of generation, never by scanning the
+    question for words - a keyword rule like `if "patent" in question` is
+    exactly what the generalisation requirement rules out, and it would put a
+    patent label on "how do I stop someone patenting my formulation?".
+    """
+
+    PATENT = "patent"
+    GI = "gi"
+    ABS = "abs"
+    TKDL = "tkdl"
+    OTHER = "other"
+
+
+# The permitted labels, per intent. This is a closed vocabulary and it is the
+# mechanism by which a bare "yes, patentable" is made impossible rather than
+# merely discouraged: the model picks a label, the label is checked against this
+# table, and anything outside it becomes REQUIRES_VERIFICATION.
+#
+# Every label is hedged on purpose. This banner is a preliminary orientation
+# produced by a document search, not a legal opinion, and a categorical
+# yes/no would be read as the latter however much small print sits beneath it.
+REQUIRES_VERIFICATION = "Requires verification"
+INSUFFICIENT_INFORMATION = "Insufficient information"
+
+TAKEAWAY_LABELS: dict[TakeawayIntent, tuple[str, ...]] = {
+    TakeawayIntent.PATENT: (
+        "Potentially patentable",
+        "Likely excluded",
+        REQUIRES_VERIFICATION,
+        INSUFFICIENT_INFORMATION,
+    ),
+    TakeawayIntent.GI: (
+        "GI route may be relevant",
+        "Unlikely to qualify",
+        REQUIRES_VERIFICATION,
+    ),
+    TakeawayIntent.ABS: (
+        "ABS/NBA requirements may apply",
+        "Unlikely to apply",
+        REQUIRES_VERIFICATION,
+    ),
+    TakeawayIntent.TKDL: (
+        "High prior-art risk",
+        "Low apparent prior-art risk",
+        REQUIRES_VERIFICATION,
+    ),
+    # A question that fits none of the above still gets an honest orientation
+    # rather than a label borrowed from a regime it does not belong to.
+    TakeawayIntent.OTHER: (REQUIRES_VERIFICATION, INSUFFICIENT_INFORMATION),
+}
+
+
+class Takeaway(BaseModel):
+    """A one-line orientation above the reasoning trail.
+
+    Shown only when there is something to assess. A definitional or procedural
+    question - "what is a GI tag?" - gets no banner, because there is no matter
+    to take a view on and a label would invent one.
+
+    `reason` is held to the same citation standard as a step: it carries its
+    own ids, they are validated against the retrieved evidence, and when none
+    survive the banner says so rather than looking sourced. That is the lesson
+    of the headline defect - any new prose channel to the user needs its own
+    validation, or it becomes the hole in the guard.
+    """
+
+    intent: TakeawayIntent
+    label: str = Field(description="One of TAKEAWAY_LABELS for this intent")
+    reason: str = Field(description="One plain-language sentence, never a bare yes/no")
+    citation_ids: list[str] = Field(default_factory=list)
+    unsourced: bool = False
+
+
 # The four steps are fixed by the problem statement's core loop. Step 4 is a
 # statement about the *scope* of our corpus rather than a claim about law, so it
 # is the only step permitted to carry no citation.
@@ -248,6 +340,9 @@ class Answer(BaseModel):
     # correct one-line answer is still useful - it just must not LOOK sourced.
     headline_unsourced: bool = False
     confidence: ConfidenceLevel | None = None
+    #: One-line orientation above the trail. None for definitional or
+    #: procedural questions, and for every abstention.
+    takeaway: Takeaway | None = None
     confidence_label: str | None = None
     confidence_score: float | None = None
     confidence_reasons: list[str] = Field(default_factory=list)
@@ -543,4 +638,99 @@ class ComparisonResult(BaseModel):
     disclaimer: str = (
         "This is information, not legal advice. It cites primary legal sources "
         "but is not a substitute for a qualified IP practitioner."
+    )
+
+# ---------------------------------------------------------------------------
+# Export readiness
+# ---------------------------------------------------------------------------
+
+
+class ReadinessStatus(str, Enum):
+    """What was actually found for one checklist item.
+
+    Derived, never assigned by rule. A status is only as good as the evidence
+    behind it, so `NOT_COVERED` is not a failure mode here - it is the honest
+    answer whenever the corpus does not reach an item, and it is what the code
+    forces when no citation survives validation.
+    """
+
+    VERIFIED = "verified"
+    NEEDS_VERIFICATION = "needs_verification"
+    BLOCKER = "blocker"
+    NOT_COVERED = "not_covered"
+
+
+class ReadinessItem(BaseModel):
+    """One line of the readiness checklist."""
+
+    title: str = Field(description="The requirement, in a few words")
+    detail: str = Field(description="What the sources actually say about it")
+    status: ReadinessStatus
+    #: Why this status and not another - shown next to the icon so the state is
+    #: interrogable rather than decorative.
+    status_reason: str = ""
+    citation_ids: list[str] = Field(default_factory=list)
+
+
+class ReadinessSection(BaseModel):
+    """One side of the report. Kept apart so the two are never conflated."""
+
+    #: "national" or "international" - which corpus every item here came from.
+    jurisdiction: str
+    heading: str
+    #: Set when the corpus does not reach this side at all. The section then
+    #: carries no items, and says so, rather than degrading into generic advice.
+    covered: bool = True
+    uncovered_reason: str | None = None
+    items: list[ReadinessItem] = Field(default_factory=list)
+
+
+class ExportReadinessRequest(BaseModel):
+    """The short form behind the report."""
+
+    product: str = Field(min_length=2, max_length=MAX_QUESTION_CHARS)
+    ingredients: str = Field(default="", max_length=MAX_QUESTION_CHARS)
+    #: Optional. Left unset, the existing classifier infers it from `product`.
+    category: Category | None = None
+    health_claims: bool = False
+    target_country: str = Field(min_length=2, max_length=120)
+    log_consent: bool = False
+    style: ResponseStyle = ResponseStyle.LEGAL
+
+
+class ExportReadinessReport(BaseModel):
+    """India-side and target-market readiness, each grounded in its own corpus."""
+
+    product: str
+    target_country: str
+    classification: ClassificationResult | None = None
+    #: How the target market frames this kind of product, when the international
+    #: corpus actually says. None when it does not - never inferred.
+    target_framing: str | None = None
+    target_framing_citation_ids: list[str] = Field(default_factory=list)
+
+    india: ReadinessSection | None = None
+    target: ReadinessSection | None = None
+
+    #: Ordered next steps. May draw on both sides; each carries its own
+    #: jurisdiction so a treaty-derived step can never read as an Indian duty.
+    action_plan: list[NextStep] = Field(default_factory=list)
+
+    citations: list[Citation] = Field(default_factory=list)
+    rejected_citation_ids: list[str] = Field(default_factory=list)
+    confidence: ConfidenceLevel | None = None
+    confidence_label: str | None = None
+    confidence_score: float | None = None
+    confidence_reasons: list[str] = Field(default_factory=list)
+
+    abstained: bool = False
+    abstention_kind: AbstentionKind = AbstentionKind.NONE
+    abstention_message: str | None = None
+    escalate: bool = False
+    escalation_reason: str | None = None
+
+    disclaimer: str = (
+        "This is information, not legal advice. It is a preliminary readiness view "
+        "assembled from cited sources, not a regulatory clearance. Verify every "
+        "requirement with the competent authority before exporting."
     )

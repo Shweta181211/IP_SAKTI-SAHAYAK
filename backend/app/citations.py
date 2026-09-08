@@ -38,9 +38,57 @@ FOOTNOTE_CUE = re.compile(
 )
 
 # The numbered heading that opens a provision: "122E. Definition of new drug.-"
-# or "3. Definitions.". Anchored near the start; that is what makes it the
-# chunk's own provision rather than a cross-reference.
-HEADING = re.compile(r"(\d{1,3}[A-Z]{0,2}(?:-[A-Z0-9]{1,3})?)\.\s*([A-Z][^.;]{2,90}?)\s*[.—–-]")
+# or "3. Definitions.".
+#
+# The optional bracket before the title is not cosmetic. Several documents in
+# this corpus are Indian Kanoon scrapes, whose convention is to wrap any
+# provision that has ever been amended in square brackets and inline the
+# amendment note straight after it:
+#
+#     31. [ Standard for certain imported drugs. [Substituted by G.S.R. 604(E)...
+#
+# Without allowing that bracket the title match fails on "[" and the whole
+# heading is lost. In the Drugs and Cosmetics Rules 1945 - the most heavily
+# amended document here - that one character accounted for the majority of
+# unidentified provisions.
+#
+# "]" is accepted as a title terminator for the same reason: a heading can end
+# on an amended phrase rather than a full stop, as in
+# "52. Duties of Inspectors ... the manufacture of [drugs or cosmetics]".
+HEADING = re.compile(
+    r"(\d{1,3}[A-Z]{0,2}(?:-[A-Z0-9]{1,3})?)\.\s*(\[\s*)?([A-Z][^.;]{2,90}?)\s*[.\]—–-]"
+)
+
+# A provision whose heading text was itself substituted away, leaving the
+# number, a bracket and the amendment note:
+#
+#     41. [ [Substituted by S.O. 218, dated 15.1.1954.] (1)If the Director...
+#
+# The number is still the rule number, and "Rule 41" is still the right
+# citation. Distinguished from a footnote block by the bracket: a footnote
+# block opens with its cue ("2. Ins. by Act 21 of 1962"), never with "[".
+HEADING_AMENDED_AWAY = re.compile(r"(\d{1,3}[A-Z]{0,2}(?:-[A-Z0-9]{1,3})?)\.\s*\[\s*\[")
+
+# A chunk that opens on a chapter, part or schedule heading begins a new
+# structural division of the document, so whatever provision ran above it has
+# ended and must not be inherited across the boundary.
+STRUCTURAL_DIVIDER = re.compile(
+    r"^(?:THE\s+)?(?:CHAPTER|PART|SCHEDULE|ANNEX(?:URE)?|APPENDIX)\b", re.IGNORECASE
+)
+
+# How far into the text after a heading number a footnote cue may start before
+# the "heading" is judged to be a footnote block rather than a provision.
+#
+# This replaces a flat 160-character forward window, which could not tell these
+# two apart:
+#
+#     2. Ins. by Act 21 of 1962, s.2 (w.e.f. 27-7-1964).   <- footnote block
+#     31. [ Standard for certain imported drugs. [Substituted by ...  <- heading
+#
+# Both carry a cue within 160 characters, so the old check rejected both. The
+# discriminator is WHERE the cue sits: a footnote block *opens* with its cue,
+# while a real heading puts its title first and the amendment note after it.
+FOOTNOTE_LEAD_CHARS = 6
 
 # A self-labelling reference, e.g. the marginal "Section 3(p)" the Manual of
 # Patent Office Practice prints beside each provision it discusses.
@@ -75,31 +123,102 @@ def _looks_like_footnote(fragment: str) -> bool:
     return bool(FOOTNOTE_CUE.search(fragment))
 
 
+# An enumerated list is not a provision. Schedule H drug lists, First Schedule
+# book lists, equipment schedules and blocks of amendment footnotes all pack
+# many numbered entries into one chunk, and any one of those numbers can be
+# mistaken for the heading of the provision the chunk belongs to. Measured on
+# this corpus, that produced "Rule 170" for a list of drug names, "Section 1"
+# for the First Schedule list of Ayurvedic texts, and a section number for 60+
+# blocks of pure footnote text.
+#
+# A real provision opens with one heading; the corpus distribution is stark -
+# provisions carry 1 numbered entry, lists carry 5 to 15. So a chunk with this
+# many distinct numbered entries is a list, and gets act plus page.
+LIST_ENTRY = re.compile(
+    r"(?:^|\s)(\d{1,3}[A-Z]{0,2}(?:-[A-Z0-9]{1,3})?)\.\s+(?=[A-Za-z\[])"
+)
+MAX_NUMBERED_ENTRIES = 4
+
+
+def _is_enumerated_list(text: str) -> bool:
+    """Is this chunk a numbered list rather than a provision?"""
+    return len(set(LIST_ENTRY.findall(text[:400]))) > MAX_NUMBERED_ENTRIES
+
+
+def _opens_with_footnote_cue(after_number: str) -> bool:
+    """Does a footnote cue START this fragment, rather than merely appear in it?
+
+    See FOOTNOTE_LEAD_CHARS. A footnote block leads with its cue; a provision
+    heading leads with its title and carries the amendment note afterwards.
+    """
+    match = FOOTNOTE_CUE.search(after_number[:160])
+    return bool(match) and match.start() <= FOOTNOTE_LEAD_CHARS
+
+
 def _heading_number(text: str) -> str | None:
     """The raw leading heading number, with no reliability filtering."""
-    for match in HEADING.finditer(text[:400]):
-        title = match.group(2).strip()
-        window = text[match.start() : match.start() + 160]
-        if _looks_like_footnote(title) or _looks_like_footnote(window):
+    if _is_enumerated_list(text):
+        return None
+    window = text[:400]
+    for match in HEADING.finditer(window):
+        title = match.group(3).strip()
+        bracketed = match.group(2) is not None
+        after_number = window[match.end(1) + 1 :]
+        # A bracketed title is an amended provision, so the amendment note that
+        # follows it is expected and says nothing about whether this is a
+        # heading. An unbracketed one is only a heading if it does not open on
+        # a footnote cue.
+        if not bracketed and _opens_with_footnote_cue(after_number):
+            continue
+        if _looks_like_footnote(title):
             continue
         if title.isupper() and len(title) > 12:
             continue
         return match.group(1)
+
+    # No titled heading. The provision may still be identifiable if its heading
+    # text was amended away entirely, which leaves the number intact.
+    amended = HEADING_AMENDED_AWAY.search(window)
+    if amended:
+        return amended.group(1)
     return None
 
 
+# Two different bounds, for two different risks.
+#
+# LINK is how far apart two headings may sit and still be read as consecutive
+# provisions of one ascending sequence. It exists to stop the chain walking out
+# of the provision body and into a schedule: measured on the D&C Rules, the body
+# ends at Rule 166 around chunk 254 and Schedule H's drug list ("391.
+# D-PENICILLAMINE", "440. ROPINIROLE") resumes ascending numbering 289 chunks
+# later. Unbounded, the chain hops that gap and cites drug names as Rules 230,
+# 285, 342, 393 and 444.
+#
+# CARRY is how many consecutive chunks may inherit a provision number from the
+# heading above them. It is much tighter because its failure mode is worse: a
+# link that is wrong costs one citation, while an over-long carry mislabels
+# every chunk it covers. A rule spans a handful of chunks, never dozens.
+SPINE_MAX_LINK_GAP = 40
+SPINE_MAX_CARRY = 6
+
+
 @lru_cache(maxsize=64)
-def _unreliable_numbers(doc_id: str) -> frozenset[str]:
-    """Heading numbers that repeat within a document, and so cannot be sections.
+def _repeated_numbers(doc_id: str) -> frozenset[str]:
+    """Heading numbers that repeat within a document, and so cannot be unique.
 
     Schedules, forms and monographs restart their numbering on every page - the
     D&C Rules are full of "4. Standards", "5. Labelling" paragraphs that look
-    exactly like provision headings. Real section numbers are essentially unique
-    within an act, so a number appearing repeatedly is numbering of some other
-    kind and must not be cited as a section.
+    exactly like provision headings. A real provision number is essentially
+    unique within an act, so a number appearing repeatedly is numbering of some
+    other kind and must not be cited on the strength of the heading alone.
 
-    This is deliberately structural rather than a list of keywords: it adapts to
-    whatever documents the corpus happens to contain.
+    This is the project's original filter and it is kept unchanged, because for
+    a chunk the provision spine cannot place it is still the best test there is.
+    What changed is that it is no longer the ONLY test: it used to ban a number
+    across the whole document, so the D&C Rules lost real Rules 2, 3 and 5 to
+    the schedule paragraphs that reuse those numbers later. The spine now
+    rescues exactly those, by placing them in the document's own ascending
+    sequence; this filter still governs everything the spine has no view on.
     """
     counts: Counter[str] = Counter()
     for chunk in all_chunks():
@@ -111,19 +230,166 @@ def _unreliable_numbers(doc_id: str) -> frozenset[str]:
     return frozenset(number for number, count in counts.items() if count > 3)
 
 
-def extract_section(chunk_text: str, act_name: str = "", doc_id: str = "") -> str | None:
+def _chunk_ordinal(chunk: dict) -> int:
+    """Position of a chunk within its document, from the trailing index."""
+    try:
+        return int(str(chunk["chunk_id"]).rsplit("_", 1)[1])
+    except (KeyError, IndexError, ValueError):
+        return 0
+
+
+def _provision_key(number: str) -> tuple[int, str] | None:
+    """Sortable form of a provision number: '122-E' -> (122, 'E'), '3' -> (3, '')."""
+    match = re.match(r"(\d{1,3})[-]?([A-Za-z0-9]{0,3})$", number or "")
+    if not match:
+        return None
+    return int(match.group(1)), match.group(2).upper()
+
+
+@lru_cache(maxsize=64)
+def _provision_spine(doc_id: str) -> dict[str, str]:
+    """Map every identifiable chunk of a document to the provision it belongs to.
+
+    This replaces a frequency filter that suppressed any heading number
+    appearing more than three times in a document. The intent was right -
+    schedules, forms and monographs restart their numbering on every page, so
+    "5. Capsules" in Schedule M is not Rule 5 - but the instrument was blunt:
+    in the D&C Rules 1945 it banned the numbers 1-14 and 23 outright, which
+    threw away **316 correctly detected real rules** along with the schedule
+    paragraphs. That single filter, not the heading regex, was the main reason
+    this document cited a provision for only 11% of its chunks.
+
+    The structural fact it missed is that a statute's provision numbers ASCEND
+    through the document, while schedule numbering restarts. So instead of
+    asking "is this number repeated?", build the longest chain of detected
+    headings that is non-decreasing in provision number and locally contiguous
+    in the document. That chain is the provision body; headings that cannot
+    join it are the restarts, and are refused exactly as before.
+
+    Two properties fall out of this that the frequency filter could not give:
+
+    * Rules 2, 3 and 5 are citable again, because in the body they appear once,
+      in order - it is only the schedules that repeat those numbers later.
+    * Chunks BETWEEN two consecutive chain members are continuations of the
+      earlier one, so they inherit its number. That is what puts a rule number
+      on the 404 chunks that carry no heading of their own because the
+      provision began on the previous chunk. The inheritance is bounded by
+      SPINE_MAX_GAP by construction, so it can never run across a document.
+
+    Still structural, still no per-document special-casing, and still biased
+    towards under-citing: a chunk the chain cannot place gets act plus page.
+    """
+    chunks = [c for c in all_chunks() if c.get("doc_id") == doc_id]
+    if not chunks:
+        return {}
+    chunks.sort(key=_chunk_ordinal)
+
+    # (position in document, chunk_id, heading number, sortable key)
+    candidates: list[tuple[int, str, str, tuple[int, str]]] = []
+    for position, chunk in enumerate(chunks):
+        number = _heading_number(_normalise_ws(chunk["chunk_text"]))
+        key = _provision_key(number) if number else None
+        if number and key:
+            candidates.append((position, str(chunk["chunk_id"]), number, key))
+    if not candidates:
+        return {}
+
+    # Longest non-decreasing chain under a positional bound. Scanning backwards
+    # and breaking on the bound is safe: any earlier candidate sits at an even
+    # greater distance.
+    length = [1] * len(candidates)
+    previous = [-1] * len(candidates)
+    for b in range(len(candidates)):
+        for a in range(b - 1, -1, -1):
+            if candidates[b][0] - candidates[a][0] > SPINE_MAX_LINK_GAP:
+                break
+            if candidates[a][3] <= candidates[b][3] and length[a] + 1 > length[b]:
+                length[b] = length[a] + 1
+                previous[b] = a
+
+    end = max(range(len(candidates)), key=lambda i: length[i])
+    chain: list[int] = []
+    while end != -1:
+        chain.append(end)
+        end = previous[end]
+    chain.reverse()
+
+    spine: dict[str, str] = {}
+    for rank, index in enumerate(chain):
+        position, chunk_id, number, _key = candidates[index]
+        spine[chunk_id] = number
+        # Chunks between this heading and the next one on the chain continue
+        # this provision, so they carry its number. Only BETWEEN members: after
+        # the last one there is no bound on how far the document runs on, and
+        # in the D&C Rules what follows the final rule is the schedules.
+        if rank + 1 < len(chain):
+            next_position = candidates[chain[rank + 1]][0]
+            if next_position - position - 1 > SPINE_MAX_CARRY:
+                continue
+            heading_page = chunks[position].get("page_number")
+            for between in range(position + 1, next_position):
+                following = chunks[between]
+                # Only into chunks with no heading of their own. A chunk that
+                # does carry a heading is making its own claim about which
+                # provision it is; overriding that with an inherited number
+                # would be a downgrade, not a repair, so it is left to the
+                # frequency filter to judge as before.
+                if _heading_number(_normalise_ws(following["chunk_text"])):
+                    continue
+                # And only within the same printed page. Chunk adjacency alone
+                # was not enough: it inherited "Section 1" onto an Ayurvedic
+                # Formulary recipe and a section number onto a block of pure
+                # amendment footnotes. A continuation that is still on the page
+                # the heading was printed on is almost certainly the same
+                # provision; once the page turns, that stops being true and the
+                # honest citation is the act plus the page.
+                if (
+                    heading_page is None
+                    or following.get("page_number") != heading_page
+                ):
+                    continue
+                # A structural divider ends the provision above it. Without
+                # this a lone "CHAPTER VI FARMERS' RIGHTS" chunk inherited the
+                # section number of whatever preceded it on the page.
+                if STRUCTURAL_DIVIDER.match(_normalise_ws(following["chunk_text"])):
+                    continue
+                spine[str(following["chunk_id"])] = number
+    return spine
+
+
+def extract_section(
+    chunk_text: str,
+    act_name: str = "",
+    doc_id: str = "",
+    chunk_id: str = "",
+) -> str | None:
     """Best verifiable reference to the provision this chunk *is*, or None.
 
     Returning None is a perfectly good outcome. Act plus page is honest; an
     invented or borrowed section number is not.
+
+    `chunk_id` is optional so existing callers keep working, but supplying it is
+    what allows the document's provision spine to place a chunk that carries no
+    heading of its own - the common case in the middle of a long rule.
     """
     text = _normalise_ws(chunk_text)
     noun = _noun_for(act_name)
 
-    # 1. The chunk's own opening heading, unless that number is schedule/form
-    #    numbering rather than a provision number.
+    # 1. Where the document's own provision sequence places this chunk. See
+    #    _provision_spine: this both accepts real numbers the old frequency
+    #    filter suppressed and rejects schedule numbering it could not see.
+    if chunk_id and doc_id:
+        placed = _provision_spine(doc_id).get(chunk_id)
+        if placed:
+            return f"{noun} {placed}"
+
+    # 2. Otherwise the original rule, unchanged: the chunk's own opening
+    #    heading, unless that number repeats within the document and so is
+    #    schedule or form numbering. Keeping this as a fallback rather than
+    #    replacing it is what makes the spine strictly additive - every citation
+    #    the previous implementation produced is still produced.
     number = _heading_number(text)
-    if number and number not in _unreliable_numbers(doc_id):
+    if number and number not in _repeated_numbers(doc_id):
         return f"{noun} {number}"
 
     # 2. Otherwise, self-labelling references - excluding pointers elsewhere.
@@ -152,10 +418,22 @@ def build_citation(chunk_id: str, excerpt_chars: int = 600) -> Citation | None:
 
     text = _normalise_ws(chunk["chunk_text"])
     act_name = str(chunk.get("act_name") or "Unknown source")
-    section = extract_section(text, act_name, str(chunk.get("doc_id") or ""))
+    section = extract_section(
+        text, act_name, str(chunk.get("doc_id") or ""), chunk_id
+    )
 
     # Belt and braces: never emit a number that is not literally in the text.
-    if section:
+    #
+    # This applies only to a reference read OUT of this chunk. A number the
+    # provision spine inherited from the heading above is by definition not in
+    # this chunk's own text - that is what makes it a continuation - so running
+    # the check on it was incoherent in both directions: it voided correctly
+    # inherited numbers, while passing "Rule 3" for any chunk that happened to
+    # contain a "3" inside a date.
+    inherited = bool(chunk_id) and chunk_id in _provision_spine(
+        str(chunk.get("doc_id") or "")
+    )
+    if section and not inherited:
         bare = re.sub(r"^(?:Sections?|Rules?|Regulations?|Articles?)\s+", "", section)
         if not all(part.strip() in text for part in bare.split(",")):
             section = None
@@ -284,6 +562,31 @@ def strip_chunk_ids(text: str) -> str:
         cleaned = cleaned[0].upper() + cleaned[1:]
     return cleaned
 
+
+# "International Patent Office" is not an institution. Patents are granted by
+# national offices (the Indian Patent Office, the USPTO) and regional ones (the
+# EPO); WIPO administers treaties and does not grant patents.
+#
+# This needs a guard as well as a prompt rule because the phrase is IN THE
+# CORPUS: About TKDL.pdf reads "prevent its misappropriation at International
+# Patent Offices", meaning "patent offices internationally". A model answering
+# strictly from that evidence reproduces it in its own prose, and measured over
+# six probe questions it did so in two of them - including the flagship. The
+# prompt asks; this makes sure.
+#
+# Display-only, and only over prose the MODEL wrote. Citation excerpts are
+# verbatim corpus text and are never rewritten - if the source says it, the
+# source card shows it saying it.
+_FICTIONAL_OFFICE = re.compile(
+    r"(?:the\s+)?\bInternational\s+Patent\s+Offices?\b", re.IGNORECASE
+)
+
+
+def normalise_institutions(text: str) -> str:
+    """Replace institutions that do not exist with an accurate generic phrase."""
+    if not text:
+        return text
+    return _FICTIONAL_OFFICE.sub("patent offices in other countries", text)
 
 # A provision reference as it appears in prose: "Section 3(p)", "Rule 122-E",
 # "section 11(2)(a)", "Regulation 7". The number is captured on its own so it

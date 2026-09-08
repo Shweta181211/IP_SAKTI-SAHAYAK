@@ -36,3 +36,6 @@ Thumbs.db
 # Dev server logs, written when running Vite in the background
 frontend_dev.log
 *.log
+
+# Verification screenshots from local Playwright runs — not build output.
+.shots/

@@ -28,6 +28,7 @@ from .config import ROOT, active_model, settings
 from .corpus_index import warm_up
 from .escalation import assess as assess_escalation
 from .comparison import compare_categories
+from .export_readiness import build_report as build_export_readiness
 from .jurisdiction_compare import compare_jurisdictions
 from .next_steps import next_steps_for_answer, next_steps_for_comparison
 from .plain_language import apply_style
@@ -41,6 +42,8 @@ from .schemas import (
     CompareRequest,
     ComparisonResult,
     ClassificationResult,
+    ExportReadinessReport,
+    ExportReadinessRequest,
     HealthResponse,
     JurisdictionComparison,
     NextSteps,
@@ -279,6 +282,34 @@ def compare_jurisdictions_endpoint(
                    "Please try again in a moment.",
         ) from exc
 
+
+
+@api.post("/export-readiness", response_model=ExportReadinessReport)
+def export_readiness_endpoint(
+    request: ExportReadinessRequest, http_request: Request
+) -> ExportReadinessReport:
+    """India-side and target-market readiness for one product.
+
+    Costs a classification, two retrievals (each with its own relevance gate)
+    and one generation, so it shares the comparison rate-limit bucket rather
+    than the query one.
+    """
+    enforce(compare_limiter, http_request)
+    started = time.time()
+    try:
+        report = build_export_readiness(request)
+        audit.log_readiness(
+            request.product, report,
+            consent=request.log_consent, elapsed_s=time.time() - started,
+        )
+        return report
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Export readiness failed")
+        raise HTTPException(
+            status_code=502,
+            detail="The readiness report failed because an upstream service was "
+                   "unavailable. Please try again in a moment.",
+        ) from exc
 
 
 @api.post("/next-steps", response_model=NextSteps)

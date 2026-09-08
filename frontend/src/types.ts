@@ -23,7 +23,22 @@ export type AbstentionKind =
   | "conversational"
   | "legal_advice";
 
-export type ConfidenceLevel = "high" | "moderate" | "limited";
+export type ConfidenceLevel = "strong" | "high" | "moderate" | "limited";
+
+export type TakeawayIntent = "patent" | "gi" | "abs" | "tkdl" | "other";
+
+/** The one-line orientation above the trail.
+ *
+ *  `label` is drawn from a closed, always-hedged vocabulary that the backend
+ *  validates against `TAKEAWAY_LABELS` — a bare "yes, patentable" cannot reach
+ *  the client. `reason` is citation-checked like a reasoning step. */
+export interface Takeaway {
+  intent: TakeawayIntent;
+  label: string;
+  reason: string;
+  citation_ids: string[];
+  unsourced: boolean;
+}
 
 /** Phrasing only. Citations and classification are identical across styles —
  *  plain mode is a rewrite of a finished answer, not a second generation. */
@@ -102,6 +117,8 @@ export interface Answer {
   headline_citation_ids: string[];
   /** The headline is a summary, not a sourced finding. The UI must say so. */
   headline_unsourced: boolean;
+  /** Null for definitional/procedural questions and every abstention. */
+  takeaway: Takeaway | null;
   confidence: ConfidenceLevel | null;
   confidence_label: string | null;
   confidence_score: number | null;
@@ -189,3 +206,65 @@ export interface JurisdictionComparison {
   synthesis_message: string | null;
   disclaimer: string;
 }
+
+// --------------------------------------------------------------------------
+// Export readiness
+// --------------------------------------------------------------------------
+
+/** Derived from what retrieval actually found, never assigned by a fixed rule.
+ *  `not_covered` is forced server-side whenever an item's citations do not
+ *  survive validation — an honest gap, not a failure. */
+export type ReadinessStatus =
+  | "verified"
+  | "needs_verification"
+  | "blocker"
+  | "not_covered";
+
+export interface ReadinessItem {
+  title: string;
+  detail: string;
+  status: ReadinessStatus;
+  status_reason: string;
+  citation_ids: string[];
+}
+
+export interface ReadinessSection {
+  jurisdiction: "national" | "international";
+  heading: string;
+  covered: boolean;
+  uncovered_reason: string | null;
+  items: ReadinessItem[];
+}
+
+export interface ExportReadinessRequest {
+  product: string;
+  ingredients: string;
+  category: Category | null;
+  health_claims: boolean;
+  target_country: string;
+  log_consent?: boolean;
+}
+
+export interface ExportReadinessReport {
+  product: string;
+  target_country: string;
+  classification: ClassificationResult | null;
+  target_framing: string | null;
+  target_framing_citation_ids: string[];
+  india: ReadinessSection | null;
+  target: ReadinessSection | null;
+  action_plan: NextStep[];
+  citations: Citation[];
+  rejected_citation_ids: string[];
+  confidence: ConfidenceLevel | null;
+  confidence_label: string | null;
+  confidence_score: number | null;
+  confidence_reasons: string[];
+  abstained: boolean;
+  abstention_kind: AbstentionKind;
+  abstention_message: string | null;
+  escalate: boolean;
+  escalation_reason: string | null;
+  disclaimer: string;
+}
+

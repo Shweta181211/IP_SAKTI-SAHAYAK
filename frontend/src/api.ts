@@ -5,6 +5,8 @@ import type {
   JurisdictionComparison,
   NextSteps,
   ResponseStyle,
+  ExportReadinessReport,
+  ExportReadinessRequest,
 } from "./types";
 
 // Vite proxies /api to the backend in dev; in production both sit behind one
@@ -153,6 +155,20 @@ export function fetchNextSteps(
   signal?: AbortSignal,
 ): Promise<NextSteps> {
   return post<NextSteps>("/next-steps", { ...payload, style }, signal);
+}
+
+/** The export readiness report. Costs a classification, two gated retrievals
+ *  and one generation, so it is only ever triggered by an explicit submit. */
+export function fetchExportReadiness(
+  request: ExportReadinessRequest,
+  signal?: AbortSignal,
+  logConsent = false,
+): Promise<ExportReadinessReport> {
+  return post<ExportReadinessReport>(
+    "/export-readiness",
+    { ...request, log_consent: logConsent },
+    signal,
+  );
 }
 
 export async function fetchHealth(): Promise<Health | null> {

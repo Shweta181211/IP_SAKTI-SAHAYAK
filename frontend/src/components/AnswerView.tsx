@@ -5,6 +5,7 @@ import { ReasoningTrail, buildCitationIndex, buildCitationMap } from "./Reasonin
 import { Confidence } from "./Confidence";
 import { AbstentionPanel, Verdict } from "./Verdict";
 import { Escalate } from "./Escalate";
+import { TakeawayBanner } from "./TakeawayBanner";
 
 interface Props {
   answer: Answer;
@@ -170,6 +171,21 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                       {answer.degraded_reason}
                     </p>
                   </div>
+                )}
+
+                {/* The orientation, above everything. It is the line most
+                    readers will act on, so it carries its own caveat and its
+                    own validated citations rather than borrowing the
+                    headline's. Absent for definitional questions, where there
+                    is nothing to take a view on. */}
+                {answer.takeaway && (
+                  <TakeawayBanner
+                    takeaway={answer.takeaway}
+                    citationIndex={citationIndex}
+                    citationById={citationById}
+                    onJumpToCitation={jumpToCitation}
+                    onHover={(ids) => setHovered(ids ?? [])}
+                  />
                 )}
 
                 {/* Conclusion first. The trail below is the working, for anyone
