@@ -14,6 +14,15 @@ guessing.
 
 ---
 
+## Where to look
+
+| file | what it holds |
+|---|---|
+| `PROJECT_STATUS.md` | what was built, what was found broken and why, and **what is still broken**. Read this before demoing. |
+| `CLAUDE.md` | the full engineering history, updated at the end of every phase |
+| `PROJECT_BRIEF.md` | the official problem statement and the MVP scope |
+| `MANUAL_TEST_CHECKLIST.md` | the manual test script |
+
 ## Quick start
 
 **Prerequisites:** Python 3.11+, Node 18+ (for the frontend, from Phase 6), and at
