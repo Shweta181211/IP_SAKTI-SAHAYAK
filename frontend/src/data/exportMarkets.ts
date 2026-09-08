@@ -1,4 +1,12 @@
-/** Treaty lanes for the Export page. Questions hit the international corpus. */
+/** Treaty lanes for the Treaty routes page. Questions hit the international corpus.
+ *
+ * `use` names what a lane is ABOUT and invites the question. It deliberately
+ * does not say what an instrument requires, permits or bars: this file ships as
+ * static copy with no citation and no validator behind it, and a sentence like
+ * "minimum IP standards WTO members must meet" is a statement of law wearing a
+ * caption's clothes. The legal content arrives when the lane is opened, from
+ * retrieval, with the provision attached.
+ */
 
 export interface ExportLane {
   id: string;
@@ -13,7 +21,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "pct",
     treaty: "Patent Cooperation Treaty",
     file: "05_WIPO_PCT_and_Regulations_2026.pdf",
-    use: "One international patent filing, then national phase in chosen countries.",
+    use: "Ask what it provides for filing one application that covers several countries.",
     question:
       "What does the Patent Cooperation Treaty provide for filing a patent application covering several countries?",
   },
@@ -21,7 +29,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "epc",
     treaty: "European Patent Convention",
     file: "09_EPO_European_Patent_Convention.pdf",
-    use: "Grant of a European patent covering designated EPC contracting states.",
+    use: "Ask what it provides for obtaining a patent across its contracting states.",
     question:
       "What does the European Patent Convention provide for obtaining a patent covering several European states?",
   },
@@ -29,7 +37,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "thmpd",
     treaty: "EU Directive 2004/24/EC",
     file: "10_EU_Directive_2004_24_Traditional_Herbal_Medicinal_Products.pdf",
-    use: "Traditional herbal medicinal product registration in the European Union.",
+    use: "Ask what it sets out for traditional herbal medicinal products in the EU.",
     question:
       "What does EU Directive 2004/24/EC require for a traditional herbal medicinal product?",
   },
@@ -37,7 +45,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "madrid",
     treaty: "Madrid Protocol",
     file: "06_WIPO_Madrid_Protocol_Rules_2025.pdf",
-    use: "International trade-mark registration from a single application.",
+    use: "Ask how it handles trade-mark protection sought in several countries at once.",
     question:
       "How does the Madrid Protocol let me seek trade-mark protection in several countries from one filing?",
   },
@@ -45,7 +53,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "hague",
     treaty: "Hague Agreement (Geneva Act)",
     file: "07_WIPO_Hague_Agreement_Geneva_Act.pdf",
-    use: "International industrial-design registration for packaging and product form.",
+    use: "Ask what it sets out for registering an industrial design internationally.",
     question:
       "What does the Hague Agreement Geneva Act provide for registering an industrial design internationally?",
   },
@@ -53,7 +61,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "budapest",
     treaty: "Budapest Treaty",
     file: "08_WIPO_Budapest_Treaty.pdf",
-    use: "Deposit of a micro-organism to support a patent in multiple offices.",
+    use: "Ask what it says about depositing a micro-organism in support of a patent.",
     question:
       "What does the Budapest Treaty require for depositing a micro-organism in support of a patent?",
   },
@@ -61,7 +69,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "trips",
     treaty: "WTO TRIPS Agreement",
     file: "01_WTO_TRIPS_Agreement.pdf",
-    use: "Minimum IP standards WTO members must meet, including patents and undisclosed information.",
+    use: "Ask what it says about patentable subject matter and traditional knowledge.",
     question:
       "What does the TRIPS Agreement say about patentable subject matter and traditional knowledge related inventions?",
   },
@@ -69,7 +77,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "cbd",
     treaty: "Convention on Biological Diversity",
     file: "02_CBD_Convention_on_Biological_Diversity.pdf",
-    use: "Sovereign rights over genetic resources; the frame for access when material leaves India.",
+    use: "Ask what it says about genetic resources and access to them.",
     question:
       "What does the Convention on Biological Diversity say about sovereign rights over genetic resources and access?",
   },
@@ -77,7 +85,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "nagoya",
     treaty: "Nagoya Protocol",
     file: "03_CBD_Nagoya_Protocol.pdf",
-    use: "Access and benefit-sharing when genetic resources or associated TK are used abroad.",
+    use: "Ask what it sets out on access to genetic resources and associated knowledge.",
     question:
       "What does the Nagoya Protocol require for access to genetic resources and associated traditional knowledge?",
   },
@@ -85,7 +93,7 @@ export const EXPORT_LANES: ExportLane[] = [
     id: "gratk",
     treaty: "WIPO GRATK Treaty 2024",
     file: "04_WIPO_GRATK_Treaty_2024.pdf",
-    use: "Disclosure of genetic resources and associated TK in patent applications.",
+    use: "Ask what disclosure it addresses in patent applications.",
     question:
       "What disclosure does the WIPO GRATK Treaty 2024 require in patent applications involving genetic resources or traditional knowledge?",
   },

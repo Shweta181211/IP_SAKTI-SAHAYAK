@@ -21,6 +21,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import re
 
 from functools import lru_cache
 
@@ -37,36 +38,117 @@ logger = logging.getLogger(__name__)
 # and every anchor silently pointed at the wrong provision. Anchors are now
 # resolved by CONTENT at load time, which survives any rebuild, and
 # verify_anchors() still fails loudly if a provision genuinely disappears.
+# Phrases are taken from the DEFINING clause itself, not from the term being
+# defined. A bare term appears wherever the statute uses it - "patent or
+# proprietary medicine" resolved to a Siddha formulary book list, and "Ayurveda
+# Aahara" to a food-additive schedule - whereas a clause's own wording occurs
+# once. Each of these was checked against the corpus and matches exactly one
+# chunk.
+#
+# Note what is deliberately NOT used as an anchor: the word "means". The Drugs
+# and Cosmetics Act extraction carries the margin bleed described in CLAUDE.md
+# section 3, which renders it "mneans" in the definitions clause. Anchoring on
+# the defined content survives that; anchoring on the grammar would not.
 DEFINITION_ANCHORS: dict[Category, tuple[str, str]] = {
     Category.CLASSICAL_GENERIC: ("Drugs and Cosmetics Act", "authoritative books of"),
-    Category.PATENT_PROPRIETARY: ("Drugs and Cosmetics Act", "patent or proprietary medicine"),
+    Category.PATENT_PROPRIETARY: (
+        "Drugs and Cosmetics Act", "formulations containing only such ingredients",
+    ),
     Category.NEW_DRUG: ("Drugs and Cosmetics Rules", "new drug shall mean"),
-    Category.PHYTOPHARMACEUTICAL: ("Drugs and Cosmetics Rules", "phytopharmaceutical drug"),
-    Category.AYURVEDA_AAHAR: ("FSSAI", "Ayurveda Aahara"),
+    # There is no clean statutory definition of a phytopharmaceutical in this
+    # corpus - rule 2(eb) was not captured by the extraction (CLAUDE.md 6b). The
+    # Schedule Y data requirements describe the concept, and describing it is
+    # better than pointing at the new-drug rule that merely includes it.
+    Category.PHYTOPHARMACEUTICAL: (
+        "Drugs and Cosmetics Rules", "brief description or summary of the phytopharmaceutical",
+    ),
+    Category.AYURVEDA_AAHAR: ("FSSAI", "a food prepared in accordance with the recipes"),
     Category.COSMETIC: ("Drugs and Cosmetics Act", "cleansing, beautifying"),
 }
 
 
+# Words that mark a definition rather than a passing mention. A schedule that
+# LISTS "patent or proprietary medicines" contains the phrase; the clause that
+# DEFINES the term says "means" or "includes" beside it.
+_DEFINING_CUE = re.compile(r"\b(means|shall mean|includes|is defined as)\b", re.IGNORECASE)
+
+# How far either side of the phrase a defining cue may sit and still be read as
+# belonging to it. Wide enough to span a clause, narrow enough that a "means"
+# three provisions away does not count.
+_CUE_WINDOW = 240
+
+
+def _phrase_at(text: str, phrase: str) -> int:
+    return text.lower().find(phrase.lower())
+
+
+def _is_definitional(text: str, phrase: str) -> bool:
+    """Does a defining cue sit beside this occurrence of the phrase?"""
+    at = _phrase_at(text, phrase)
+    if at < 0:
+        return False
+    window = text[max(0, at - _CUE_WINDOW) : at + len(phrase) + _CUE_WINDOW]
+    return bool(_DEFINING_CUE.search(window))
+
+
 @lru_cache(maxsize=1)
 def resolved_anchors() -> dict[Category, str]:
-    """Find the chunk that defines each category, by searching the corpus.
+    """Find the chunk that DEFINES each category, by searching the corpus.
 
-    Picks the shortest matching chunk, which is reliably the definition itself
-    rather than a long passage that merely mentions the phrase.
+    The rule was "the shortest chunk containing the phrase", and it was wrong in
+    three of six cases on the current corpus. A phrase appears in more places
+    than the provision that defines it, and schedules are short: "patent or
+    proprietary medicine" resolved to a Siddha formulary BOOK LIST because that
+    chunk was shorter than the definitions clause, and "Ayurveda Aahara" landed
+    on a food-additive schedule. Those chunks were then injected into the
+    classifier prompt under the heading "statutory definitions, quoted verbatim
+    from Indian law", and shown to the user as "Defined by ...".
+
+    So a candidate now has to look like a definition: the phrase, with a
+    defining cue beside it. Only if nothing qualifies does it fall back to the
+    old rule, which is better than resolving nothing at all.
     """
     found: dict[Category, str] = {}
     for category, (act_fragment, phrase) in DEFINITION_ANCHORS.items():
-        best: tuple[int, str] | None = None
+        defining: tuple[int, str] | None = None
+        mentioning: tuple[int, str] | None = None
         for chunk in all_chunks():
             if act_fragment.lower() not in str(chunk.get("act_name", "")).lower():
                 continue
             text = " ".join(str(chunk["chunk_text"]).split())
-            if phrase.lower() in text.lower():
-                if best is None or len(text) < best[0]:
-                    best = (len(text), chunk["chunk_id"])
+            if phrase.lower() not in text.lower():
+                continue
+            candidate = (len(text), chunk["chunk_id"])
+            if _is_definitional(text, phrase):
+                if defining is None or candidate < defining:
+                    defining = candidate
+            elif mentioning is None or candidate < mentioning:
+                mentioning = candidate
+        best = defining or mentioning
         if best:
             found[category] = best[1]
     return found
+
+
+def anchor_excerpt(chunk_id: str, phrase: str, size: int = 750) -> str:
+    """The chunk's text, centred on the phrase rather than cut from the start.
+
+    `excerpt()` truncates from character zero, which is fine for a short
+    provision and useless for a long one: the new-drug definition sits ~1,800
+    characters into a 4,000-character chunk, so the classifier was handed an
+    Ethics Committee proviso and told it was the definition of a new drug. Same
+    failure as the relevance gate in 6c - the text was there, and the window
+    could not see it.
+    """
+    text = excerpt(chunk_id, limit=10_000)
+    if not text:
+        return ""
+    at = _phrase_at(text, phrase)
+    if at < 0 or len(text) <= size:
+        return text[:size]
+    start = max(0, at - size // 3)
+    piece = text[start : start + size]
+    return ("..." if start > 0 else "") + piece
 
 
 def anchor_for(category: Category) -> str | None:
@@ -89,6 +171,17 @@ def verify_anchors() -> list[str]:
             )
         elif get_chunk(chunk_id) is None:
             problems.append(f"{category.value}: resolved chunk {chunk_id} missing")
+        else:
+            # The check that would have caught this: it is not enough for the
+            # chunk to contain the phrase somewhere, because the model is only
+            # ever shown a window of it. Verify the RENDERED text.
+            shown = anchor_excerpt(chunk_id, phrase, 750)
+            if phrase.lower() not in shown.lower():
+                problems.append(
+                    f"{category.value}: {chunk_id} contains '{phrase}' but the "
+                    "rendered excerpt does not show it"
+                )
+
     return problems
 
 
@@ -101,7 +194,7 @@ def _definitions_block() -> str:
         parts.append(
             f"### {category.value}  ({CATEGORY_LABELS[category]})\n"
             f"Source: {source} [{chunk_id}]\n"
-            f"{excerpt(chunk_id, 750)}"
+            f"{anchor_excerpt(chunk_id, DEFINITION_ANCHORS[category][1], 750)}"
         )
     return "\n\n".join(parts)
 

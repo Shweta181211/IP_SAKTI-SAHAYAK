@@ -43,7 +43,13 @@ from app.export_readiness import (  # noqa: E402
     _settle_status,
 )
 from app.generation import _build_takeaway  # noqa: E402
-from app.corpus_index import all_chunks  # noqa: E402
+from app.classification import (  # noqa: E402
+    DEFINITION_ANCHORS,
+    anchor_excerpt,
+    resolved_anchors,
+    verify_anchors,
+)
+from app.corpus_index import all_chunks, get_chunk  # noqa: E402
 from app.comparison import _CHUNK_ID as _COMPARISON_CHUNK_ID  # noqa: E402
 from app.conversation import EXAMPLE_QUESTIONS, conversational_reply  # noqa: E402
 from app.escalation import assess as assess_escalation  # noqa: E402
@@ -58,6 +64,7 @@ from app.retrieval import (  # noqa: E402
 from app.schemas import (  # noqa: E402
     AbstentionKind,
     Answer,
+    Category,
     Citation,
     HISTORY_TURNS,
     MAX_QUESTION_CHARS,
@@ -317,6 +324,92 @@ record("a reason naming an unretrieved provision is dropped", _fabricated is Non
 record("every permitted label is hedged - none is a bare verdict",
        all(not lbl.lower().startswith(("yes", "no ", "no,"))
            for labels in TAKEAWAY_LABELS.values() for lbl in labels))
+
+
+section("STATIC COPY - the marketing surfaces may not state law")
+# --------------------------------------------------------------------------
+# Home's category blurbs and the treaty lane captions ship as static strings
+# with no citation and no validator behind them. They used to assert law -
+# "Prior approval of the National Biodiversity Authority is required before IPR
+# on biological resources", "minimum IP standards WTO members must meet" - which
+# is exactly the fabricated-authority failure the whole pipeline is built to
+# prevent, just wearing a caption's clothes. They may name a subject and invite
+# a question; the legal content arrives from retrieval, with its provision.
+#
+# Assertive forms only. "Ask what it requires" is a question about the law and
+# is fine; "approval is required" is a statement of it and is not.
+_ASSERTIVE = re.compile(
+    r"\b(?:is|are|shall|must|cannot|may\s+not|does\s+not)\s+(?:be\s+)?(?:required|barred|excluded|prohibited|constrained|granted|patentable|permitted|needed|obliged)\b|\bprior\s+approval\s+of\b|\bmust\s+meet\b",
+    re.IGNORECASE,
+)
+
+_FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src"
+
+
+def _strings_in(path, key):
+    """Every `key: "..."` literal in a source file."""
+    text = (_FRONTEND / path).read_text(encoding="utf-8")
+    return re.findall(rf'{key}:\s*"([^"]*)"', text)
+
+
+_blurbs = _strings_in("pages/Home.tsx", "tease") + _strings_in("pages/Home.tsx", "teaseHi")
+_lanes = _strings_in("data/exportMarkets.ts", "use")
+
+record("Home category blurbs were found to check", len(_blurbs) >= 10, f"{len(_blurbs)} found")
+record("treaty lane captions were found to check", len(_lanes) == 10, f"{len(_lanes)} found")
+
+_offending = [t for t in _blurbs + _lanes if _ASSERTIVE.search(t)]
+record("no static blurb asserts what the law requires or bars",
+       not _offending, "; ".join(_offending)[:150])
+
+# The guard has to be able to fail, or it proves nothing.
+record("the guard would catch the sentence that prompted it",
+       bool(_ASSERTIVE.search(
+           "Prior approval of the National Biodiversity Authority is required before IPR.")))
+record("...and does not fire on a question about the same thing",
+       not _ASSERTIVE.search("Ask when the National Biodiversity Authority is engaged."))
+
+
+section("CLASSIFICATION ANCHORS - the definition, and the model must SEE it")
+# --------------------------------------------------------------------------
+# These chunks are injected into the classifier prompt under the heading
+# "statutory definitions, quoted verbatim from Indian law", and shown to the
+# user as "Defined by ...". Three of six silently resolved to the wrong chunk:
+# "patent or proprietary medicine" to a Siddha formulary BOOK LIST, "Ayurveda
+# Aahara" to a food-additive schedule, and the new-drug excerpt to an Ethics
+# Committee proviso 1,800 characters before the definition it was meant to show.
+
+record("every category resolves to an anchor",
+       len(resolved_anchors()) == len(DEFINITION_ANCHORS),
+       f"{len(resolved_anchors())} of {len(DEFINITION_ANCHORS)}")
+record("startup verification reports no problems",
+       verify_anchors() == [], str(verify_anchors()))
+
+for _cat, (_frag, _phrase) in DEFINITION_ANCHORS.items():
+    _cid = resolved_anchors().get(_cat)
+    _chunk = get_chunk(_cid) if _cid else None
+    record(f"{_cat.value}: resolves into the right act",
+           _chunk is not None and _frag.lower() in str(_chunk.get("act_name", "")).lower(),
+           str(_chunk.get("act_name") if _chunk else None))
+    # The check that would have caught the excerpt bug: it is not enough for the
+    # chunk to contain the phrase, because the model only ever sees a window.
+    _shown = anchor_excerpt(_cid, _phrase, 750) if _cid else ""
+    record(f"{_cat.value}: the rendered excerpt SHOWS the phrase",
+           _phrase.lower() in _shown.lower(), _shown[:70])
+
+# The specific wrong resolutions, named so they cannot come back.
+record("proprietary is the definition, not the formulary book list",
+       "formulations containing only such ingredients"
+       in anchor_excerpt(resolved_anchors()[Category.PATENT_PROPRIETARY],
+                         DEFINITION_ANCHORS[Category.PATENT_PROPRIETARY][1], 750).lower())
+record("new drug shows rule 122E, not the Ethics Committee proviso",
+       "definition of new drug"
+       in anchor_excerpt(resolved_anchors()[Category.NEW_DRUG],
+                         DEFINITION_ANCHORS[Category.NEW_DRUG][1], 750).lower())
+record("ayurveda aahar shows regulation 2(b), not a food-additive schedule",
+       "ayurveda aahara" in anchor_excerpt(
+           resolved_anchors()[Category.AYURVEDA_AAHAR],
+           DEFINITION_ANCHORS[Category.AYURVEDA_AAHAR][1], 750).lower())
 
 
 section("EXPORT READINESS - status is derived, and nothing is hardcoded")
