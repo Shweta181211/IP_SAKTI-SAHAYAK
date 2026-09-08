@@ -613,47 +613,6 @@
 }
 
 /* ---------- Exploratory brand surface (Dribbble Ayurveda energy) ---------- */
-/* The pointer mark is a leaf, not a ring — the same shape as the logo, so the
-   cursor reads as part of the identity rather than a generic tracker dot.
-   `border-radius: 0 100% 0 100%` gives the pointed oval; the rotation stands it
-   up, and the ::after stroke is the midrib.
-
-   `mix-blend-mode: difference` is what lets one mark work on both the dark
-   landing ground and the paper workspace without being told which it is on. */
-.has-aura .site-aura {
-  display: block;
-  position: fixed;
-  left: var(--mx, -80px);
-  top: var(--my, -80px);
-  z-index: 90;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
-  border: 1.5px solid rgba(232, 197, 107, 0.85);
-  border-radius: 0 100% 0 100%;
-  transform: rotate(-45deg);
-  pointer-events: none;
-  mix-blend-mode: difference;
-  transition:
-    width 120ms ease,
-    height 120ms ease;
-}
-
-/* Midrib. Drawn as a thin diagonal band so it follows the leaf's long axis
-   after the rotation, which a plain border cannot do. */
-.has-aura .site-aura::after {
-  content: "";
-  position: absolute;
-  inset: -1.5px;
-  border-radius: inherit;
-  background: linear-gradient(
-    to bottom right,
-    transparent calc(50% - 0.6px),
-    rgba(232, 197, 107, 0.8) calc(50% - 0.6px),
-    rgba(232, 197, 107, 0.8) calc(50% + 0.6px),
-    transparent calc(50% + 0.6px)
-  );
-}
 .site-aura {
   display: none;
 }
@@ -2355,167 +2314,401 @@
 }
 
 /* ============================================================================
-   CONSULT GROUND — PAPER / DESK
+   DARK SURFACE
 
-   "Desk" puts the workspace on the landing page's dark ground and leaves the
-   answer itself on paper: a printed opinion sheet lying on a desk. That is the
-   whole reason this is a GROUND switch and not a dark theme — inverting the
-   answer into light-on-dark would cost the readability the entire layout is
-   built around, and a statute excerpt is the last thing that should be set in
-   reversed type.
+   Not the paper sheet on a dark background - that was a light design wearing a
+   dark border, and it read as chrome. This is a different surface: no sheet, no
+   ruling, no card stock. Panels are glass over a lit ground, hairlines replace
+   borders, and the accents are re-mixed for a dark field rather than reused
+   from the paper palette, where the same hues go muddy.
 
-   So the overrides below only touch what surrounds the sheet: the ground, the
-   header, the composer and the empty state. Every answer component is
-   untouched and keeps working exactly as it does on paper.
+   It is a SURFACE, not a different product. Every component renders from the
+   identical Answer object with identical guards; nothing here changes what is
+   said, only what it is said on. That is why the whole thing is CSS scoped
+   under one class and no component takes a theme prop.
+
+   Colour still means what it means: haldi is the classification verdict, indigo
+   is sources, neem is grounded/verified, clay is a limit or a refusal. Each is
+   lifted in luminance so it survives on a dark field.
    ========================================================================== */
 
-.consult-desk {
+.consult-dark {
   position: relative;
-  background:
-    radial-gradient(ellipse at 16% 8%, rgba(196, 92, 58, 0.34), transparent 52%),
-    radial-gradient(ellipse at 86% 4%, rgba(201, 138, 43, 0.2), transparent 46%),
-    linear-gradient(165deg, #1a0e0a 0%, #0e1712 46%, #142018 100%);
+  isolation: isolate;
+
+  /* Re-mixed for a dark field. Overriding the tokens rather than every rule is
+     what makes this uniform: components built on the vars re-skin themselves,
+     and only the handful that use a token as a FOREGROUND need a fix below. */
+  --paper: #16211c;
+  --paper-deep: #1e2b25;
+  --rule: rgba(226, 214, 187, 0.14);
+  --ink: #f1e8d5;
+  --ink-soft: #cbc3b0;
+  --ink-faint: #8f9186;
+  --haldi: #e3a844;
+  --haldi-wash: rgba(227, 168, 68, 0.13);
+  --indigo: #93b8db;
+  --indigo-wash: rgba(147, 184, 219, 0.13);
+  --neem: #86b795;
+  --neem-wash: rgba(134, 183, 149, 0.13);
+  --clay: #e2866c;
+  --clay-wash: rgba(226, 134, 108, 0.13);
+
+  color: var(--ink);
+  background: #0d1512;
 }
 
-/* The pointer-tracked wash, borrowed from the landing hero so the ground is lit
-   rather than flat. Fixed and behind everything, so it never intercepts a
-   click on the sheet above it. */
-.consult-desk-glow {
+/* ---- the ground: lit and slowly moving, never a flat fill ---- */
+
+.consult-dark-wash,
+.consult-dark-glow {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
-  background: radial-gradient(
-    38vmax 38vmax at calc(var(--mxp, 0.5) * 100%) calc(var(--myp, 0.3) * 100%),
-    rgba(201, 138, 43, 0.16),
-    transparent 62%
-  );
-  transition: background-position 200ms linear;
 }
 
-/* The ruled paper texture belongs to the sheet, not to the desk. */
-.consult-desk .ruled {
-  position: relative;
-  z-index: 1;
-  background: transparent;
-}
-
-/* The sheet. Paper, ruled, lifted off the desk by a real shadow. */
-.consult-desk main {
-  margin-top: 1.1rem;
-  margin-bottom: 1.1rem;
-  border: 1px solid rgba(221, 206, 172, 0.35);
-  border-radius: 4px;
+.consult-dark-wash {
   background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 31px,
-      rgba(221, 206, 172, 0.38) 31px,
-      rgba(221, 206, 172, 0.38) 32px
-    ),
-    var(--paper);
+    radial-gradient(46vmax 40vmax at 12% -6%, rgba(196, 92, 58, 0.22), transparent 60%),
+    radial-gradient(40vmax 38vmax at 92% 4%, rgba(201, 138, 43, 0.16), transparent 58%),
+    radial-gradient(52vmax 44vmax at 60% 108%, rgba(79, 125, 92, 0.16), transparent 62%),
+    linear-gradient(168deg, #1a0f0a 0%, #0d1512 44%, #101b16 100%);
+  animation: dark-drift 34s ease-in-out infinite alternate;
+}
+
+/* The pointer wash. Subtle on purpose - it should be felt at the edge of
+   attention, not followed. */
+.consult-dark-glow {
+  background: radial-gradient(
+    30vmax 30vmax at calc(var(--mxp, 0.5) * 100%) calc(var(--myp, 0.35) * 100%),
+    rgba(227, 168, 68, 0.1),
+    transparent 60%
+  );
+}
+
+@keyframes dark-drift {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+/* ---- structure: the sheet and its ruling are gone ---- */
+
+.consult-dark .ruled {
+  background: none;
+}
+
+.consult-dark > .ruled > main {
+  max-width: 74rem;
+  padding-top: 2.2rem;
+  padding-bottom: 2.6rem;
+}
+
+/* Header and composer are glass over the ground, not opaque bars. */
+.consult-dark > .ruled > header,
+.consult-dark > .ruled > div:last-child {
+  border-color: rgba(226, 214, 187, 0.1);
+  background: rgba(13, 21, 18, 0.72);
+  backdrop-filter: blur(14px) saturate(120%);
+}
+
+/* ---- panels: glass, hairlines, no card stock ---- */
+
+/* NB: .support is deliberately absent. The gauge sits directly on the surface
+   in both modes - giving it a panel here would re-introduce exactly the frame
+   that made it look like a form field on paper. */
+.consult-dark .card,
+.consult-dark .step-card,
+.consult-dark .takeaway,
+.consult-dark .readiness-section,
+.consult-dark .readiness-plan,
+.consult-dark .readiness-sources {
+  border-color: rgba(226, 214, 187, 0.13);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 248, 0.055) 0%,
+    rgba(255, 253, 248, 0.022) 100%
+  );
   box-shadow:
-    0 1px 0 rgba(255, 253, 248, 0.5) inset,
-    0 18px 44px rgba(0, 0, 0, 0.45),
-    0 3px 10px rgba(0, 0, 0, 0.3);
+    0 1px 0 rgba(255, 253, 248, 0.06) inset,
+    0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
-/* Header and composer sit ON the desk, so they take the desk's colouring.
-   Both are sticky and translucent, which is why they need an explicit dark
-   ground rather than inheriting one. */
-.consult-desk > .ruled > header {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(14, 23, 18, 0.82);
+.consult-dark .takeaway::before {
+  background: var(--haldi);
+  opacity: 0.75;
 }
 
-.consult-desk > .ruled > div:last-child {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(14, 23, 18, 0.86);
+.consult-dark .step-card {
+  border-left-color: rgba(226, 214, 187, 0.13);
 }
 
-/* Chrome text on the desk. Scoped to the header and composer only — anything
-   inside the sheet keeps its paper colours. */
-.consult-desk > .ruled > header .eyebrow,
-.consult-desk > .ruled > div:last-child .eyebrow,
-.consult-desk > .ruled > div:last-child .consult-pill-label {
-  color: rgba(245, 238, 221, 0.62);
+.consult-dark .step-card:hover,
+.consult-dark .step-card.is-linked {
+  border-color: rgba(147, 184, 219, 0.4);
+  border-left-color: var(--indigo);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.08) inset,
+    0 14px 34px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(147, 184, 219, 0.12);
 }
 
-.consult-desk > .ruled > header button,
-.consult-desk > .ruled > div:last-child button {
-  color: rgba(245, 238, 221, 0.78);
+.consult-dark .step-card.is-abstained {
+  background: linear-gradient(
+    180deg,
+    rgba(226, 134, 108, 0.1) 0%,
+    rgba(226, 134, 108, 0.04) 100%
+  );
+  border-left-color: var(--clay);
 }
 
-.consult-desk > .ruled > header button {
-  border-color: rgba(255, 255, 255, 0.18);
+.consult-dark .step-medallion,
+.consult-dark .step-provision,
+.consult-dark .step-source,
+.consult-dark .readiness-plan-n {
+  background: rgba(255, 253, 248, 0.05);
+  border-color: rgba(226, 214, 187, 0.16);
 }
 
-.consult-desk > .ruled > div:last-child .consult-pill-track {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.05);
+/* Two rules where a token is used as a FOREGROUND on an accent fill. Inverting
+   --paper would have turned these dark-on-dark. */
+.consult-dark .step-card.is-pinned .step-medallion,
+.consult-dark .step-card.is-linked .step-medallion,
+.consult-dark .step-provision-n {
+  color: #0e1712;
 }
 
-.consult-desk > .ruled > div:last-child .consult-pill.is-on {
-  color: var(--ink);
+.consult-dark .step-provision-n {
+  background: var(--indigo);
 }
 
-/* The composer's own input card stays paper — you are writing onto the sheet. */
-.consult-desk > .ruled > div:last-child .card {
+/* ---- Tailwind utilities used in the components ---- */
+
+.consult-dark .text-ink { color: var(--ink); }
+.consult-dark .text-ink-soft { color: var(--ink-soft); }
+.consult-dark .text-ink-faint { color: var(--ink-faint); }
+.consult-dark .text-haldi { color: var(--haldi); }
+.consult-dark .text-clay { color: var(--clay); }
+.consult-dark .text-neem { color: var(--neem); }
+.consult-dark .text-indigo-dye { color: var(--indigo); }
+.consult-dark .border-rule { border-color: var(--rule); }
+.consult-dark .border-haldi { border-color: var(--haldi); }
+.consult-dark .border-clay { border-color: var(--clay); }
+.consult-dark .border-neem { border-color: var(--neem); }
+.consult-dark .border-indigo-dye { border-color: var(--indigo); }
+.consult-dark .bg-haldi-wash { background-color: var(--haldi-wash); }
+.consult-dark .bg-clay-wash { background-color: var(--clay-wash); }
+.consult-dark .bg-indigo-wash { background-color: var(--indigo-wash); }
+.consult-dark .bg-neem-wash { background-color: var(--neem-wash); }
+.consult-dark .bg-paper-deep { background-color: rgba(255, 253, 248, 0.07); }
+/* The feature chips on the empty state are bg-white/60 - a light wash that
+   goes chalky on a dark ground. */
+.consult-dark .bg-white\/60 { background-color: rgba(255, 253, 248, 0.06); }
+.consult-dark .bg-indigo-dye { background-color: var(--indigo); color: #0e1712; }
+.consult-dark .bg-haldi { background-color: var(--haldi); color: #0e1712; }
+.consult-dark .bg-clay { background-color: var(--clay); }
+.consult-dark .bg-neem { background-color: var(--neem); }
+
+/* The send button inverts: cream on the dark ground reads as the primary
+   action, where a near-black button would disappear into it. */
+.consult-dark .send-btn {
+  background: #efe4cb;
+  color: #14201a;
+}
+
+.consult-dark .send-btn:hover {
   background: #fffdf8;
 }
 
-.consult-desk > .ruled > div:last-child .card button {
-  color: inherit;
+.consult-dark .consult-pill-track {
+  border-color: rgba(226, 214, 187, 0.16);
+  background: rgba(255, 253, 248, 0.05);
 }
 
-.consult-desk > .ruled > div:last-child .send-btn {
-  color: var(--paper);
+.consult-dark .consult-pill.is-on {
+  color: #0e1712;
 }
 
-/* The empty state is the only page content that lives outside a card, so it is
-   the one thing inside the sheet that would otherwise look unconsidered. It
-   stays on paper with everything else — no override needed — but the leaf mark
-   gets a touch more presence against the framed sheet. */
-.consult-desk .consult-leaf {
-  opacity: 0.9;
+.consult-dark .mic-btn,
+.consult-dark .ground-switch {
+  border-color: rgba(226, 214, 187, 0.18);
+}
+
+.consult-dark .ground-switch-btn {
+  color: rgba(241, 232, 213, 0.6);
+}
+
+.consult-dark .ground-switch-btn:hover {
+  color: var(--ink);
+}
+
+.consult-dark .ground-switch-btn.is-on {
+  background: var(--haldi);
+  color: #0e1712;
+}
+
+/* The composer's field is glass too - a white box here would be a hole. */
+.consult-dark > .ruled > div:last-child .card {
+  background: rgba(255, 253, 248, 0.05);
+}
+
+.consult-dark textarea::placeholder {
+  color: rgba(241, 232, 213, 0.34);
+}
+
+/* ---- the gauge, re-lit ---- */
+
+.consult-dark .support-label {
+  color: var(--neem);
+}
+
+.consult-dark .support-label.is-thin {
+  color: var(--clay);
+}
+
+/* ---- motion: the page should feel alive without becoming busy ---- */
+
+/* Each turn rises into place. */
+.consult-dark .msg-in {
+  animation: dark-rise 460ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+
+@keyframes dark-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The four trail cards deal themselves out in reading order. */
+.consult-dark .step-card {
+  animation: dark-deal 480ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+@keyframes dark-deal {
+  from {
+    opacity: 0;
+    transform: translateY(16px) rotateX(6deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A slow sheen crosses the takeaway once, the way light moves over glass. */
+.consult-dark .takeaway {
+  position: relative;
+  overflow: hidden;
+}
+
+.consult-dark .takeaway::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 253, 248, 0.09) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  animation: dark-sheen 1500ms ease-out 320ms 1 both;
+}
+
+@keyframes dark-sheen {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+/* The citation rail lights as it is referenced. */
+.consult-dark aside li .card {
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.consult-dark aside li .card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(147, 184, 219, 0.45);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.08) inset,
+    0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+/* Example chips on the empty state breathe on hover rather than just tinting. */
+.consult-dark .example-chip {
+  transition:
+    transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1),
+    border-color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.consult-dark .example-chip:hover {
+  transform: translateY(-3px);
+  border-color: rgba(227, 168, 68, 0.5);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+}
+
+.consult-dark .consult-leaf {
+  filter: drop-shadow(0 8px 22px rgba(227, 168, 68, 0.22));
+}
+
+/* The waiting skeleton glows instead of greying, so a 20-second wait looks
+   like something warming up rather than something stalled. */
+.consult-dark .trail-sweep .h-2\.5,
+.consult-dark .trail-sweep > div {
+  background: rgba(255, 253, 248, 0.09);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .consult-desk-glow {
-    background: radial-gradient(
-      38vmax 38vmax at 50% 30%,
-      rgba(201, 138, 43, 0.14),
-      transparent 62%
-    );
+  .consult-dark-wash,
+  .consult-dark .msg-in,
+  .consult-dark .step-card,
+  .consult-dark .takeaway::after {
+    animation: none;
+  }
+  .consult-dark .step-card:hover,
+  .consult-dark .example-chip:hover,
+  .consult-dark aside li .card:hover {
+    transform: none;
   }
 }
 
+/* A dark surface is a screen preference. Print is always the paper sheet. */
 @media print {
-  .consult-desk {
-    background: none;
+  .consult-dark {
+    background: #fff;
+    --paper: #f5eedd;
+    --ink: #16241e;
+    --ink-soft: #24382f;
+    --rule: #ddceac;
   }
-  .consult-desk-glow {
+  .consult-dark-wash,
+  .consult-dark-glow {
     display: none;
   }
-  .consult-desk main {
-    border: none;
-    box-shadow: none;
-    margin: 0;
-  }
 }
 
-/* ---- the switch itself ---- */
+/* ---- the surface switch ---- */
 
 .ground-switch {
   display: flex;
   overflow: hidden;
   border: 1px solid var(--rule);
   border-radius: 3px;
-}
-
-.consult-desk .ground-switch {
-  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .ground-switch-btn {
@@ -2540,19 +2733,6 @@
 }
 
 .ground-switch-btn.is-on {
-  background: var(--haldi);
-  color: var(--ink);
-}
-
-.consult-desk .ground-switch-btn {
-  color: rgba(245, 238, 221, 0.6);
-}
-
-.consult-desk .ground-switch-btn:hover {
-  color: var(--paper);
-}
-
-.consult-desk .ground-switch-btn.is-on {
   background: var(--haldi);
   color: var(--ink);
 }
@@ -2587,12 +2767,52 @@
   background: var(--indigo-wash);
 }
 
-/* Enough desk showing for the metaphor to land. At full sheet width the dark
-   ground reads as a border rather than a surface, so the sheet is inset once
-   there is room to spare — never on narrow screens, where every pixel of
-   reading width matters more than the effect. */
-@media (min-width: 1180px) {
-  .consult-desk > .ruled > main {
-    max-width: min(72rem, calc(100% - 7rem));
-  }
+
+
+/* ============================================================================
+   THE POINTER IS A LEAF
+
+   Not a mark that follows the arrow - the arrow is gone. A trailing element is
+   two pointers at once, and the system arrow wins the eye every time; it also
+   lags on a busy page in a way a real cursor image never does.
+
+   Geometry is the logo's mark: two mirrored curves meeting at a point, with a
+   midrib. It is drawn tip-first at the origin and rotated so the tip leads
+   up-left, and the hotspot sits exactly on that tip.
+
+   The dark outline is what lets one gold leaf stay visible on both the paper
+   workspace and the dark surface, without needing to know which it is over.
+
+   Hotspots must be INTEGERS. A fractional one silently invalidates the whole
+   declaration and the system arrow comes straight back.
+   ========================================================================== */
+
+.has-aura,
+.has-aura button,
+.has-aura a,
+.has-aura summary,
+.has-aura label,
+.has-aura [role="radio"],
+.has-aura [role="button"] {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'20'%20height%3D'31'%20viewBox%3D'0%200%2020%2031'%3E%3Cg%20transform%3D'translate(2%201)%20rotate(-25)'%3E%3Cpath%20d%3D'M0%200%20C-6.5%2010%20-6.5%2020%200%2029%20C6.5%2020%206.5%2010%200%200%20Z'%20fill%3D'%23d9a441'%20stroke%3D'%232b1a0e'%20stroke-width%3D'1.1'%20stroke-linejoin%3D'round'%2F%3E%3Cpath%20d%3D'M0%202%20L0%2027'%20stroke%3D'%236b4a18'%20stroke-width%3D'0.9'%20opacity%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 2 1, auto;
+}
+
+/* Brighter and slightly larger over anything that responds to a click, so the
+   cursor still answers "can I press this?" now that the arrow is not there to. */
+.has-aura button:hover,
+.has-aura a:hover,
+.has-aura label:hover,
+.has-aura [role="radio"]:hover,
+.has-aura [role="button"]:hover,
+.has-aura .step-card:hover,
+.has-aura .tilt-card:hover {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'23'%20height%3D'34'%20viewBox%3D'0%200%2023%2034'%3E%3Cg%20transform%3D'translate(2.5%201)%20rotate(-25)'%3E%3Cpath%20d%3D'M0%200%20C-7.2%2010%20-7.2%2020%200%2031%20C7.2%2020%207.2%2010%200%200%20Z'%20fill%3D'%23f0c268'%20stroke%3D'%232b1a0e'%20stroke-width%3D'1.1'%20stroke-linejoin%3D'round'%2F%3E%3Cpath%20d%3D'M0%202%20L0%2029'%20stroke%3D'%238a6320'%20stroke-width%3D'0.9'%20opacity%3D'0.75'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 2 1, pointer;
+}
+
+/* Typing needs a caret. A leaf hovering over a text field tells the reader
+   nothing about where the insertion point is. */
+.has-aura input,
+.has-aura textarea,
+.has-aura select {
+  cursor: auto;
 }

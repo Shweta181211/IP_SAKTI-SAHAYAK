@@ -30,11 +30,12 @@ type Mode = "ask" | "compare";
 // transcript per named consultation rather than a single anonymous blob that
 // "End session" destroyed.
 const STYLE_KEY = "ipsakti.style.v1";
-// The workspace ground. "paper" is the printed-sheet default; "desk" puts
-// that sheet on the landing page's dark ground. Remembered per browser
-// because it is a viewing preference, not a property of any one answer.
-const GROUND_KEY = "ipsakti.ground.v1";
-type Ground = "paper" | "desk";
+// The workspace ground. "paper" is the printed-sheet default; "dark" is a
+// different surface altogether - no sheet, no ruling, panels instead of
+// cards. Remembered per browser: it is a viewing preference, not a
+// property of any one answer, and every answer renders identically in both.
+const GROUND_KEY = "ipsakti.ground.v2";
+type Ground = "paper" | "dark";
 
 /** `lockedMode` is the mode this route opens in. It is a starting point, not a
  *  lock: the rail can still switch, because a user who lands on /compare and
@@ -329,11 +330,16 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
 
   return (
     <div
-      className={`min-h-[calc(100vh-56px)] ${ground === "desk" ? "consult-desk" : ""}`}
+      className={`min-h-[calc(100vh-56px)] ${ground === "dark" ? "consult-dark" : ""}`}
     >
-      {/* The pointer-tracked wash from the landing page, so the dark ground
-          is lit rather than flat. Inert in paper mode. */}
-      {ground === "desk" && <div className="consult-desk-glow" aria-hidden />}
+      {/* Two drifting washes plus a pointer-tracked one, so the ground is
+          lit and slowly moving rather than a flat fill. Inert on paper. */}
+      {ground === "dark" && (
+        <>
+          <div className="consult-dark-wash" aria-hidden />
+          <div className="consult-dark-glow" aria-hidden />
+        </>
+      )}
       {/* One column, no rail.
           The controls that lived in a permanent sidebar now sit where the
           decision is actually made - mode, jurisdiction and wording as pills
@@ -381,19 +387,18 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
               </>
             )}
 
-            {/* Ground, not theme: this changes what the sheet sits ON, and
-                the sheet itself stays paper in both. The answer is a printed
-                legal opinion either way - inverting it into dark type would
-                cost the readability the whole layout is built around. */}
-            <div className="ground-switch" role="radiogroup" aria-label="Workspace ground">
-              {(["paper", "desk"] as const).map((g) => (
+            {/* Two surfaces for the same answer. Nothing about the content
+                changes - same steps, same citations, same guards - so this is
+                a viewing preference and lives next to the other ones. */}
+            <div className="ground-switch" role="radiogroup" aria-label="Workspace surface">
+              {(["paper", "dark"] as const).map((g) => (
                 <button
                   key={g}
                   type="button"
                   role="radio"
                   aria-checked={ground === g}
                   onClick={() => setGround(g)}
-                  title={g === "paper" ? "Paper — plain sheet" : "Desk — sheet on a dark ground"}
+                  title={g === "paper" ? "Paper — the printed sheet" : "Dark — low-light surface"}
                   className={`ground-switch-btn ${ground === g ? "is-on" : ""}`}
                 >
                   {g === "paper" ? (
@@ -403,9 +408,10 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                     </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path d="M3 17h18" strokeLinecap="round" />
-                      <path d="M8 6h11v8H8z" strokeLinejoin="round" />
-                      <path d="M5 21v-4M19 21v-4" strokeLinecap="round" />
+                      <path
+                        d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   )}
                 </button>
