@@ -31,6 +31,8 @@ separation is a request; a validator that drops the item is a guarantee.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
@@ -66,6 +68,121 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ReadinessArea:
+    """One line the checklist must answer, and the probe that finds evidence for it.
+
+    The areas are a structural property of the FEATURE - what an export
+    readiness view has to cover - and not anything scanned out of what the user
+    typed, so 5's no-keyword-special-casing rule holds. Same precedent as
+    `comparison.COMPARED`.
+
+    They are the reason the report is complete rather than lucky. Measured on a
+    Triphala tablet report before this existed: three India items, ALL of them
+    about access and benefit sharing, because ABS vocabulary dominated the one
+    retrieval for that side. Licensing, trade marks and labelling were not
+    reported as gaps - they were simply absent, and nothing on the page said so.
+
+    The market is never named here, in code or in a comment: `test_units.py`
+    greps this module for country and regulator names and fails if one appears,
+    because a market named in a comment is how special-casing starts.
+    """
+
+    key: str
+    label: str
+    #: Statutory vocabulary, not the user's words. Retrieved with a small
+    #: reserved allocation so this area reaches the prompt even when the
+    #: product's own vocabulary out-scores it in the fused ranking.
+    probe: str
+
+
+# The India side of the checklist: what has to be true here before a product can
+# be made, protected and shipped.
+INDIA_AREAS: tuple[ReadinessArea, ...] = (
+    ReadinessArea(
+        "licensing", "Manufacture and licensing",
+        "licence to manufacture for sale ayurvedic siddha or unani drugs, "
+        "application to the licensing authority, conditions of licence",
+    ),
+    ReadinessArea(
+        "ip", "Patent, trade mark and GI",
+        "registration of a trade mark, inventions not patentable, "
+        "registration of a geographical indication of goods",
+    ),
+    ReadinessArea(
+        "abs", "Biodiversity and benefit sharing",
+        "approval of the National Biodiversity Authority before obtaining a "
+        "biological resource, fair and equitable benefit sharing",
+    ),
+    ReadinessArea(
+        "labelling", "Labelling, packaging and claims",
+        "particulars to be shown on the label of a container of ayurvedic drugs, "
+        "prohibition of advertisement of certain drugs and magic remedies",
+    ),
+    ReadinessArea(
+        "documents", "Records, documents and certifications",
+        "records and registers to be maintained, form of application and fee, "
+        "certificate issued by the licensing authority for export",
+    ),
+)
+
+# The target side: what the international instruments settle about placing the
+# product in the named market. Every one of these can legitimately come back
+# NOT_COVERED - the corpus holds treaties and regional instruments, not most
+# countries' domestic marketing-authorisation law, and saying so is the point.
+TARGET_AREAS: tuple[ReadinessArea, ...] = (
+    ReadinessArea(
+        "pathway", "Regulatory pathway",
+        "marketing authorisation or simplified registration procedure for "
+        "traditional herbal medicinal products",
+    ),
+    ReadinessArea(
+        "ingredients", "Ingredient restrictions",
+        "herbal substances and herbal preparations permitted, restrictions on "
+        "constituents and vitamins or minerals",
+    ),
+    ReadinessArea(
+        "claims", "Health-claim restrictions",
+        "indications appropriate to traditional use, claims that may be made "
+        "on the basis of long-standing use",
+    ),
+    ReadinessArea(
+        "labelling", "Labelling and packaging",
+        "labelling and package leaflet particulars required for the product",
+    ),
+    ReadinessArea(
+        "ip", "IP protection in that market",
+        "protection of trade marks, patents and geographical indications in the "
+        "territory of a contracting party, national treatment",
+    ),
+)
+
+READINESS_AREAS = {"national": INDIA_AREAS, "international": TARGET_AREAS}
+
+
+def _reserve_area_evidence(
+    result: "RetrievalResult", areas: tuple[ReadinessArea, ...], jurisdiction: str
+) -> list[str]:
+    """Add a reserved allocation per area to an already-gated evidence set.
+
+    Costs no model call: the gate has run on the side's own retrieval and
+    settled scope, and a fixed probe needs no expansion. The ids returned are
+    what the prompt may cite, in fused order with the reserved slots appended.
+    """
+    ids = [item.chunk_id for item in result.evidence]
+    seen = set(ids)
+    for area in areas:
+        probe = retrieve(
+            area.probe, top_k=settings.readiness_probe_slots,
+            jurisdiction=jurisdiction, use_llm_gate=False, expand=False,
+        )
+        for item in probe.evidence:
+            if item.chunk_id not in seen:
+                seen.add(item.chunk_id)
+                ids.append(item.chunk_id)
+    return ids
+
+
 READINESS_PROMPT = """You are preparing an **export readiness** view for an Ayurvedic product. \
 You give information, never legal advice, and you answer STRICTLY from the numbered evidence \
 below. You have no other knowledge of the law.
@@ -91,13 +208,20 @@ There are two separate bodies of evidence and they must never be mixed.
 ## What to produce
 
 **India-side items** - what Indian law requires before this product can be made, protected and \
-shipped. Cover, where the Indian evidence supports it: the regulatory/licensing pathway, \
-intellectual-property considerations (patent, trade mark, GI as relevant), access-and-benefit-\
-sharing or biodiversity duties, and any labelling or advertising constraint. Cite ONLY ids from \
-the INDIAN evidence.
+shipped. Return EXACTLY ONE item for each of these areas, using the area key verbatim:
+
+{india_areas}
 
 **Target-market items** - what the international evidence says bears on placing this product in \
-the named market. Cite ONLY ids from the INTERNATIONAL evidence.
+the named market. Return EXACTLY ONE item for each of these areas, using the area key verbatim:
+
+{target_areas}
+
+Answer every area. Where the evidence on that side does not reach an area, still return the \
+item, with `status` `not_covered`, an empty `citation_ids`, and a `detail` saying plainly what \
+is missing. A checklist a reader cannot tell is incomplete is worse than one that admits a gap. \
+Cite ONLY ids from the INDIAN evidence on India-side items and ONLY ids from the INTERNATIONAL \
+evidence on target-market items.
 
 **This is the part to get right.** The international corpus holds treaties and regional \
 instruments. It does NOT hold most countries' domestic marketing-authorisation law.
@@ -108,8 +232,8 @@ its contracting parties. It does not have to name the country to govern it, and 
 ordinary knowledge of which bloc or treaty a country belongs to in order to decide that. What \
 you may NOT do is take the legal requirement from anywhere but the evidence.
 
-If nothing in the evidence reaches the market on that test, return an EMPTY `target_items` list \
-and say why in `target_note`. Do not substitute an instrument that has nothing to do with the \
+If nothing in the evidence reaches the market on that test, mark every target area \
+`not_covered` and say why in `target_note`. Do not substitute an instrument that has nothing to do with the \
 market, and do not write generic export advice. An honest gap is the correct output and it is \
 what this tool is for.
 
@@ -120,6 +244,7 @@ Each item carries a `status`, and you must choose it from what the evidence actu
 product meets it, or it points to a step the user must still take.
 - `blocker` - the evidence shows something that would BAR this route as described (a statutory \
 exclusion, a prohibition, a claim that may not be made).
+- `not_covered` - this side's evidence does not settle the area at all.
 
 `status_reason` is one short clause saying why that status and not another.
 
@@ -147,15 +272,17 @@ Return ONLY a JSON object, no markdown fence and no commentary:
  "target_framing_citation_ids": ["<international ids>"],
  "target_note": "<why the target market is not covered, or null if it is>",
  "india_items": [
-   {{"title": "...", "detail": "...", "status": "verified|needs_verification|blocker",
+   {{"area": "<area key>", "title": "...", "detail": "...",
+     "status": "verified|needs_verification|blocker|not_covered",
      "status_reason": "...", "citation_ids": ["<indian ids>"]}}
  ],
  "target_items": [
-   {{"title": "...", "detail": "...", "status": "verified|needs_verification|blocker",
+   {{"area": "<area key>", "title": "...", "detail": "...",
+     "status": "verified|needs_verification|blocker|not_covered",
      "status_reason": "...", "citation_ids": ["<international ids>"]}}
  ],
  "action_plan": [
-   {{"text": "...", "jurisdiction": "india|international", "citation_ids": ["..."]}}
+   {{"text": "...", "jurisdiction": "national|international", "citation_ids": ["..."]}}
  ]}}"""
 
 
@@ -197,15 +324,42 @@ def _target_question(description: str, target: str) -> str:
     )
 
 
-def _evidence_block(result: RetrievalResult | None, char_limit: int = 1000) -> str:
-    if result is None or not result.evidence:
-        return "(nothing retrieved)"
+def _area_menu(areas: tuple[ReadinessArea, ...]) -> str:
+    """The areas as the prompt sees them: key first, so it can be echoed back."""
+    return chr(10).join(f"- `{area.key}` - {area.label}" for area in areas)
+
+
+def _evidence_block(
+    result: RetrievalResult | None,
+    char_limit: int = 1000,
+    extra_ids: list[str] | None = None,
+) -> str:
+    """The evidence the prompt may cite.
+
+    `extra_ids` carries the per-area reserved slots. They are appended rather
+    than merged into the ranking on purpose: the fused order is what retrieval
+    judged most relevant to the product, and a probe result is here because the
+    checklist needs that area covered, not because it out-scored anything.
+    """
     parts = []
-    for item in result.evidence:
+    seen = set()
+    for item in (result.evidence if result else []):
         meta = item.metadata or {}
         text = " ".join(str(item.text).split())[:char_limit]
-        parts.append(f"[{item.chunk_id}] {meta.get('act_name', 'Unknown source')}\n{text}")
-    return "\n\n".join(parts)
+        seen.add(item.chunk_id)
+        parts.append(f"[{item.chunk_id}] {meta.get('act_name', 'Unknown source')}" + chr(10) + text)
+    for chunk_id in extra_ids or []:
+        if chunk_id in seen:
+            continue
+        chunk = get_chunk(chunk_id)
+        if chunk is None:
+            continue
+        seen.add(chunk_id)
+        text = " ".join(str(chunk.get("chunk_text", "")).split())[:char_limit]
+        parts.append(f"[{chunk_id}] {chunk.get('act_name', 'Unknown source')}" + chr(10) + text)
+    if not parts:
+        return "(nothing retrieved)"
+    return (chr(10) + chr(10)).join(parts)
 
 
 def _side_of(chunk_id: str) -> str | None:
@@ -245,13 +399,22 @@ def _settle_status(claimed: str, kept_ids: list[str]) -> tuple[ReadinessStatus, 
 
 
 def _build_items(
-    raw_items: object, allowed_ids: list[str], side: str
+    raw_items: object, allowed_ids: list[str], side: str,
+    areas: tuple[ReadinessArea, ...] = (),
 ) -> tuple[list[ReadinessItem], list[str]]:
-    """Validate raw items for one side. Returns (items, rejected ids)."""
+    """Validate raw items for one side, then make the checklist complete.
+
+    Two jobs, and the second is the one that changed the feature. Validation
+    settles what each returned item may claim. Then every declared area with no
+    surviving item gets an explicit NOT_COVERED line, so the reader can see the
+    whole checklist and tell a gap from an omission - which they could not
+    before, because a missing area simply was not on the page.
+    """
     items: list[ReadinessItem] = []
     rejected: list[str] = []
+    by_key = {a.key: a for a in areas}
     if not isinstance(raw_items, list):
-        return items, rejected
+        raw_items = []
 
     for raw in raw_items:
         if not isinstance(raw, dict):
@@ -281,12 +444,37 @@ def _build_items(
         if status is ReadinessStatus.NOT_COVERED and not detail:
             detail = "The corpus does not contain a source that settles this."
 
+        # An area key the model invented is not a reason to drop a validated,
+        # cited requirement - it just does not get a heading.
+        area = by_key.get(str(raw.get("area") or "").strip().lower())
         items.append(
             ReadinessItem(
+                area=area.key if area else "",
+                area_label=area.label if area else "",
                 title=title, detail=detail, status=status,
                 status_reason=reason, citation_ids=kept,
             )
         )
+
+    # Order by the declared areas, and fill the ones nothing came back for.
+    covered_keys = {item.area for item in items if item.area}
+    for area in areas:
+        if area.key in covered_keys:
+            continue
+        items.append(
+            ReadinessItem(
+                area=area.key, area_label=area.label, title=area.label,
+                detail=(
+                    "This corpus does not contain a source that settles this for this "
+                    "product. It is listed so the gap is visible, not because it does "
+                    "not apply - check it with the competent authority."
+                ),
+                status=ReadinessStatus.NOT_COVERED,
+                status_reason="no source in this corpus reaches this requirement",
+            )
+        )
+    order = {a.key: i for i, a in enumerate(areas)}
+    items.sort(key=lambda i: order.get(i.area, len(order)))
     return items, rejected
 
 
@@ -365,17 +553,27 @@ def build_report(request: ExportReadinessRequest) -> ExportReadinessReport:
     if not national.sufficient:
         return _abstained(request, national.abstention, national.reason, classification)
 
-    national_ids = list(national.allowed_ids)
-    international_ids = list(international.allowed_ids) if international.sufficient else []
+    # Each area gets a small reserved allocation of its own, on top of the fused
+    # retrieval above. Without it the checklist is whatever one ranking happened
+    # to surface: measured on a Triphala tablet report, three India items and
+    # all three about benefit sharing.
+    national_ids = _reserve_area_evidence(national, INDIA_AREAS, "national")
+    international_ids = (
+        _reserve_area_evidence(international, TARGET_AREAS, "international")
+        if international.sufficient else []
+    )
 
     prompt = READINESS_PROMPT.format(
-        national_evidence=_evidence_block(national),
+        national_evidence=_evidence_block(national, extra_ids=national_ids),
         international_evidence=(
-            _evidence_block(international) if international.sufficient
+            _evidence_block(international, extra_ids=international_ids)
+            if international.sufficient
             else "(the international corpus does not reach this market for this product)"
         ),
         product=description,
         target_country=request.target_country,
+        india_areas=_area_menu(INDIA_AREAS),
+        target_areas=_area_menu(TARGET_AREAS),
     )
     try:
         data = complete_json(prompt, max_tokens=3000)
@@ -388,9 +586,11 @@ def build_report(request: ExportReadinessRequest) -> ExportReadinessReport:
             classification,
         )
 
-    india_items, rejected = _build_items(data.get("india_items"), national_ids, "national")
+    india_items, rejected = _build_items(
+        data.get("india_items"), national_ids, "national", INDIA_AREAS
+    )
     target_items, target_rejected = _build_items(
-        data.get("target_items"), international_ids, "international"
+        data.get("target_items"), international_ids, "international", TARGET_AREAS
     )
     rejected.extend(target_rejected)
 
@@ -414,7 +614,7 @@ def build_report(request: ExportReadinessRequest) -> ExportReadinessReport:
 
     # Coverage is decided by what actually came back, never by a list of
     # supported countries.
-    covered = bool(target_items)
+    covered = any(i.status is not ReadinessStatus.NOT_COVERED for i in target_items)
     uncovered_reason = None
     if not covered:
         note = strip_chunk_ids(str(data.get("target_note") or "").strip())
@@ -429,9 +629,9 @@ def build_report(request: ExportReadinessRequest) -> ExportReadinessReport:
     india_section = ReadinessSection(
         jurisdiction="national",
         heading="India-side requirements",
-        covered=bool(india_items),
+        covered=any(i.status is not ReadinessStatus.NOT_COVERED for i in india_items),
         uncovered_reason=(
-            None if india_items
+            None if any(i.status is not ReadinessStatus.NOT_COVERED for i in india_items)
             else "No Indian requirement could be grounded in a cited source for this product."
         ),
         items=india_items,

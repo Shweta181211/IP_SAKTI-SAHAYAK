@@ -1142,6 +1142,63 @@ record("only the invented sentence is removed, the correct one survives",
 
 
 
+# --------------------------------------------------------------------------
+section("READINESS AREAS - the checklist is complete by construction")
+# --------------------------------------------------------------------------
+
+from app.export_readiness import (  # noqa: E402
+    INDIA_AREAS,
+    TARGET_AREAS,
+    _area_menu,
+    _build_items,
+)
+
+record("both sides declare their areas",
+       len(INDIA_AREAS) >= 5 and len(TARGET_AREAS) >= 5,
+       f"{len(INDIA_AREAS)} India / {len(TARGET_AREAS)} target")
+
+record("area keys are unique per side",
+       len({a.key for a in INDIA_AREAS}) == len(INDIA_AREAS)
+       and len({a.key for a in TARGET_AREAS}) == len(TARGET_AREAS))
+
+record("every area carries a probe in statutory vocabulary",
+       all(len(a.probe.split()) >= 5 for a in INDIA_AREAS + TARGET_AREAS))
+
+# The point of the areas: a model that answers only one of them still produces
+# a complete checklist, with the rest shown as gaps rather than omitted. Before
+# this, a report came back with three items - all of them access-and-benefit-
+# sharing - and nothing on the page said the other areas had not been looked at.
+_partial = [{"area": "licensing", "title": "Manufacturing licence",
+             "detail": "A licence in Form 25-D is required.",
+             "status": "needs_verification", "status_reason": "applies to this product",
+             "citation_ids": []}]
+_items, _ = _build_items(_partial, [], "national", INDIA_AREAS)
+record("every declared area appears even when the model answers one",
+       {i.area for i in _items} == {a.key for a in INDIA_AREAS},
+       str(sorted(i.area for i in _items)))
+record("the areas nothing was returned for are marked not_covered",
+       all(i.status is ReadinessStatus.NOT_COVERED for i in _items if i.area != "licensing"),
+       str([(i.area, i.status.value) for i in _items]))
+record("items come back in the declared area order",
+       [i.area for i in _items] == [a.key for a in INDIA_AREAS],
+       str([i.area for i in _items]))
+record("every line carries its area label for the page to show",
+       all(i.area_label for i in _items))
+
+# An area key the model invents must not cost a validated requirement its place.
+_odd = [{"area": "made_up", "title": "Something real", "detail": "x",
+         "status": "verified", "status_reason": "y", "citation_ids": []}]
+_items2, _ = _build_items(_odd, [], "national", INDIA_AREAS)
+record("an unknown area key keeps the item but gives it no heading",
+       any(i.title == "Something real" and i.area == "" for i in _items2),
+       str([(i.area, i.title) for i in _items2][:2]))
+
+record("the prompt's area menu names every key",
+       all(f"`{a.key}`" in _area_menu(INDIA_AREAS) for a in INDIA_AREAS),
+       _area_menu(INDIA_AREAS).replace(chr(10), " | "))
+
+
+
 
 # --------------------------------------------------------------------------
 print("\n" + "=" * 74)

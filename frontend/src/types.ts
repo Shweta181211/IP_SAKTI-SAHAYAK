@@ -278,6 +278,11 @@ export type ReadinessStatus =
   | "not_covered";
 
 export interface ReadinessItem {
+  /** Which requirement area this line answers. Fixed per side, so the checklist
+   *  is complete: an area the corpus cannot reach still appears, marked
+   *  not_covered, rather than quietly missing. */
+  area?: string;
+  area_label?: string;
   title: string;
   detail: string;
   status: ReadinessStatus;

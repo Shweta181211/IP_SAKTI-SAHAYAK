@@ -3976,3 +3976,14 @@ html[data-surface="dark"] {
     display: none;
   }
 }
+
+/* The requirement area a checklist line answers. Set above the title in the
+   chrome face rather than the serif, so it reads as a category label and never
+   competes with the requirement itself. */
+.readiness-area {
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 2px;
+}

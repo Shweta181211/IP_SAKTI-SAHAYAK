@@ -179,6 +179,13 @@ class Settings(BaseSettings):
     # vocabulary the product happens not to share with nothing to cite.
     compare_probe_slots: int = 4
 
+    # Reserved evidence slots per readiness AREA (see export_readiness.py).
+    # Same reasoning as compare_probe_slots and the same measurement behind it:
+    # RRF rewards consensus, so the vocabulary shared by every formulation
+    # accumulates while the provision governing exactly one area is out-scored.
+    # A small reserved allocation per area is what makes the checklist complete.
+    readiness_probe_slots: int = 3
+
     # --- Rate limiting -----------------------------------------------------
     # Requests per minute per client, for the endpoints that cost upstream LLM
     # calls. Generous for a person demonstrating the tool, restrictive for a

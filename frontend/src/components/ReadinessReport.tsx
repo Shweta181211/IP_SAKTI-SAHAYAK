@@ -90,6 +90,13 @@ function Item({
       </span>
 
       <div className="min-w-0 flex-1">
+        {/* The requirement area, above the title. It is what makes the list
+            legible as a CHECKLIST rather than a set of findings: the reader can
+            see licensing, IP, ABS, labelling and documents all accounted for,
+            including the ones the corpus could not reach. */}
+        {item.area_label && (
+          <p className="readiness-area">{item.area_label}</p>
+        )}
         <p className="readiness-item-head">
           <span className="readiness-title">{item.title}</span>
           <span className="readiness-status">{state.label}</span>

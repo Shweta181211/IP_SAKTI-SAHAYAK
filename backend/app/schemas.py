@@ -727,6 +727,12 @@ class ReadinessStatus(str, Enum):
 class ReadinessItem(BaseModel):
     """One line of the readiness checklist."""
 
+    #: Which requirement area this line answers. The areas are fixed per side
+    #: (export_readiness.READINESS_AREAS), so the checklist is complete by
+    #: construction: an area the corpus cannot reach still appears, marked
+    #: NOT_COVERED, rather than quietly missing from the list.
+    area: str = ""
+    area_label: str = ""
     title: str = Field(description="The requirement, in a few words")
     detail: str = Field(description="What the sources actually say about it")
     status: ReadinessStatus
