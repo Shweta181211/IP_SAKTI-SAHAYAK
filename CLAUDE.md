@@ -1797,6 +1797,38 @@ free tier's per-minute limit during a burst, i.e. the fail-closed path working.
 Re-measured immediately, out of the burst: **3/3 answered, each citing the
 Biological Diversity Act, its 2023 Amendment and the 2024 Rules.**
 
+### The citation guard was deleting correct sentences, and a judge pass found it
+
+A verification pass over questions the build had never seen (no flagship, no
+benchmark wording) turned up one real defect, and it was in the most
+load-bearing guard in the project.
+
+On a GI eligibility question the **Legal position step shipped empty**.
+`provision_support` tests whether the provision named in a sentence occurs in
+the retrieved text - but statutes do not print their own sub-clause numbers. The
+GI Act reads `11. Application for registration.-(1) Any association of
+persons...`, so the literal string `11(1)` occurs nowhere in the corpus. Three
+correct references - `2(1)(e)`, `11(1)`, `11(2)(a)` - were called invented and
+their sentences deleted.
+
+`_subclause_supported` widens the test by exactly as much as is safe: a
+sub-clause reference is supported when a retrieved chunk **is** that provision
+(per `_provision_spine`) **and** carries that clause marker. Accepting the base
+number alone would have re-opened §6k's hole - a chunk merely MENTIONING section
+3 would then support a fabricated "Section 3(e)". Verified both ways: it
+restores all three GI references, and adds nothing to the flagship's evidence
+set, where no retrieved chunk is spine-placed as a base provision.
+
+```
+before   step 2 EMPTY · unsupported: 2(1)(e), 11(1), 11(2)(a) · moderate
+after    step 2 cites 2(1)(e), step 3 cites 11 · unsupported: [] · high
+```
+
+*The general lesson, third time in this project: a guard that fires on absence
+must be tested against what the corpus actually PRINTS, not against how lawyers
+write. §6c's gate could not see past 320 characters; §6o's anchors were
+windowed from character zero; this one asked for a string statutes never set.*
+
 ### Known still open
 
 Unchanged from §6o, plus:

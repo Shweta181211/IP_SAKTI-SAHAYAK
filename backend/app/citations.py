@@ -620,6 +620,52 @@ def _normalise_provision(token: str) -> str:
     return re.sub(r"[\s\u2010-\u2015-]", "", token).lower()
 
 
+# A sub-clause reference, split into its provision and its clause markers:
+# "11(1)" -> ("11", ["1"]);  "2(1)(e)" -> ("2", ["1", "e"]).
+_SUBCLAUSE = re.compile(
+    r"^([0-9]+[A-Za-z]*(?:[‐-―-][A-Za-z0-9]+)?)((?:\([^)]{1,8}\))+)$"
+)
+
+
+def _subclause_supported(token: str, chunk_ids: list[str]) -> bool:
+    """Is "Section 11(1)" supported by a chunk that IS section 11 and shows (1)?
+
+    The literal test above asks whether the string "11(1)" occurs in the
+    evidence. Statutes almost never write that: the GI Act prints
+    "11. Application for registration.-(1) Any association of persons...", so a
+    perfectly correct reference to section 11(1) matched nothing and the whole
+    sentence carrying it was deleted. Measured on a GI question: three correct
+    references (2(1)(e), 11(1), 11(2)(a)) were all called invented, and the
+    Legal position step - the one a reader actually needs - shipped empty.
+
+    So a sub-clause reference is also supported when a retrieved chunk **is**
+    that provision (per the provision spine) **and** carries that clause marker.
+    That is deliberately much narrower than "the base number appears somewhere
+    in the evidence", which would have re-opened the exact hole section 6k
+    closed: a chunk merely MENTIONING section 3 would then support a fabricated
+    "Section 3(e)". Here the chunk has to be section 3 itself.
+
+    Verified against both cases: it restores all three GI references, and adds
+    nothing at all to the flagship's evidence set, where no retrieved chunk is
+    spine-placed as a base provision.
+    """
+    match = _SUBCLAUSE.match(re.sub(r"\s+", "", token))
+    if not match:
+        return False
+    base = _normalise_provision(match.group(1))
+    markers = re.findall(r"\(([^)]{1,8})\)", match.group(2))
+    for chunk_id in chunk_ids:
+        chunk = get_chunk(chunk_id)
+        if not chunk:
+            continue
+        placed = _provision_spine(str(chunk.get("doc_id") or "")).get(chunk_id)
+        if not placed or _normalise_provision(placed) != base:
+            continue
+        if all(f"({marker})" in chunk.get("chunk_text", "") for marker in markers):
+            return True
+    return False
+
+
 def provision_support(text: str, chunk_ids: Iterable[str]) -> tuple[list[str], list[str]]:
     """Split provisions named in `text` into (supported, unsupported).
 
@@ -635,8 +681,9 @@ def provision_support(text: str, chunk_ids: Iterable[str]) -> tuple[list[str], l
     the fabricated provision looked sourced. That is the "no fabricated
     authority" rule in CLAUDE.md 1.2, and nothing was enforcing it.
     """
+    ids = list(chunk_ids)
     haystack = _normalise_provision(
-        " ".join((get_chunk(cid) or {}).get("chunk_text", "") for cid in chunk_ids)
+        " ".join((get_chunk(cid) or {}).get("chunk_text", "") for cid in ids)
     )
     supported: list[str] = []
     unsupported: list[str] = []
@@ -644,8 +691,8 @@ def provision_support(text: str, chunk_ids: Iterable[str]) -> tuple[list[str], l
         token = match.group(1).strip()
         if _is_year(token):
             continue  # part of an Act's title, not a provision reference
-        (supported if _normalise_provision(token) in haystack
-         else unsupported).append(match.group(0))
+        ok = _normalise_provision(token) in haystack or _subclause_supported(token, ids)
+        (supported if ok else unsupported).append(match.group(0))
     return supported, unsupported
 
 

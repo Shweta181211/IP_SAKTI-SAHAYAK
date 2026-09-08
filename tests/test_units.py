@@ -1100,6 +1100,48 @@ record(
     _served[0]["citations"] == 3 and _served[0]["abstained"] is False,
 )
 
+# --------------------------------------------------------------------------
+section("SUB-CLAUSE REFERENCES - supported by the provision, not by the string")
+# --------------------------------------------------------------------------
+
+# A statute prints "11. Application for registration.-(1) Any association...",
+# never the string "11(1)". Requiring the literal form called three CORRECT
+# references invented on a GI question and shipped the Legal position step
+# empty. The widening is narrow on purpose: the chunk must BE that provision.
+_GI_S11 = _shortest_chunk_with("Application for registration", "association of persons")
+
+_sup, _unsup = provision_support(
+    "Under Section 11(1) an association of persons may apply.", [_GI_S11]
+)
+record("a sub-clause of a retrieved provision is supported",
+       bool(_sup) and not _unsup, f"{_sup} / {_unsup}")
+
+# The guard that must NOT be re-opened: a chunk that merely MENTIONS a section
+# does not support a sub-clause of it. Section 6k's fabricated "Section 3(e)"
+# is exactly this shape - the citation beside it was valid, so the invented
+# provision looked sourced.
+_MENTIONS_ONLY = _shortest_chunk_with("section 11", absent="Application for registration")
+_sup, _unsup = provision_support("Section 11(9) requires a fee.", [_MENTIONS_ONLY])
+record("a chunk that only MENTIONS a section does not support its sub-clause",
+       not _sup and bool(_unsup), f"{_sup} / {_unsup}")
+
+# A sub-clause of a provision that is nowhere in the evidence is still invention.
+_sup, _unsup = provision_support(
+    "Under Section 84(3) a compulsory licence may issue.", [_GI_S11]
+)
+record("a sub-clause of an unretrieved provision is still rejected",
+       not _sup and bool(_unsup), f"{_sup} / {_unsup}")
+
+_kept, _removed = strip_unsupported_provisions(
+    "Section 11(1) allows an association to apply. Section 84(3) grants a licence.",
+    [_GI_S11],
+)
+record("only the invented sentence is removed, the correct one survives",
+       "11(1)" in _kept and "84(3)" not in _kept,
+       f"kept={_kept!r} removed={_removed}")
+
+
+
 
 # --------------------------------------------------------------------------
 print("\n" + "=" * 74)

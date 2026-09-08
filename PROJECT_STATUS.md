@@ -320,6 +320,38 @@ had run. All four now carry it, and the vagueness screen records itself as a
 skipped stage — so "did it even try?" has a visible answer.
 
 
+### 2.10 The citation guard was deleting correct sentences
+
+Found by a judge-style pass over questions the build had never seen. On
+*"Is the name of a traditional Kerala herbal oil eligible for GI protection?"*
+the **Legal position step shipped empty** — the most important step on the page.
+
+`provision_support` asks whether the provision named in a sentence occurs in the
+retrieved text. Statutes do not print their own sub-clause numbers: the GI Act
+reads `11. Application for registration.-(1) Any association of persons...`, so
+the string `11(1)` occurs nowhere. Three **correct** references —
+`Section 2(1)(e)`, `Section 11(1)`, `Section 11(2)(a)` — were therefore called
+invented, and every sentence carrying one was removed.
+
+The fix is deliberately narrow. A sub-clause reference is also supported when a
+retrieved chunk **is** that provision (per the provision spine) **and** carries
+that clause marker. Accepting the base number alone would have re-opened exactly
+the hole §2.x closed: a chunk merely *mentioning* section 3 would then support a
+fabricated "Section 3(e)". Here the chunk has to be section 3 itself.
+
+Measured on the same question, before and after:
+
+```
+before   step 2 EMPTY · unsupported_provisions: 2(1)(e), 11(1), 11(2)(a)
+         evidence support: moderate / "Some support"
+after    step 2 cites Section 2(1)(e); step 3 cites Section 11
+         unsupported_provisions: []   ·   support: high / "Well supported"
+```
+
+Four unit tests pin both directions, including the one that must never pass: a
+chunk that only *mentions* a section does not support its sub-clause.
+
+
 ## 3. Current issues and known bugs
 
 Nothing here is hidden. Read this section before demoing.
