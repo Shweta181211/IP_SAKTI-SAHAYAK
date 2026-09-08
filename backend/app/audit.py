@@ -205,29 +205,73 @@ def log_readiness(
     _write(entry)
 
 
-def summary(limit: int = 500) -> dict[str, Any]:
-    """Aggregate the recent log. Used by /health so the trail is inspectable."""
+# Fields that carry user content. They exist in the log only when the caller
+# consented, and they are removed again on the way OUT, so the inspectable
+# trail is the operational record and nothing else. Two gates rather than one:
+# consent decides what is written, this decides what is served.
+PERSONAL_FIELDS = ("question", "resolved_question", "product")
+
+
+def _entries(limit: int) -> list[dict[str, Any]]:
+    """Parse the tail of the log. Never raises - a missing log is zero entries."""
     try:
         if not AUDIT_PATH.exists():
-            return {"entries": 0, "path": str(AUDIT_PATH)}
+            return []
         lines = AUDIT_PATH.read_text(encoding="utf-8").splitlines()[-limit:]
     except OSError:
-        return {"entries": 0, "path": str(AUDIT_PATH)}
-
-    total = answered = abstained = escalated = rejected = 0
+        return []
+    out: list[dict[str, Any]] = []
     for line in lines:
         try:
-            entry = json.loads(line)
+            parsed = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(parsed, dict):
+            out.append(parsed)
+    return out
+
+
+def recent(limit: int = 40) -> list[dict[str, Any]]:
+    """The most recent entries, newest first, with user content removed.
+
+    This is what makes auditability demonstrable rather than asserted: a reader
+    can see the actual rows the system wrote about its own behaviour. What they
+    cannot see is what anybody asked, because that is stripped here even when it
+    was consented into the file. Consent decides what is written; this decides
+    what is served, and the second gate is the one a reader is standing behind.
+    """
+    rows = _entries(max(limit, 1))[-limit:]
+    return [
+        {k: v for k, v in row.items() if k not in PERSONAL_FIELDS}
+        for row in reversed(rows)
+    ]
+
+
+def summary(limit: int = 500) -> dict[str, Any]:
+    """Aggregate the recent log. Used by /health so the trail is inspectable."""
+    rows = _entries(limit)
+    if not rows:
+        return {"entries": 0, "path": str(AUDIT_PATH), "retained_question_text": 0}
+
+    total = answered = abstained = escalated = rejected = consented = 0
+    kinds: dict[str, int] = {}
+    reasons: dict[str, int] = {}
+    for entry in rows:
         total += 1
+        kind = str(entry.get("kind") or "query")
+        kinds[kind] = kinds.get(kind, 0) + 1
         if entry.get("abstained"):
             abstained += 1
+            reason = entry.get("abstention_kind")
+            if reason and reason != "none":
+                reasons[str(reason)] = reasons.get(str(reason), 0) + 1
         else:
             answered += 1
         if entry.get("escalate"):
             escalated += 1
         rejected += int(entry.get("rejected_citations") or 0)
+        if any(field in entry for field in PERSONAL_FIELDS):
+            consented += 1
 
     return {
         "entries": total,
@@ -235,5 +279,13 @@ def summary(limit: int = 500) -> dict[str, Any]:
         "abstained": abstained,
         "escalated": escalated,
         "citations_rejected": rejected,
+        # How many of these rows kept the question text. Zero unless someone
+        # opted in, which is the claim the consent design is making - and it is
+        # a count rather than a flag so it can be checked, not just believed.
+        "retained_question_text": consented,
+        "kinds": kinds,
+        "abstention_kinds": reasons,
+        "first_entry": rows[0].get("ts"),
+        "last_entry": rows[-1].get("ts"),
         "path": str(AUDIT_PATH),
     }

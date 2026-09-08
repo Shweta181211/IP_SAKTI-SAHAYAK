@@ -3541,3 +3541,438 @@ html[data-surface="dark"] {
   text-transform: uppercase;
   color: var(--indigo);
 }
+
+/* ==========================================================================
+   THE PROVISION GRAPH, THE ORCHESTRATION TRACE, AND THE AUDIT TRAIL
+
+   Three surfaces added together because they answer the same question from
+   three distances: what does this provision connect to, how was this answer
+   assembled, and what has this system done over time. All three are written on
+   the design tokens alone, so `.surface-dark` re-skins them by overriding those
+   tokens - there is no dark-mode duplicate of any rule below.
+   ========================================================================== */
+
+/* ---- citation card: connected provisions ---------------------------------
+   A statute is a graph, not a list: Rule 122-E means little without the rules
+   it points at. These edges are extracted from the chunk's own text, so every
+   link is quoted rather than asserted - which is why each one carries an
+   excerpt and not only a provision number. */
+
+.cite-links {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+}
+
+.cite-links > li {
+  border-left: 2px solid var(--indigo-wash);
+  padding-left: 8px;
+}
+
+.cite-link-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* Direction is the whole meaning of an edge and it is the easiest thing to
+   lose: "refers to" and "relied on by" point opposite ways through the same
+   pair. Given a shape as well as a word, because two short labels a few pixels
+   apart get read as one label. */
+.cite-link-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  white-space: nowrap;
+}
+
+.cite-link-dir::before {
+  content: "\2192";
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.cite-link-dir.inbound::before {
+  content: "\2190";
+}
+
+.cite-link-prov {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.cite-links blockquote {
+  margin-top: 3px;
+  font-family: "Spectral", ui-serif, Georgia, serif;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+/* ---- the orchestration trace ---------------------------------------------
+   Collapsed by default: this is provenance, not the answer. Open, it is a
+   ledger - one row per stage, what that stage decided, and what it cost. */
+
+.trace {
+  margin-top: 26px;
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+}
+
+.trace-toggle {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+  color: var(--ink-faint);
+  transition: color 160ms ease-out;
+}
+
+.trace-toggle:hover {
+  color: var(--indigo);
+}
+
+.trace-toggle-label {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.trace-toggle-meta {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.trace-chevron {
+  margin-left: auto;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.trace-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.trace-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trace-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 2px;
+  background: var(--indigo-wash);
+  /* Staggered so the chain is seen being built in the order it ran, which is
+     the point of showing it at all. `backwards`, never `both`: `both` leaves
+     the element holding its final frame and silently kills every later
+     transform on it - a trap this project has already been caught by twice. */
+  animation: trace-in 340ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+}
+
+.trace-list > li:nth-child(1) { animation-delay: 0ms; }
+.trace-list > li:nth-child(2) { animation-delay: 55ms; }
+.trace-list > li:nth-child(3) { animation-delay: 110ms; }
+.trace-list > li:nth-child(4) { animation-delay: 165ms; }
+.trace-list > li:nth-child(5) { animation-delay: 220ms; }
+.trace-list > li:nth-child(6) { animation-delay: 275ms; }
+
+@keyframes trace-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A degraded or skipped stage is a limit, and clay is what a limit is here. */
+.trace-step.is-degraded,
+.trace-step.is-skipped {
+  background: var(--clay-wash);
+}
+
+.trace-n {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--indigo);
+  color: var(--paper);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+}
+
+.trace-step.is-degraded .trace-n,
+.trace-step.is-skipped .trace-n {
+  background: var(--clay);
+}
+
+.trace-stage {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+.trace-status {
+  margin-left: 6px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--clay);
+}
+
+.trace-detail {
+  display: block;
+  margin-top: 2px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.trace-bar {
+  display: block;
+  margin-top: 5px;
+  height: 2px;
+  background: var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.trace-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--indigo);
+  border-radius: inherit;
+  transform-origin: left;
+  animation: trace-fill 520ms cubic-bezier(0.16, 0.84, 0.44, 1) backwards;
+}
+
+@keyframes trace-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.trace-ms {
+  flex: none;
+  padding-top: 1px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.trace-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+/* ---- the audit trail ----------------------------------------------------- */
+
+.audit {
+  border-top: 1px solid var(--rule);
+  padding-top: 28px;
+}
+
+.audit-counts {
+  display: grid;
+  /* minmax(0, ...) rather than a bare fraction: these labels do not wrap, and a
+     content-sized implicit column has grown this kind of grid past a 390px
+     viewport before. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .audit-counts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .audit-counts {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.audit-count {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 12px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+/* A hairline of the meaning on the edge nearest the reader's eye. Colour still
+   means one thing each: clay a limit, neem a guard that held, indigo sources. */
+.audit-count::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--ink-faint);
+  opacity: 0.5;
+}
+
+.audit-count.is-clay::before {
+  background: var(--clay);
+  opacity: 1;
+}
+
+.audit-count.is-neem::before {
+  background: var(--neem);
+  opacity: 1;
+}
+
+.audit-count.is-indigo::before {
+  background: var(--indigo);
+  opacity: 1;
+}
+
+.audit-count-n {
+  display: block;
+  font-family: "Spectral", ui-serif, Georgia, serif;
+  font-size: 27px;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-count-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.audit-note {
+  border-left: 2px solid var(--indigo);
+  background: var(--indigo-wash);
+  padding: 10px 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.audit-field {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: var(--paper-deep);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.audit-toggle {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  border-bottom: 1px solid var(--indigo);
+  padding-bottom: 2px;
+  transition: opacity 160ms ease-out;
+}
+
+.audit-toggle:hover {
+  opacity: 0.7;
+}
+
+/* The table is the widest thing on this page, so it scrolls inside itself -
+   the page body never scrolls sideways. */
+.audit-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.audit-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.audit-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: var(--paper-deep);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.audit-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-soft);
+  vertical-align: top;
+}
+
+.audit-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.audit-table tbody tr:hover td {
+  background: var(--indigo-wash);
+}
+
+.audit-ts,
+.audit-model {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-step,
+  .trace-bar > span {
+    animation: none;
+  }
+}
+
+@media print {
+  .trace,
+  .audit {
+    display: none;
+  }
+}

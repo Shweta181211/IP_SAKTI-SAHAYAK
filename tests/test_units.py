@@ -935,6 +935,173 @@ audit._write = original_write  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------
+section("PROVISION GRAPH - edges are quoted from the statute, never proposed")
+# --------------------------------------------------------------------------
+
+from app import graph  # noqa: E402
+
+# ---- the reference extractor, on hand-written text ------------------------
+# These cases are written out rather than sampled because the two that matter
+# are the ones that were WRONG first: a reference naming another instrument was
+# being resolved inside the current one, so "section 4 of the Trade and
+# Merchandise Marks Act" in the Designs Act became Designs Act s.4 - a link
+# that resolves, looks clean, and points at the wrong law.
+_REF_CASES = [
+    # (text, act, expected)
+    ("Subject to the provisions of section 12, the Registrar shall...",
+     "the geographical indications of goods act 1999", {"12"}),
+    ("as provided in sections 3 and 6 of this Act",
+     "the geographical indications of goods act 1999", {"3", "6"}),
+    # another instrument - must NOT be resolved locally
+    ("registered under section 4 of the Trade and Merchandise Marks Act, 1958",
+     "the designs act 2000", set()),
+    ("punishable under section 21 of the Indian Penal Code",
+     "the geographical indications of goods act 1999", set()),
+    # "of this Act" is the same instrument and must survive the guard above
+    ("an offence under section 21 of this Act",
+     "the geographical indications of goods act 1999", {"21"}),
+    # the noun must match the instrument's own: a "section" reference inside a
+    # set of Rules is a reference to the parent ACT, which we do not resolve
+    ("as required by section 18 of the Act",
+     "the drugs and cosmetics rules 1945", set()),
+    # the expected value is the NORMALISED key the graph indexes on, which is
+    # what a caller can actually look up - "122-E" and "122E" are one provision
+    ("in accordance with rule 122-E",
+     "the drugs and cosmetics rules 1945", {"122e"}),
+    # a list whose last item names another instrument loses the WHOLE list
+    ("under sections 4 and 5 of the Trade and Merchandise Marks Act, 1958",
+     "the designs act 2000", set()),
+    # a singular noun does not license a list: the "and 6" here is prose
+    ("section 3 and 6 schedules apply",
+     "the geographical indications of goods act 1999", {"3"}),
+    # a four-digit number after the noun is a year in a title, not a provision
+    ("the Biological Diversity Rules 2024 provide",
+     "the biological diversity rules 2024", set()),
+]
+for _text, _act, _expected in _REF_CASES:
+    _got = graph._references_in(_text, _act)
+    record(
+        f"references_in: {_text[:44]!r}",
+        _got == _expected,
+        f"got {sorted(_got)}, expected {sorted(_expected)}",
+    )
+
+# ---- the graph over the real corpus ---------------------------------------
+_stats = graph.stats()
+record("the graph has provisions", _stats["provisions"] > 100, str(_stats))
+record("the graph has cross-references", _stats["references"] > 100, str(_stats))
+
+# The check that a corpus rebuild would fail: every edge must land on a chunk
+# that exists. A link that 404s is worse than no link.
+record("no edge points at a missing chunk", graph.verify() == [], str(graph.verify()))
+
+# ---- links attached to citations ------------------------------------------
+_edges = graph._edges()
+_sample_id = next(iter(_edges))
+_out = graph.references_from(_sample_id)
+record(
+    "a linked passage yields outbound provisions",
+    len(_out) > 0 and all(r.direction == "outbound" for r in _out),
+    f"{_sample_id} -> {[r.provision for r in _out]}",
+)
+record(
+    "every link carries an excerpt, so it is quoted not asserted",
+    all(r.excerpt.strip() for r in _out),
+)
+record(
+    "no link points back at its own passage",
+    all(r.chunk_id != _sample_id for r in _out),
+)
+
+# Only documents whose numbered provisions ARE their structure may be linked.
+# The Ayurvedic Formulary numbers its recipes and its bibliography; the Manual
+# of Patent Office Practice numbers its own paragraphs and quotes the Patents
+# Act's sections in its margin. Both produced confident links to unrelated
+# passages before LINKABLE_REGIMES existed.
+_edge_regimes = {
+    (get_chunk(cid) or {}).get("regime_type")
+    for cid, links in _edges.items()
+    for _t, _l in links
+}
+record(
+    "only statute-shaped documents carry edges",
+    _edge_regimes <= set(graph.LINKABLE_REGIMES),
+    str(sorted(str(r) for r in _edge_regimes)),
+)
+record(
+    "the pharmacopoeia and the practice manual are excluded",
+    "pharmacopoeia_reference" not in graph.LINKABLE_REGIMES
+    and "registry_guideline" not in graph.LINKABLE_REGIMES,
+)
+
+_linked = graph.attach_links([cit(_sample_id, "some act", "Section 1")])
+record("attach_links populates Citation.related", len(_linked[0].related) > 0)
+record(
+    "attach_links is bounded",
+    len(_linked[0].related) <= 4,
+    str(len(_linked[0].related)),
+)
+
+# An unrelated id must come back with an empty list rather than raising: a
+# citation the graph knows nothing about is the normal case, not an error.
+_none = graph.attach_links([cit("DOES_NOT_EXIST_chunk_999", "nowhere", None)])
+record("an unknown chunk gets no links and does not raise",
+       _none[0].related == [])
+
+# ---- expansion is off, and that is a measured decision --------------------
+# Graph expansion into the retrieval prompt was measured on six questions: it
+# helped three and hurt three, including the flagship, which it pulled toward
+# compulsory licensing (Patents Act ss.84/87/88). So the graph ships as
+# navigation only and retrieval is byte-identical to before it existed. This
+# check exists so that decision cannot be undone silently.
+from app.config import settings as _settings  # noqa: E402
+
+record(
+    "graph expansion into retrieval is disabled (see config comment)",
+    _settings.graph_expansion_slots == 0,
+    str(_settings.graph_expansion_slots),
+)
+record(
+    "expand() returns nothing at zero slots",
+    graph.expand([_sample_id], _settings.graph_expansion_slots) == [],
+)
+
+
+# --------------------------------------------------------------------------
+section("AUDIT TRAIL - what is served is narrower than what is written")
+# --------------------------------------------------------------------------
+
+# The consent gate decides what is WRITTEN. This second gate decides what is
+# SERVED, and it is the one a reader of /audit is standing behind. Both are
+# tested, because a redaction that only exists in a docstring is not one.
+_row = {
+    "ts": "2026-09-08T10:00:00+00:00",
+    "kind": "query",
+    "question": "can a classical churna be patented?",
+    "resolved_question": "can a classical churna be patented?",
+    "product": "churna",
+    "abstained": False,
+    "citations": 3,
+}
+_served = [
+    {k: v for k, v in _row.items() if k not in audit.PERSONAL_FIELDS}
+]
+record(
+    "every personal field is named in PERSONAL_FIELDS",
+    set(audit.PERSONAL_FIELDS) == {"question", "resolved_question", "product"},
+    str(audit.PERSONAL_FIELDS),
+)
+record(
+    "redaction removes the question, the resolved question and the product",
+    all(f not in _served[0] for f in audit.PERSONAL_FIELDS),
+)
+record(
+    "redaction keeps what the audit is for",
+    _served[0]["citations"] == 3 and _served[0]["abstained"] is False,
+)
+
+
+# --------------------------------------------------------------------------
 print("\n" + "=" * 74)
 failed_checks = [r for r in results if r[0] == FAIL]
 print(f" {len(results) - len(failed_checks)}/{len(results)} checks passed")

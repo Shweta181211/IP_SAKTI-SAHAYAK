@@ -80,6 +80,29 @@ export interface ComparisonResult {
   disclaimer: string;
 }
 
+/** A provision a cited passage points at, or that points at it.
+ *
+ *  Derived from the passage's own text by the provision graph — no model is
+ *  involved, so it cannot invent a relation. It adds no claim to the answer:
+ *  it is navigation, so "subject to rule 21" stops being a dead end. */
+export interface RelatedProvision {
+  chunk_id: string;
+  act_name: string;
+  provision: string;
+  page: number | null;
+  excerpt: string;
+  /** "outbound" — this citation defers to it. "inbound" — it relies on this. */
+  direction: "outbound" | "inbound";
+}
+
+/** One pipeline stage that ran to produce an answer. */
+export interface TraceStep {
+  stage: string;
+  status: "ok" | "skipped" | "degraded";
+  ms: number;
+  detail: string;
+}
+
 export interface Citation {
   chunk_id: string;
   act_name: string;
@@ -88,6 +111,7 @@ export interface Citation {
   source_file: string | null;
   regime: string | null;
   excerpt: string;
+  related: RelatedProvision[];
 }
 
 export interface ClassificationResult {
@@ -119,6 +143,8 @@ export interface Answer {
   headline_unsourced: boolean;
   /** Null for definitional/procedural questions and every abstention. */
   takeaway: Takeaway | null;
+  /** The stages that ran, in order — orchestration shown, not asserted. */
+  trace: TraceStep[];
   confidence: ConfidenceLevel | null;
   confidence_label: string | null;
   confidence_score: number | null;
@@ -159,15 +185,46 @@ export interface Health {
   /** Active (provider:model) fallback chain, best first. */
   llm_chain?: string[];
   anchor_problems: string[];
-  /** Aggregate of the server's local audit trail — counts only, never text. */
-  audit?: {
-    entries: number;
-    answered?: number;
-    abstained?: number;
-    escalated?: number;
-    citations_rejected?: number;
-    path?: string;
+  /** Shape of the provision graph: nodes, edges, and how much of the corpus
+   *  the cross-references actually reach. */
+  graph?: {
+    provisions?: number;
+    passages_with_references?: number;
+    references?: number;
+    provisions_referenced?: number;
   };
+  graph_problems?: string[];
+  /** Aggregate of the server's local audit trail — counts only, never text. */
+  audit?: AuditSummary;
+}
+
+/** Counts over the server's audit log. Mirrors `audit.summary()`. */
+export interface AuditSummary {
+  entries: number;
+  answered?: number;
+  abstained?: number;
+  escalated?: number;
+  citations_rejected?: number;
+  /** Rows that kept the question text, i.e. rows where the asker opted in.
+   *  A count rather than a flag, so the consent default can be checked. */
+  retained_question_text?: number;
+  kinds?: Record<string, number>;
+  abstention_kinds?: Record<string, number>;
+  first_entry?: string | null;
+  last_entry?: string | null;
+  path?: string;
+}
+
+/** One redacted row of the audit log. The server strips user content before
+ *  serving, so every field here is operational — what was decided, not what
+ *  was asked. Untyped values because the row shape differs per `kind`. */
+export type AuditEntry = Record<string, string | number | boolean | null>;
+
+export interface AuditTrail {
+  summary: AuditSummary;
+  entries: AuditEntry[];
+  redacted_fields: string[];
+  retention: string;
 }
 
 /** Display citation line. Mirrors Citation.display on the backend. */

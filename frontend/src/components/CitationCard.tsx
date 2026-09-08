@@ -34,6 +34,12 @@ export function CitationCard({
   flash,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [linksOpen, setLinksOpen] = useState(false);
+  // Sessions are restored from localStorage, so an Answer stored before the
+  // provision graph existed arrives with no `related` field at all. Defaulted
+  // here rather than typed optional: the contract with the backend really does
+  // guarantee the array, and only a stale record can be missing it.
+  const related = citation.related ?? [];
   const [copied, setCopied] = useState(false);
 
   // Reset the confirmation so the tick does not sit there permanently.
@@ -106,13 +112,49 @@ export function CitationCard({
             {citation.page ? <span className="text-ink-faint"> · p. {citation.page}</span> : null}
           </p>
 
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="eyebrow mt-2 transition-colors hover:text-indigo-dye focus-visible:focus-ring"
-            aria-expanded={open}
-          >
-            {open ? "Hide source text" : "Read source text"}
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="eyebrow transition-colors hover:text-indigo-dye focus-visible:focus-ring"
+              aria-expanded={open}
+            >
+              {open ? "Hide source text" : "Read source text"}
+            </button>
+
+            {/* The provision graph. A statute that says "subject to rule 21"
+                used to be a dead end here: the referenced provision shares
+                almost no wording with the question, so search never finds it.
+                These links are read out of the passage's own text - no model is
+                involved, so nothing here can be invented. */}
+            {related.length > 0 && (
+              <button
+                onClick={() => setLinksOpen((v) => !v)}
+                className="eyebrow text-indigo-dye transition-colors hover:text-ink focus-visible:focus-ring"
+                aria-expanded={linksOpen}
+              >
+                {linksOpen ? "Hide connections" : `${related.length} connected`}
+              </button>
+            )}
+          </div>
+
+          <div className="reveal" data-open={linksOpen} aria-hidden={!linksOpen}>
+            <div>
+              <ul className="cite-links">
+                {related.map((r) => (
+                  <li key={`${r.direction}-${r.chunk_id}`}>
+                    <p className="cite-link-head">
+                      <span className={`cite-link-dir ${r.direction}`}>
+                        {r.direction === "outbound" ? "refers to" : "relied on by"}
+                      </span>
+                      <span className="cite-link-prov">{r.provision}</span>
+                      {r.page ? <span className="text-ink-faint">· p. {r.page}</span> : null}
+                    </p>
+                    <blockquote>{r.excerpt}</blockquote>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
 
           <div className="reveal" data-open={open} aria-hidden={!open}>
             <div>

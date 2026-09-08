@@ -1,5 +1,6 @@
 import type {
   Answer,
+  AuditTrail,
   ComparisonResult,
   Health,
   JurisdictionComparison,
@@ -179,6 +180,19 @@ export async function fetchHealth(): Promise<Health | null> {
   } catch {
     // A dead backend is an expected state during development, not an error
     // worth surfacing as a crash — the header simply shows "offline".
+    return null;
+  }
+}
+
+
+export async function fetchAudit(limit = 40): Promise<AuditTrail | null> {
+  try {
+    const response = await fetch(`${BASE}/audit?limit=${limit}`);
+    if (!response.ok) return null;
+    return (await response.json()) as AuditTrail;
+  } catch {
+    // Same reasoning as fetchHealth: the panel says "unavailable" rather than
+    // taking the page down over a record that is not the answer.
     return null;
   }
 }

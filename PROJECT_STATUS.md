@@ -89,6 +89,64 @@ classification verdict, indigo is sources, neem is grounded, clay is a limit.
 The **landing page is excluded on purpose**: it is a fixed composition (dark hero,
 deliberately light garden), not a switchable workspace.
 
+### Provision graph — `backend/app/graph.py`, links on every source card
+
+Statutes are a graph, not a list. A source card now carries the provisions that
+passage **refers to** and the provisions that **refer back to it**, each with the
+sentence it was read from.
+
+The links are extracted from the passage's own text by pattern. **No model is
+involved anywhere in this module**, which is the whole point: a relationship a
+model proposes is a relationship it can invent, and this build's entire claim is
+that nothing reaches the reader the corpus does not say.
+
+```
+575 provisions · 602 cross-references · 330 linked passages · 0 dangling links
+built in ~1s at startup, reported and verified at /health
+```
+
+Coverage is a property of the law, not a setting: 46.7% of statute chunks and
+16.5% of the D&C Rules carry at least one link, and across five real questions
+7 of 14 cited passages showed connections.
+
+**Deliberately not fed into retrieval.** Feeding graph-linked passages into the
+prompt was built, measured on six questions, and turned off — it helped three
+and hurt three, including the flagship. `graph_expansion_slots = 0`, the
+measurement is recorded in the config comment, and a unit test asserts the zero
+so the decision cannot be reversed by accident.
+
+### Orchestration trace — "How this answer was assembled"
+
+Every answer and every refusal now carries the five stages that ran, what each
+one decided, and what it cost:
+
+```
+Classify formulation · expand query      ok   4996ms  classical_generic · 4 search formulations
+Retrieve · scope and jurisdiction gate   ok   3791ms  12 passages · in scope
+Generate the four-step trail             ok   2270ms  google:gemini-3.5-flash-lite
+Validate every citation                  ok     39ms  3 of 3 steps sourced · 0 citations rejected
+Score evidence support                   ok      3ms  Strongly supported · 2 citations
+```
+
+"12 passages, in scope" is worth reading; "retrieval: ok" is not. It is attached
+to refusals too — a refusal is the hardest thing to take on trust, and the trace
+is what shows the scope gate *ran and decided* rather than the model declining.
+
+Collapsed by default: it is provenance, not the answer.
+
+### The audit trail is readable — `GET /audit`, panel on Sources
+
+`audit.py` has logged every question, refusal and export report since Phase 11.
+Nothing surfaced it. It is now on the Sources page: the counters, the retention
+statement, the names of the fields removed before serving, and the last 40 rows.
+
+The design point is **two gates, not one**. Consent decides what is *written*;
+`PERSONAL_FIELDS` decides what is *served* — the question, the resolved question
+and the product are stripped on the way out even when they were consented into
+the file. The summary reports `retained_question_text` as a **count**, because
+the claim being made is "the default retains nothing" and a count is the number
+that would falsify it.
+
 ### Smaller additions
 
 - **Treaty routes** back on their own page (`/treaties`), separate from Export readiness —
@@ -238,9 +296,49 @@ tests.
 
 ---
 
+### 2.8 The graph resolved four families of reference to the wrong law
+
+Every one of these produced a link that *resolved cleanly and pointed at the
+wrong provision* — worse than no link, because it looks checked. All four were
+found by auditing samples of the edges, not by reading the code.
+
+| what happened | why | fix |
+|---|---|---|
+| `"section 4 of the Trade and Merchandise Marks Act"` inside the Designs Act became Designs Act s.4 | matching the reference's noun to the document is not enough — both say "section" inside an Act | `_OTHER_INSTRUMENT` drops a reference followed by "of the / of that / of said"; `_SELF_INSTRUMENT` keeps "of this Act" |
+| `"sections 3 and 6"` yielded only 3 | the pattern matched one number per noun | `_LIST_CONTINUATION`, but only after a **plural** noun, and the list is gathered *before* the instrument test so "sections 4 and 5 of the Trade Marks Act" loses both, not one |
+| `"the Biological Diversity Rules 2024"` became a reference to rule 202 | `\d{1,3}` truncated the year, so the existing year guard was handed "202" and passed it | `(?!\d)` inside the pattern — the guard has to be in the regex, not after it |
+| the Ayurvedic Formulary's `"SECTION 10 VATI AND GUTIKA"` linked to `"10. Sadananda Sharma, Rasatarangini"` (its bibliography) | the provision spine will place any ascending numerals, and a formulary, a practice manual and a treaty table of contents all have some | `LINKABLE_REGIMES` — the graph runs only over documents whose numbered provisions *are* their structure. Keeps 602 of 641 edges; removes every family the audit found wrong |
+
+Alongside those, a link target must be a chunk that actually **shows** the
+provision's heading, not merely one the spine placed by inheritance.
+
+### 2.9 Refusals carried no trace
+
+The four abstention paths returned before the trace was attached, so the one
+answer a reader is least willing to take on trust had no evidence that anything
+had run. All four now carry it, and the vagueness screen records itself as a
+skipped stage — so "did it even try?" has a visible answer.
+
+
 ## 3. Current issues and known bugs
 
 Nothing here is hidden. Read this section before demoing.
+
+### The graph
+
+- **The flagship shows no graph links.** Its decisive citation is the Manual of
+  Patent Office Practice — a practice guide, excluded above on purpose. Fixing
+  it means resolving references *across* documents, which needs a way to say
+  which document "the Trade and Merchandise Marks Act" is. Doing that by hand
+  would be authored legal knowledge; deriving it from `act_subtype` is plausible
+  and unaudited, so it is a next step rather than a footnote.
+- **Treaties are outside the graph.** They number by Article, and the noun
+  helper calls anything without "rules" in its name a Section, so a treaty's
+  table of contents resolves against itself. Fixing that changes citation
+  *display* across 825 international chunks — a separate decision.
+- `/audit` has no access control, like the rest of this build. It serves no user
+  content, which is why exposing it locally is safe; a deployment needs storage
+  with access control and a retention policy.
 
 ### Retrieval
 

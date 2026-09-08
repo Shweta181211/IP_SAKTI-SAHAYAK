@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -33,9 +34,10 @@ from .citations import (
 )
 from .conversation import EXAMPLE_QUESTIONS, conversational_reply
 from .classification import classify
+from .graph import attach_links as attach_graph_links
 from .confidence import assess as assess_confidence
 from .escalation import assess as assess_escalation
-from .config import settings
+from .config import active_model, settings
 from .llm import LLMUnavailable, complete_json
 from .retrieval import RetrievalResult, expand_query, is_too_vague, retrieve
 from .schemas import (
@@ -43,6 +45,7 @@ from .schemas import (
     TAKEAWAY_LABELS,
     Takeaway,
     TakeawayIntent,
+    TraceStep,
     CONFIDENCE_LABELS,
     STEP_TITLES,
     STEPS_REQUIRING_CITATION,
@@ -281,7 +284,14 @@ def _abstention_answer(
     classification: ClassificationResult | None = None,
     clarifying: str | None = None,
     resolved: str | None = None,
+    trace: list[TraceStep] | None = None,
 ) -> Answer:
+    """Build a refusal.
+
+    The trace belongs here as much as on an answer - arguably more. A refusal is
+    the hardest thing to take on trust, and the stages show that the scope gate
+    RAN and decided, rather than the model simply declining.
+    """
     # A refusal is where a human is most likely to be needed - but only for the
     # kinds that reflect a real legal need. escalation.py draws that line.
     escalate, escalation_reason = assess_escalation(True, kind, None)
@@ -296,6 +306,7 @@ def _abstention_answer(
         escalate=escalate,
         escalation_reason=escalation_reason,
         disclaimer=settings.disclaimer,
+        trace=trace or [],
     )
 
 
@@ -413,6 +424,32 @@ def _build_takeaway(
     )
 
 
+class _Trace:
+    """Collects the stages that ran, so orchestration can be shown not claimed.
+
+    Deliberately records what each stage DECIDED, not that it happened - "12
+    passages, in scope" is worth reading; "retrieval: ok" is not. Timings are
+    wall-clock and include provider latency, which is the honest number: on a
+    free endpoint that is where nearly all of it goes.
+    """
+
+    def __init__(self) -> None:
+        self.steps: list[TraceStep] = []
+        self._mark = time.time()
+
+    def step(self, stage: str, detail: str = "", status: str = "ok") -> None:
+        now = time.time()
+        self.steps.append(
+            TraceStep(
+                stage=stage,
+                status=status,
+                ms=int((now - self._mark) * 1000),
+                detail=detail,
+            )
+        )
+        self._mark = now
+
+
 def answer_question(
     question: str,
     top_k: int | None = None,
@@ -459,13 +496,23 @@ def answer_question(
             logger.info("Cache hit for %r", question[:60])
             return cached
 
+    trace = _Trace()
+
     # Bail before spending any API call on a fragment.
     if is_too_vague(question):
+        # Recorded as a stage so the refusal explains itself: this one is
+        # deterministic and costs nothing, which is exactly what a reader
+        # wondering "did it even try?" needs to see.
+        trace.step(
+            "Screen the question",
+            "below the content-word minimum - no model was called",
+            status="skipped",
+        )
         return _abstention_answer(
             asked, AbstentionKind.TOO_VAGUE,
             "That is too short for me to search on. Tell me what the product is, or "
             "which part of the law you are asking about.",
-            resolved=resolved,
+            resolved=resolved, trace=trace.steps,
         )
 
     # Classification and query expansion both depend only on the question, so
@@ -476,6 +523,12 @@ def answer_question(
         expansion_future = pool.submit(expand_query, question, jurisdiction)
         classification = classification_future.result()
         expansion = expansion_future.result()
+    trace.step(
+        "Classify formulation · expand query",
+        f"{classification.category.value} · {len(expansion.queries)} search formulation"
+        f"{'' if len(expansion.queries) == 1 else 's'}",
+        status="ok" if expansion.ok else "degraded",
+    )
 
     # Scope and jurisdiction are settled BEFORE any clarifying question.
     # Order matters: asking "is your product classical or proprietary?" about a
@@ -484,11 +537,17 @@ def answer_question(
     category = classification.category if classification.is_formulation else None
     result = retrieve(question, category=category, top_k=top_k, expansion=expansion,
                       jurisdiction=jurisdiction)
+    trace.step(
+        "Retrieve · scope and jurisdiction gate",
+        f"{len(result.evidence)} passages · "
+        + ("in scope" if result.sufficient else f"refused: {result.abstention.value}"),
+        status="ok" if result.sufficient else "skipped",
+    )
 
     if not result.sufficient:
         return _abstention_answer(
             asked, result.abstention, result.reason,
-            classification=classification, resolved=resolved,
+            classification=classification, resolved=resolved, trace=trace.steps,
         )
 
     # In scope, but the product's category is undetermined.
@@ -523,17 +582,19 @@ def answer_question(
     )
     try:
         data = complete_json(prompt, max_tokens=settings.max_tokens)
+        trace.step("Generate the four-step trail", f"{active_model()}")
     except LLMUnavailable as exc:
         # NOT no_evidence. The corpus may well cover this question perfectly
         # well - we simply could not reach the model. The UI renders
         # `no_evidence` as "nothing here covers that", which told users to
         # rephrase a question that was fine. GATE_UNAVAILABLE says "retry".
         logger.error("Generation failed: %s", exc)
+        trace.step("Generate the four-step trail", "no provider answered", status="failed")
         return _abstention_answer(
             asked, AbstentionKind.GATE_UNAVAILABLE,
             "The answering service is temporarily unavailable. Your question looks fine - "
             "please try it again in a moment.",
-            classification=classification, resolved=resolved,
+            classification=classification, resolved=resolved, trace=trace.steps,
         )
 
     # The allowed set is "everything we actually showed the model". That includes
@@ -555,6 +616,14 @@ def answer_question(
         allowed.append(classification.defining_source_id)
 
     steps, rejected, unsupported_provisions = _build_steps(data.get("steps") or [], allowed)
+    _cited_steps = sum(1 for st in steps if st.citation_ids and not st.abstained)
+    trace.step(
+        "Validate every citation",
+        f"{_cited_steps} of 3 steps sourced · {len(rejected)} citation"
+        f"{'' if len(rejected) == 1 else 's'} rejected · "
+        f"{len(unsupported_provisions)} unsupported provision"
+        f"{'' if len(unsupported_provisions) == 1 else 's'} removed",
+    )
     if rejected:
         logger.warning("Rejected %d unverifiable citation ids: %s", len(rejected), rejected)
     if unsupported_provisions:
@@ -575,7 +644,7 @@ def answer_question(
             asked, AbstentionKind.NO_EVIDENCE,
             "I could not ground an answer to this in the corpus, so I am not going to "
             "offer one. Try asking about a specific provision, product type or process.",
-            classification=classification, resolved=resolved,
+            classification=classification, resolved=resolved, trace=trace.steps,
         )
 
     takeaway, takeaway_rejected = _build_takeaway(data.get("takeaway"), allowed)
@@ -623,9 +692,17 @@ def answer_question(
 
     # Built once, here, because confidence now scores citation specificity and
     # therefore needs the resolved provisions - not just the ids.
-    built_citations = citations_for(cited)
+    # Each citation also carries the provisions its own text points at, so a
+    # rule that says "subject to rule 21" stops being a dead end. Display
+    # only - it adds no claim to the answer.
+    built_citations = attach_graph_links(citations_for(cited))
     # Scored after validation, from what actually survived - see confidence.py.
     confidence = assess_confidence(steps, built_citations, rejected, result)
+    trace.step(
+        "Score evidence support",
+        f"{CONFIDENCE_LABELS[confidence.level]} · {len(built_citations)} citation"
+        f"{'' if len(built_citations) == 1 else 's'}",
+    )
 
     escalate, escalation_reason = assess_escalation(False, AbstentionKind.NONE, confidence.level)
 
@@ -643,6 +720,7 @@ def answer_question(
         confidence_label=CONFIDENCE_LABELS[confidence.level],
         confidence_score=confidence.score,
         confidence_reasons=confidence.reasons,
+        trace=trace.steps,
         # Surfaced with the answer, not instead of it.
         clarifying_question=classification.clarifying_question if unresolved_category else None,
         classification=classification,

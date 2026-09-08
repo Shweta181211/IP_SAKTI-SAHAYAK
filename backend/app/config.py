@@ -142,6 +142,30 @@ class Settings(BaseSettings):
     # prompt tokens against a 1M context - cheap insurance for recall.
     top_k: int = 12
 
+    #: How many provisions the graph may add on top of fused retrieval.
+    #:
+    #: **Zero, and that is a measured decision rather than a default.** Feeding
+    #: cross-referenced provisions into the evidence set was built and then
+    #: measured on six questions: it helped on three (the GI question gained
+    #: ss.3, 6 and 12; ABS gained s.23; the licensing question gained ss.5, 20
+    #: and 21) and added noise on three - including the flagship, where it
+    #: pulled Patents Act ss.84, 87 and 88 into the prompt. Those are compulsory
+    #: licensing; they have nothing to do with the traditional-knowledge bar.
+    #: Restricting the expansion to the top 3 passages instead of all 12 did not
+    #: change that, so it is not a tuning problem.
+    #:
+    #: The cause is structural: statutes cross-reference for procedural plumbing
+    #: far more often than for substantive relevance, so "referenced by" is a
+    #: poor proxy for "bears on this question". More candidate provisions in the
+    #: prompt is exactly how section 6f's "settled for a neighbouring clause"
+    #: failure happens.
+    #:
+    #: The graph therefore ships as navigation, not as evidence: every citation
+    #: shows what it points at, and a reader can follow it, but no answer
+    #: changes. Raise this only with a measurement that shows the flagship still
+    #: cites 3(p) and gains nothing irrelevant.
+    graph_expansion_slots: int = 0
+
     # Evidence for a CATEGORY COMPARISON, which must cover four regulatory
     # regimes in one prompt rather than answer one question. At top_k = 12 the
     # product's own vocabulary filled every slot with one act: two of the four

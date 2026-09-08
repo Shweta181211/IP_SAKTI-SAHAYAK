@@ -1,5 +1,7 @@
 import type { CSSProperties } from "react";
 import { OFFICIAL_SOURCES } from "../data/exportMarkets";
+import { AuditPanel } from "../components/AuditPanel";
+import { GraphFacts } from "../components/GraphFacts";
 
 export function SourcesPage() {
   return (
@@ -33,6 +35,10 @@ export function SourcesPage() {
           </li>
         ))}
       </ul>
+      <GraphFacts />
+
+      <AuditPanel />
+
       <p className="mt-10 text-[12px] leading-relaxed text-ink-faint">
         Information, not legal advice. Always verify against the live official text.
       </p>

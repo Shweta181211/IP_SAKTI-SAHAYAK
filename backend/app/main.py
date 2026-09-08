@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import audit
+from . import audit, graph
 from .classification import classify, verify_anchors
 from .config import ROOT, active_model, settings
 from .corpus_index import warm_up
@@ -38,6 +38,7 @@ from .ratelimit import RateLimiter, enforce
 from .schemas import (
     AbstentionKind,
     Answer,
+    AuditTrail,
     CompareJurisdictionsRequest,
     CompareRequest,
     ComparisonResult,
@@ -84,6 +85,18 @@ async def lifespan(app: FastAPI):
         # Loud but not fatal: classification degrades gracefully, and refusing to
         # boot during a demo would be worse than running with a warning.
         logger.error("Definition anchors have problems: %s", problems)
+
+    # Build the provision graph now rather than on the first question - it is a
+    # single pass over the corpus (~1s) and paying for it inside a user's query
+    # would be indistinguishable from a slow model. Same reasoning as the
+    # anchors: it resolves chunk ids, so a renumbered corpus must be loud here.
+    graph_problems = graph.verify()
+    _state["graph"] = graph.stats()
+    _state["graph_problems"] = graph_problems
+    if graph_problems:
+        logger.error("Provision graph has problems: %s", graph_problems)
+    logger.info("Provision graph: %s", _state["graph"])
+
     logger.info("Ready. %s", _state["health"])
     yield
 
@@ -125,7 +138,7 @@ def health() -> HealthResponse:
     info = _state.get("health") or warm_up()
     problems = _state.get("anchor_problems", [])
     return HealthResponse(
-        status="degraded" if problems else "ok",
+        status="degraded" if (problems or _state.get("graph_problems")) else "ok",
         chunks_in_json=info["chunks_in_json"],
         chunks_in_vector_db=info["chunks_in_vector_db"],
         chunks_by_jurisdiction=info.get("chunks_by_jurisdiction", {}),
@@ -134,7 +147,29 @@ def health() -> HealthResponse:
         generation_model=active_model(),
         llm_chain=[str(e) for e in llm_endpoints()],
         anchor_problems=problems,
+        graph=_state.get("graph", {}),
+        graph_problems=_state.get("graph_problems", []),
         audit=audit.summary(),
+    )
+
+
+@api.get("/audit", response_model=AuditTrail)
+def audit_endpoint(limit: int = 40) -> AuditTrail:
+    """The audit trail, redacted, so a reader can check it rather than take it.
+
+    `limit` is clamped rather than validated into an error: this is a read-only
+    inspection route and an out-of-range number is a typo, not an attack worth
+    a 422.
+    """
+    return AuditTrail(
+        summary=audit.summary(),
+        entries=audit.recent(max(1, min(limit, 200))),
+        redacted_fields=list(audit.PERSONAL_FIELDS),
+        retention=(
+            "Rows are written locally to a single append-only file that rotates at "
+            "5 MB. Question text is written only when the asker opts in, and is "
+            "removed again before any row is served here."
+        ),
     )
 
 

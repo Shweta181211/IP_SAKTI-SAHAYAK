@@ -150,6 +150,41 @@ class CategoryContrast(BaseModel):
     citation_ids: list[str] = Field(default_factory=list)
 
 
+class TraceStep(BaseModel):
+    """One stage of the pipeline that ran to produce an answer.
+
+    Recorded so the orchestration is inspectable rather than asserted. A reader
+    who wants to know whether this is "just ChatGPT" can read the stages, their
+    timings and what each one decided.
+    """
+
+    stage: str
+    #: "ok", "skipped" or "degraded" - a stage that failed soft still ran.
+    status: str = "ok"
+    ms: int = 0
+    #: What this stage actually decided, in a few words. Facts, not narration.
+    detail: str = ""
+
+
+class RelatedProvision(BaseModel):
+    """A provision that a cited passage points at, resolved to a real chunk.
+
+    Derived from the passage's own text by `graph.py`, never from a model. It
+    adds no claim to the answer - it is navigation, so that "subject to rule 21"
+    stops being a dead end for the reader.
+    """
+
+    chunk_id: str
+    act_name: str
+    #: The reference as the citing passage words it, e.g. "Rule 21".
+    provision: str
+    page: int | None = None
+    excerpt: str
+    #: "outbound" - this citation points at it; "inbound" - it points at this
+    #: citation. Shown to the reader, because the two mean different things.
+    direction: str = "outbound"
+
+
 class Citation(BaseModel):
     """A verified pointer into the corpus.
 
@@ -166,6 +201,9 @@ class Citation(BaseModel):
     source_file: str | None = None
     regime: str | None = None
     excerpt: str = Field(description="Verbatim corpus text, for the citation card")
+    #: Provisions this passage cross-references, from the provision graph.
+    #: Display only; populated after validation, and empty when nothing resolves.
+    related: list[RelatedProvision] = Field(default_factory=list)
 
     @property
     def display(self) -> str:
@@ -343,6 +381,8 @@ class Answer(BaseModel):
     #: One-line orientation above the trail. None for definitional or
     #: procedural questions, and for every abstention.
     takeaway: Takeaway | None = None
+    #: The pipeline stages that ran, in order, with timings.
+    trace: list[TraceStep] = Field(default_factory=list)
     confidence_label: str | None = None
     confidence_score: float | None = None
     confidence_reasons: list[str] = Field(default_factory=list)
@@ -469,9 +509,33 @@ class HealthResponse(BaseModel):
     # degraded system from a broken one.
     llm_chain: list[str] = Field(default_factory=list)
     anchor_problems: list[str] = Field(default_factory=list)
+    # Shape of the provision graph, plus anything wrong with it. Reported for
+    # the same reason as anchor_problems: the graph resolves chunk ids, so a
+    # corpus rebuild that renumbers them must be visible at startup rather than
+    # discovered as dead links in a citation card.
+    graph: dict = Field(default_factory=dict)
+    graph_problems: list[str] = Field(default_factory=list)
     # Aggregate of the local audit trail, so auditability is demonstrable rather
     # than asserted. Counts only - never question text.
     audit: dict = Field(default_factory=dict)
+
+
+
+class AuditTrail(BaseModel):
+    """The system's record of its own behaviour, served for inspection.
+
+    Two claims the problem statement asks for pull against each other -
+    auditability wants a record, data protection wants none - so both are shown
+    at once: the operational rows, and the count of rows that kept a question
+    (zero unless somebody opted in). `redacted_fields` names what was removed on
+    the way out, because a redaction nobody can see is indistinguishable from a
+    field that was never collected.
+    """
+
+    summary: dict = Field(default_factory=dict)
+    entries: list[dict] = Field(default_factory=list)
+    redacted_fields: list[str] = Field(default_factory=list)
+    retention: str = ""
 
 
 class JurisdictionPoint(BaseModel):

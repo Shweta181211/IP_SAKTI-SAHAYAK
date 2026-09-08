@@ -39,9 +39,13 @@ User question
 
 ### Explicitly deferred (do NOT build until the core loop is confirmed)
 
-International jurisdiction (toggle visible but disabled) · multilingual/Bhashini ·
-confidence indicator · human-facilitator escalation · knowledge graph · agentic
-orchestration · PDF export · TKDL similarity flagging.
+multilingual/Bhashini · TKDL similarity flagging.
+
+Everything else once listed here has since been built: international jurisdiction
+(§6l), the confidence indicator (§6i, reworked in §6n), human-facilitator
+escalation (§6o), and the knowledge graph plus visible orchestration and audit
+(§6p). The deferral was correct at the time - none of them was worth building
+before the core loop was verified.
 
 ---
 
@@ -62,6 +66,8 @@ backend/
     retrieval.py       # hybrid dense+lexical retrieval
     classification.py  # 6-category formulation classifier
     generation.py      # Claude call + citation validation
+    graph.py           # provision cross-reference graph  <- no model, pattern only (§6p)
+    audit.py           # append-only trail; consent gates writes, PERSONAL_FIELDS gates reads
     main.py            # FastAPI app
 
 pipeline/              # corpus ingestion (built by Person B, already run)
@@ -243,6 +249,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 14 | Outage triage: key staleness, per-minute vs daily caps, comparison retrieval | **Done** — §6m |
 | 15 | Citation depth, evidence-support meter, takeaway banner, card trail, export readiness | **Done** — §6n |
 | 16 | Classification anchors, uncited static copy, the volumes trail, a site-wide dark surface | **Done** — §6o |
+| 17 | Provision graph, orchestration trace, visible audit trail | **Done** — §6p |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -1610,6 +1617,203 @@ Unchanged from §6n except where noted above:
 - **The OpenRouter key exposed by the §6j traversal bug has still not been
   rotated.** The hole is closed; the key is still compromised. This is the only
   item on this list that is not a trade-off.
+
+
+---
+
+## 6p. Phase 17 - the provision graph, the trace, and an audit trail you can read
+
+The problem statement's expected solution names three things this build asserted
+rather than showed: a relational knowledge graph, agentic multi-source
+orchestration, and an audit trail. The orchestration and the audit already
+existed in code. Only the graph was genuinely new - and the useful part of this
+phase is what measuring the graph refused to let us ship.
+
+### The graph: nodes are provisions, edges are what the statute itself says
+
+`backend/app/graph.py`. Nodes come from `citations._provision_spine`, so a
+provision is a node only where the corpus proves it exists. Edges come from
+`_references_in()`, a regex over each passage's own text.
+
+**No model is involved anywhere in this module.** That is the whole design: a
+graph a model proposes is a graph that can hallucinate a relation, and this
+project has spent four phases making sure nothing reaches a user that the corpus
+does not say. So an edge is a sentence in a statute pointing at another
+provision of the same statute, and every link rendered in the UI carries the
+excerpt it was read from.
+
+```
+575 provisions · 602 cross-references · 330 linked passages · 0 dangling
+built in ~1s at startup, reported at /health, verified there like the anchors
+```
+
+Four defects were found by auditing samples of the edges, and every one of them
+produced a link that *resolved cleanly and pointed at the wrong law* - which is
+worse than no link, because it looks checked.
+
+**1. Cross-instrument references resolved locally.** Indian statutes cite each
+other constantly:
+
+```
+Designs Act:  "registered under section 4 of the Trade and Merchandise Marks Act, 1958"
+GI Act:       "a public servant within the meaning of section 21 of the Indian Penal Code"
+```
+
+Both were resolved to the *citing* act's own section 4 and section 21. Matching
+the reference's noun to the document is not enough - both said "section" inside
+an Act. `_OTHER_INSTRUMENT` now drops a reference immediately followed by "of
+the / of that / of said", and `_SELF_INSTRUMENT` keeps "of this Act". Audited
+after: of the surviving references that have a *named* foreign instrument within
+200 characters, 3 remain and all three are correct self-references.
+
+**2. A provision list dropped everything after the first item.** "sections 3 and
+6" yielded only 3. `_LIST_CONTINUATION` reads the rest, but only after a PLURAL
+noun - "section 3 and 6 schedules apply" is one reference followed by prose. The
+list is gathered *before* the instrument test, because the phrase naming another
+instrument sits after the LAST item: "sections 4 and 5 of the Trade and
+Merchandise Marks Act" must lose both, not one. +46 edges.
+
+**3. A four-digit number after the noun is a year.** "the Biological Diversity
+Rules 2024" matched `\d{1,3}` as "202" and became a reference to rule 202.
+`_is_year` could not catch it because the token it was handed was already
+truncated. A `(?!\d)` at the end of the number is what fixes it - the guard has
+to be in the pattern, not after it.
+
+**4. Documents whose numbers are not provisions.** The largest correction, and
+the one that generalises:
+
+```
+Ayurvedic Formulary   "SECTION 10 VATI AND GUTIKA"  ->  "10. Sadananda Sharma,
+                       Rasatarangini" (its bibliography)
+Manual of Patent      "Section 9" in the margin  ->  the Manual's own paragraph 9
+Office Practice        (the reference is to the PATENTS ACT - a different document)
+Madrid Protocol Rules  a table of contents resolving against itself
+```
+
+The spine will happily place any ascending numerals. `LINKABLE_REGIMES` limits
+the graph to `ip_statute` and `drug_regulatory_classification` - documents whose
+numbered provisions *are* their structure. It keeps 602 of 641 edges and removes
+every family a hand audit found wrong. Keyed on corpus metadata, not on a list
+of document names, which is the thing 5 forbids.
+
+Alongside it, a target must be a chunk that actually SHOWS the provision's own
+heading (`_opening_at`), not merely one the spine placed by inheritance. The
+fallback to "the first chunk of that provision" was what let the Formulary link
+through.
+
+**Deliberately not attempted: cross-document references.** Resolving "section 4
+of the Trade and Merchandise Marks Act" to a chunk in another document requires
+deciding which document that is - authored legal knowledge, not something the
+corpus states. The consequence is visible and worth stating: the Manual of
+Patent Office Practice is where the flagship's Section 3(p) citation comes from,
+and it carries no links at all.
+
+### The graph is navigation, not retrieval - and that was measured
+
+The obvious next move is to feed graph-linked passages into the prompt. It was
+built (`retrieval.py`, `Evidence.via_graph`) and then measured on six questions:
+it helped three (GI +ss.3/6/12, ABS +s.23, licensing +ss.5/20/21) and **hurt
+three, including the flagship**, which it pulled toward compulsory licensing
+(Patents Act ss.84/87/88). Restricting to the top three links did not help.
+
+So `graph_expansion_slots = 0`. The plumbing stays, inert, with the measurement
+recorded in the config comment, and retrieval is provably byte-identical to
+before the graph existed. `tests/test_units.py` asserts the zero, so the
+decision cannot be reversed silently.
+
+**Coverage, stated honestly:** 46.7% of `ip_statute` chunks and 16.5% of the
+D&C Rules carry at least one link. A cited passage shows connections about a
+third of the time. That is a property of how often Indian statutes cross-refer,
+not a tuning parameter.
+
+### The trace: orchestration shown rather than claimed
+
+Five stages, each recording what it DECIDED and what it cost:
+
+```
+Classify formulation · expand query      ok   2744ms  classical_generic · 4 search formulations
+Retrieve · scope and jurisdiction gate   ok   2857ms  12 passages · in scope
+Generate the four-step trail             ok   2330ms  google:gemini-3.5-flash-lite
+Validate every citation                  ok     32ms  3 of 3 steps sourced · 0 citations rejected
+Score evidence support                   ok     16ms  Well supported · 3 citations
+```
+
+"12 passages, in scope" is worth reading; "retrieval: ok" is not. Timings are
+wall-clock and include provider latency, which is the honest number.
+
+**It is attached to refusals too, and that was a bug first.** The four
+abstention paths returned before the trace was attached, so the one answer a
+reader is least willing to take on trust - a refusal - was the one with no
+evidence that anything ran. All four now carry it, and `too_vague` records its
+own deterministic screen as a skipped stage, so "did it even try?" has a
+visible answer.
+
+Collapsed by default in the UI: it is provenance, not the answer.
+
+### The audit trail was already written; it was never readable
+
+`audit.py` has logged every question, refusal and export report since §6j, with
+question text gated on consent. Nothing surfaced it beyond five counters buried
+in `/health`.
+
+`GET /audit` now serves it, and the design point is that **there are two gates,
+not one**: consent decides what is *written*, and `PERSONAL_FIELDS` decides what
+is *served* - the question, the resolved question and the product are stripped
+on the way out even when they were consented into the file. A reader of the
+panel sees the operational record and cannot see what anybody asked.
+
+`summary()` also gained `retained_question_text`, a COUNT rather than a flag,
+because the claim being made is "the default retains nothing" and a count is the
+number that would falsify it.
+
+The Sources page now carries both the graph's four numbers and the trail: the
+counters, the retention statement, the redacted field names, and the last 40
+rows in a table. Every figure is fetched live; a dead backend renders "the log
+cannot be read" rather than a remembered figure.
+
+### Verified at the close of this phase
+
+Cold backend, rate limiting disabled:
+
+```
+tests/test_units.py              216/216   (+26: graph edges, list guards, regimes, redaction)
+tests/test_security.py            25/25
+tests/test_gate_scope.py          16/16
+tests/test_subject_scope.py       11/11
+tests/test_legal_advice.py        15/15
+tests/test_jurisdiction.py        10/10
+tests/test_jurisdiction_compare.py 12/12
+tests/test_style_and_steps.py     21/21
+tests/test_flagship.py             4/4     (5/5 cold runs cite 3(p) and name TKDL)
+tests/e2e_api.py                  39/39
+tests/benchmarks.py               92/93
+graph / trace / audit checks      23/23    (new, against the running API)
+frontend tsc --noEmit clean · npm run build clean · control-character sweep clean
+/health                          anchor_problems: [] · graph_problems: []
+```
+
+The one benchmark miss was the Nagoya case returning `gate_unavailable` - the
+free tier's per-minute limit during a burst, i.e. the fail-closed path working.
+Re-measured immediately, out of the burst: **3/3 answered, each citing the
+Biological Diversity Act, its 2023 Amendment and the 2024 Rules.**
+
+### Known still open
+
+Unchanged from §6o, plus:
+
+- **The flagship shows no graph links.** Its decisive citation is the Manual of
+  Patent Office Practice, a practice guide, deliberately excluded above. Fixing
+  it means resolving references across documents; the metadata-derived version
+  of that (match a guideline's `act_subtype` to a statute's) is plausible and
+  unaudited, so it is a next phase, not a footnote to this one.
+- **Treaties are outside the graph.** They number by Article and `_noun_for`
+  calls anything without "rules" in its name a Section, so a treaty's table of
+  contents resolves against itself. Fixing `_noun_for` changes citation DISPLAY
+  across 825 international chunks, which is a separate decision.
+- `/audit` has no access control, like the rest of this build. It serves no user
+  content, which is why it is safe to expose locally, but a deployment needs
+  storage with access control and a retention policy - `audit.py` says so in its
+  own docstring and that has not changed.
 
 
 ---

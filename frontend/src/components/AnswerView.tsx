@@ -6,6 +6,7 @@ import { Confidence } from "./Confidence";
 import { AbstentionPanel, Verdict } from "./Verdict";
 import { Escalate } from "./Escalate";
 import { TakeawayBanner } from "./TakeawayBanner";
+import { TracePanel } from "./TracePanel";
 
 interface Props {
   answer: Answer;
@@ -314,6 +315,12 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
               </p>
             </div>
           )}
+
+          {/* Shown on refusals too, and deliberately: a refusal is the
+              hardest thing to take on trust, and the trace is what shows the
+              scope gate ran and decided - rather than the model simply
+              declining. */}
+          <TracePanel trace={answer.trace ?? []} />
 
           <p className="mt-8 border-t border-rule pt-3 text-[12px] leading-relaxed text-ink-faint">
             {answer.disclaimer}

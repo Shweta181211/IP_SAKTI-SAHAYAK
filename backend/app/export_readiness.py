@@ -42,6 +42,7 @@ from .citations import (
     validate_ids,
 )
 from .classification import classify
+from .graph import attach_links as attach_graph_links
 from .confidence import assess as assess_confidence
 from .config import settings
 from .corpus_index import get_chunk
@@ -465,7 +466,7 @@ def build_report(request: ExportReadinessRequest) -> ExportReadinessReport:
             classification,
         )
 
-    built = citations_for(cited)
+    built = attach_graph_links(citations_for(cited))
 
     # Scored with the same function every answer uses. The India-side items
     # stand in for reasoning steps: each is a claim that either kept a citation

@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .citations import build_citation
+from .config import settings
 from .corpus_index import bm25_index, collection, embed_query, get_chunk, tokenize
+from .graph import expand as graph_expand
 from .schemas import AbstentionKind, Category, Citation
 
 logger = logging.getLogger(__name__)
@@ -188,6 +190,10 @@ class Evidence:
     score: float
     dense_rank: int | None = None
     lexical_rank: int | None = None
+    #: True when this passage was not found by search at all, but pulled in
+    #: because a retrieved provision cross-references it. Kept so the confidence
+    #: scorer and the UI can tell earned evidence from followed evidence.
+    via_graph: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -404,6 +410,22 @@ def retrieve(
 
     ordered = sorted(fused.items(), key=lambda pair: pair[1], reverse=True)[:top_k]
 
+    # Follow the provisions the retrieved passages point at.
+    #
+    # Statutes defer to each other constantly - "a licence under rule 21", "in
+    # the manner specified in rule 69" - and search cannot follow that: the
+    # referenced provision shares almost no wording with the question that
+    # found the referring one. These are added AFTER fusion rather than scored
+    # into it, for the reason section 6m records about reserved slots: RRF
+    # rewards consensus across formulations, so a provision reached by exactly
+    # one route can never out-score the vocabulary every route shares.
+    #
+    # Bounded and marked. `via_graph` says plainly that this passage was
+    # followed rather than found.
+    linked = graph_expand([cid for cid, _ in ordered], settings.graph_expansion_slots)
+    if linked:
+        logger.info("Graph added %d cross-referenced provision(s)", len(linked))
+
     evidence = []
     for cid, score in ordered:
         chunk = get_chunk(cid)
@@ -416,6 +438,21 @@ def retrieve(
                 score=score,
                 dense_rank=dense_rank.get(cid),
                 lexical_rank=lexical_rank.get(cid),
+                metadata={k: chunk.get(k) for k in
+                          ("act_name", "act_subtype", "regime_type", "page_number")},
+            )
+        )
+
+    for cid in linked:
+        chunk = get_chunk(cid)
+        if chunk is None:
+            continue
+        evidence.append(
+            Evidence(
+                chunk_id=cid,
+                text=" ".join(str(chunk["chunk_text"]).split()),
+                score=0.0,
+                via_graph=True,
                 metadata={k: chunk.get(k) for k in
                           ("act_name", "act_subtype", "regime_type", "page_number")},
             )
