@@ -242,6 +242,7 @@ It abstains correctly and does not fabricate citation IDs, which is the whole ba
 | 13 | International corpus, progressive jurisdiction flow, frontend merge | **Done** — §6l |
 | 14 | Outage triage: key staleness, per-minute vs daily caps, comparison retrieval | **Done** — §6m |
 | 15 | Citation depth, evidence-support meter, takeaway banner, card trail, export readiness | **Done** — §6n |
+| 16 | Classification anchors, uncited static copy, the volumes trail, a site-wide dark surface | **Done** — §6o |
 
 **Working agreement:** one phase at a time. Each phase ends with a summary, real verification
 output, and an update to this file. No starting a phase whose dependency is not verified.
@@ -1393,19 +1394,222 @@ number.
   because it is a change to core retrieval and needs its own measurement.
 - **"What is ABS?" retrieves food and drug regulation** rather than the
   Biological Diversity Act on roughly 1 in 3 runs.
-- **Hardcoded legal claims still in the frontend**, flagged not fixed:
-  `pages/Home.tsx` `BLOOMS[].tease` states six uncited propositions of law (the
-  strongest: *"Prior approval of the National Biodiversity Authority is required
-  before IPR on biological resources"*), and `data/exportMarkets.ts`
-  `EXPORT_LANES[].use` carries ten hand-written treaty summaries.
-- **`Escalate.tsx` opens a `mailto:` with an empty recipient.** The human
-  facilitator path is a draft addressed to nobody.
+- ~~Hardcoded legal claims in the frontend~~ — **fixed in §6o.** All 22 strings
+  now name a subject and invite the question, with a guard that fails on
+  assertive forms.
+- ~~`Escalate.tsx` opens a `mailto:` with an empty recipient~~ — **fixed in
+  §6o.** It copies a prepared practitioner brief instead.
 - Confidence is still uncalibrated - now demonstrably *responsive* across four
   bands, which is not the same thing.
 - Gemini's daily quota was exhausted during this phase; the chain failed over
   and one probe run returned `gate_unavailable`, which is the fail-closed
   behaviour working.
 - The OpenRouter key exposed by the 6j traversal bug has still not been rotated.
+
+
+---
+
+## 6o. Phase 16 - the anchors were pointing at the wrong law
+
+This phase set out to remove uncited legal claims from the marketing surfaces.
+Checking the corpus for something to replace them with is what surfaced the
+serious defect, which had nothing to do with the marketing surfaces.
+
+### Three of six classification anchors resolved to the wrong chunk
+
+Each category is anchored to the chunk that DEFINES it. That chunk is injected
+into the classifier prompt under the heading "statutory definitions, quoted
+verbatim from Indian law", shown to the user as "Defined by ...", and added to
+the set of ids an answer may cite. `verify_anchors()` reported no problems.
+
+```
+patent_proprietary -> a Siddha/Unani formulary BOOK LIST
+ayurveda_aahar     -> a food-additive schedule (citric acid)
+new_drug           -> an Ethics Committee clinical-trial proviso
+```
+
+Two independent causes, and the second is the one worth remembering:
+
+1. **The selector was "the shortest chunk containing the phrase".** A term
+   appears in more places than the clause defining it, and schedules are short,
+   so schedules won. `"patent or proprietary medicine"` matched a First Schedule
+   book list at 1,780 characters and lost to it against the 2,240-character
+   definitions clause.
+2. **`excerpt()` truncates from character zero.** The model is only ever shown a
+   window. The new-drug definition sits ~1,800 characters into a 4,000-character
+   chunk, so with a 750-character window the classifier was handed an Ethics
+   Committee proviso and told it was the definition of a new drug. **The anchor
+   was right and the view of it was wrong** - the same failure as the relevance
+   gate in §6c, where the text was present and the window could not reach it.
+
+Fixed three ways:
+
+- **Anchor on the defining clause's own wording, not on the term.**
+  `"formulations containing only such ingredients"` occurs once;
+  `"patent or proprietary medicine"` occurs wherever the statute uses it.
+- **Prefer a candidate with a defining cue beside the phrase**
+  (`_is_definitional`, ±240 chars), falling back to the old rule rather than
+  resolving nothing.
+- **`anchor_excerpt()` centres the window on the phrase.**
+
+`verify_anchors()` now checks what is actually **shown**, which is the check that
+would have caught this. The cue test is deliberately NOT part of verification:
+the D&C Act extraction carries the §3 margin bleed and renders "means" as
+**"mneans"** in the definitions clause, so a grammar-based assertion would raise
+false alarms at startup. Anchor on the defined content, never on the grammar.
+
+All six now resolve to and display the right provision - s.3(a), s.3(h), rule
+122E "Definition of new drug", Schedule Y 1.1, regulation 2(b), s.3(aaa) -
+verified by `tests/test_units.py`, which names each wrong resolution so it cannot
+come back. Classification measured **5/5**, one product per category, each citing
+the right act.
+
+**`test_subject_scope` went 10/11 -> 11/11 and `test_gate_scope` 15/16 -> 16/16
+immediately afterwards.** §6n had recorded both as retrieval variance on
+low-trial checks. They were this.
+
+### The static copy asserted law with no citation
+
+`Home.tsx` `BLOOMS[].tease` and `exportMarkets.ts` `EXPORT_LANES[].use` shipped
+as static strings with no citation and no validator behind them - *"Prior
+approval of the National Biodiversity Authority is required before IPR on
+biological resources"*, *"minimum IP standards WTO members must meet"*. That is
+the fabricated-authority failure this whole pipeline exists to prevent, wearing a
+caption's clothes.
+
+All 22 now name a subject and invite the question; the legal content arrives from
+retrieval with its provision attached. A guard in `test_units.py` greps both files
+for assertive forms (`is required`, `must meet`, `prior approval of`) and **self-
+tests that it would catch the original sentence** while not firing on a question
+about the same thing.
+
+Deliberately kept: *"PCT, Madrid and Nagoya sit in a separate corpus"* and
+*"Section 3(p) is retrieved from this layer"* are claims about **this system**,
+both backed by passing tests, not uncited claims about law.
+
+### The trail is four sealed volumes
+
+The 2x2 card grid of §6n showed all four answers at once, which is the same flaw
+the vertical stack had: the reader met four paragraphs of legal prose with no
+idea which one they wanted. Closed, a volume now shows only its numeral, its seal
+and its title - **the closed shelf IS the summary**, and opening one is the
+reader's choice about where to look. Two rows of two; an opened volume takes
+~767px of its own row while its row-mate folds to a spine, and the other row does
+not move.
+
+**Opening a volume lights that step's sources in the rail and dims the rest.**
+That is the product's whole claim as one gesture, and it replaced the separate
+"Pin sources" button - two controls for one intention, and the one that mattered
+was the one nobody pressed.
+
+Three mechanics that had to be got right:
+
+- **Width animates on `flex-grow`, not `width`.** Growing one panel must shrink
+  the others by exactly what it takes, and flex already solves that.
+- **The body is laid out at its open width and clipped.** Reflowing as the panel
+  grows rewraps the prose every frame, which reads as a stutter.
+- **`flex: none` on the title.** An element with `overflow: hidden` has an
+  automatic minimum size of ZERO, so when the plate's contents outgrew a closed
+  row, flex chose the title as the thing to shrink and took it to 0px -
+  **present in the DOM, readable to a screen reader, invisible on screen.** Found
+  by measuring the box, not by looking.
+
+Below 860px it stacks on a CSS-only `0fr`/`1fr` reveal. `min-height: 0` on the
+grid item is load-bearing there: a grid item defaults to `min-height: auto` and
+refuses to shrink below its content, so the row never collapsed and a closed
+volume leaked its footer.
+
+### A dark surface, owned in one place
+
+A paper/dark switch in the site header (also `Shift+D`, ignored inside text
+fields), applying to Consult, Export readiness, Treaty routes and Sources. First
+visit follows `prefers-color-scheme`; `color-scheme: dark` makes native controls
+and scrollbars follow.
+
+Done by **overriding the design tokens under one class**, so components re-skin
+themselves and none takes a theme prop. Only two rules needed hand-fixing - the
+step medallion and the citation badge use a token as a FOREGROUND on an accent
+fill, and inverting `--paper` would have made them dark-on-dark.
+
+**That technique has one failure mode, and it bit.** Anything with a *hardcoded*
+background and a *token* foreground inverts badly: the landing page's garden
+section hardcodes a cream ground with `color: var(--ink)`, so the dark tokens
+turned its heading cream-on-cream - present, selectable, no contrast. The landing
+page is a fixed composition (dark hero, deliberately light garden) and now keeps
+its own design in both modes.
+
+A contrast sweep was written after that (walks every text node on all five pages
+in both surfaces, resolves the first painted ancestor background, flags anything
+under 2.2) and would have caught it before it shipped. Both surfaces are clean on
+all five pages.
+
+### Also in this phase
+
+| Change | Note |
+|---|---|
+| Treaty routes back on their own page (`/treaties`) | A lane answers *what an instrument says*; the readiness report assesses *a product against one*. Stacking them made the readiness form read as a preamble to a link list. |
+| The pointer is the logo's leaf | A real `cursor` image, not a follower element - a follower is two pointers at once and the system arrow wins the eye. **Hotspots must be integers**: a fractional one silently invalidates the declaration and the arrow returns. |
+| Escalation copies a practitioner brief | It opened a `mailto:` with an *empty recipient* - a draft addressed to nobody, which looks like a working referral. There is no facilitator queue behind this build and inventing an address would be worse than admitting it. |
+| The gauge lost its card | The white panel made a measuring instrument look like a form field. It sits on the surface in both modes now, carrying itself through depth. |
+| Export form's claims checkbox rendered a sentence in letterspaced caps | It is a `<label>` inside `.readiness-field` and inherited the field-name style. |
+| Treaty lane CTA moved off **clay** | Clay means a limit or a refusal; the lane opens a source view, which is what indigo means. |
+| Five superseded reports deleted, `PROJECT_STATUS.md` added | See §9. |
+
+### The backspace trap bit twice more - three times in this project
+
+`\b` written through a shell heredoc became a literal `0x08` BACKSPACE **twice**
+in this phase: once in `STRUCTURAL_DIVIDER` (the guard was inert, so a chapter
+heading inherited the section above it) and once in the static-copy guard's
+regex, where it matched nothing and **passed vacuously**.
+
+The pattern compiles, looks perfect in every rendering, and matches nothing.
+Two defences, both worth keeping:
+
+1. `test_units.py` sweeps every backend and test module for control characters.
+2. **Any new guard carries a self-test proving it would catch the thing that
+   prompted it.** That is the only reason the second one was caught.
+
+Build the pattern from `chr(92) + "b"` rather than writing the escape.
+
+### Verified at the close of this phase
+
+Cold backend, rate limiting disabled:
+
+```
+tests/test_units.py            190/190   (+22: anchors, static copy)
+tests/test_security.py          25/25
+tests/test_gate_scope.py        16/16    (was 15/16 - the anchor fix)
+tests/test_subject_scope.py     11/11    (was 10/11 - the anchor fix)
+tests/test_legal_advice.py      15/15
+tests/e2e_api.py                39/39
+tests/benchmarks.py             92/94
+UI regression (Playwright)      23/23
+tests/test_flagship.py           3/4     TKDL naming 4/5 - the §6f variance
+frontend tsc --noEmit clean · npm run build clean · control-character sweep clean
+classification                  5/5 categories, each citing the right act
+/health                         anchor_problems: []
+```
+
+### Known still open
+
+Unchanged from §6n except where noted above:
+
+- **Retrieval dilution on compound questions** - "Can I patent it, and what
+  licence do I need?" retrieves only D&C licensing rules. A *pure* patentability
+  question retrieves 3(d)/3(e)/3(o)/3(p) correctly. The fix is §6m's
+  reserved-slots pattern applied to expansion formulations; still not taken,
+  because it changes core retrieval and needs its own measurement.
+- **"What is ABS?"** reaches food and drug regulation rather than the Biological
+  Diversity Act on roughly 1 run in 3.
+- Confidence remains uncalibrated - responsive across four bands is not the same
+  thing.
+- Patents Act s.3(p) still unreachable by search (§6g margin bleed).
+- Duplicate Biological Diversity Rules 2024 (~184 chunks) - §6g decision stands.
+- Hindi still falls back to dense-only retrieval, and the degradation is
+  invisible.
+- **The OpenRouter key exposed by the §6j traversal bug has still not been
+  rotated.** The hole is closed; the key is still compromised. This is the only
+  item on this list that is not a trade-off.
 
 
 ---
