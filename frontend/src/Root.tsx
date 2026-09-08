@@ -5,6 +5,7 @@ import { fetchHealth } from "./api";
 import { ExportPage } from "./pages/Export";
 import { Home } from "./pages/Home";
 import { SourcesPage } from "./pages/Sources";
+import { TreatiesPage } from "./pages/Treaties";
 import { Shell } from "./Shell";
 import type { UiLang } from "./i18n";
 import type { Health } from "./types";
@@ -75,6 +76,7 @@ export function Root() {
         <Route path="/consult" element={<PreserveSearch to="/ask" />} />
         <Route path="/compare" element={<Workspace lockedMode="compare" />} />
         <Route path="/export" element={<ExportPage />} />
+        <Route path="/treaties" element={<TreatiesPage />} />
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

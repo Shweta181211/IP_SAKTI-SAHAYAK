@@ -25,6 +25,7 @@ const LINKS = [
   { to: "/", key: "navHome" as const, end: true },
   { to: "/ask", key: "navConsult" as const, end: false },
   { to: "/export", key: "navExport" as const, end: false },
+  { to: "/treaties", key: "navTreaties" as const, end: false },
   { to: "/sources", key: "navSources" as const, end: false },
 ];
 

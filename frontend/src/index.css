@@ -613,20 +613,46 @@
 }
 
 /* ---------- Exploratory brand surface (Dribbble Ayurveda energy) ---------- */
+/* The pointer mark is a leaf, not a ring — the same shape as the logo, so the
+   cursor reads as part of the identity rather than a generic tracker dot.
+   `border-radius: 0 100% 0 100%` gives the pointed oval; the rotation stands it
+   up, and the ::after stroke is the midrib.
+
+   `mix-blend-mode: difference` is what lets one mark work on both the dark
+   landing ground and the paper workspace without being told which it is on. */
 .has-aura .site-aura {
   display: block;
   position: fixed;
   left: var(--mx, -80px);
   top: var(--my, -80px);
   z-index: 90;
-  width: 22px;
-  height: 22px;
-  margin: -11px 0 0 -11px;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
   border: 1.5px solid rgba(232, 197, 107, 0.85);
-  border-radius: 999px;
+  border-radius: 0 100% 0 100%;
+  transform: rotate(-45deg);
   pointer-events: none;
   mix-blend-mode: difference;
-  transition: width 120ms ease, height 120ms ease;
+  transition:
+    width 120ms ease,
+    height 120ms ease;
+}
+
+/* Midrib. Drawn as a thin diagonal band so it follows the leaf's long axis
+   after the rotation, which a plain border cannot do. */
+.has-aura .site-aura::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 0.6px),
+    rgba(232, 197, 107, 0.8) calc(50% - 0.6px),
+    rgba(232, 197, 107, 0.8) calc(50% + 0.6px),
+    transparent calc(50% + 0.6px)
+  );
 }
 .site-aura {
   display: none;
@@ -1300,11 +1326,12 @@
 
 /* ============================================================================
    EVIDENCE SUPPORT GAUGE
-   Replaces the old "Partly supported (internal score 0.83, uncalibrated)" line.
 
-   A semicircular instrument rather than a bar: this sits on a page styled as a
-   printed legal opinion, where a dial reads as a measuring instrument engraved
-   on the sheet, and a progress bar reads as a download.
+   No card. The white panel around this made a measuring instrument look like a
+   form field, and it fenced off a reading that belongs to the sheet it is
+   reporting on. The gauge now sits directly on the paper and carries itself
+   through depth instead of chrome: a groove cut into the ground, a lit arc with
+   a specular highlight, and a needle that casts a real shadow.
 
    The needle rests on the MIDDLE OF A BAND, never between two. The underlying
    score is ordinal and uncalibrated, so a needle at an arbitrary angle would
@@ -1314,28 +1341,25 @@
    it cited, and nothing about whether the law was applied correctly, so
    "Confidence" and "Certainty" are both the wrong word.
 
-   Filled arc is neem, which already means grounded/verified here; the bottom
-   band is clay, which means a limit. Haldi is deliberately absent — it names
+   The lit arc is neem, which already means grounded/verified here; the bottom
+   band is clay, which means a limit. Haldi is deliberately absent - it names
    the classification verdict and nothing else.
    ========================================================================== */
 
 .support {
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  background: #fffdf8;
-  padding: 0.8rem 1rem 0.7rem;
+  padding: 0.2rem 0 0.1rem;
 }
 
 .support-gauge {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.15rem;
 }
 
 .support-dial {
   flex: none;
-  width: 118px;
-  height: 74px;
+  width: 132px;
+  height: 85px;
   overflow: visible;
 }
 
@@ -1346,11 +1370,11 @@
 .support-label {
   margin-top: 0.1rem;
   font-family: Fraunces, ui-serif, Georgia, serif;
-  font-size: clamp(1.05rem, 1.9vw, 1.3rem);
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: -0.012em;
-  color: var(--neem);
+  color: #3d6547;
 }
 
 .support-label.is-thin {
@@ -1362,7 +1386,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.35rem;
+  margin-top: 0.3rem;
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1377,17 +1401,16 @@
 }
 
 .support-caption {
-  margin-top: 0.65rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--rule);
+  max-width: 46ch;
+  margin-top: 0.45rem;
   font-size: 11.5px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--ink-faint);
 }
 
 .support-why {
-  margin-top: 0.35rem;
-  font-size: 11px;
+  margin-top: 0.3rem;
+  font-size: 10.5px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--indigo);
@@ -1399,8 +1422,8 @@
 }
 
 .support-reasons {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
   border-top: 1px solid var(--rule);
   display: flex;
   flex-direction: column;
@@ -1427,8 +1450,8 @@
   content: none;
 }
 
-/* A swinging needle is exactly what this setting suppresses; the gauge still
-   reads correctly, it simply arrives already pointing at its band. */
+/* A swinging needle is exactly what this setting exists to suppress; the gauge
+   still reads correctly, it simply arrives already pointing at its band. */
 @media (prefers-reduced-motion: reduce) {
   .support-dial g,
   .support-dial path {
@@ -1436,13 +1459,13 @@
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 460px) {
   .support-gauge {
-    gap: 0.7rem;
+    gap: 0.75rem;
   }
   .support-dial {
-    width: 96px;
-    height: 60px;
+    width: 104px;
+    height: 68px;
   }
 }
 
@@ -2328,5 +2351,248 @@
   .readiness-section,
   .readiness-plan {
     break-inside: avoid;
+  }
+}
+
+/* ============================================================================
+   CONSULT GROUND — PAPER / DESK
+
+   "Desk" puts the workspace on the landing page's dark ground and leaves the
+   answer itself on paper: a printed opinion sheet lying on a desk. That is the
+   whole reason this is a GROUND switch and not a dark theme — inverting the
+   answer into light-on-dark would cost the readability the entire layout is
+   built around, and a statute excerpt is the last thing that should be set in
+   reversed type.
+
+   So the overrides below only touch what surrounds the sheet: the ground, the
+   header, the composer and the empty state. Every answer component is
+   untouched and keeps working exactly as it does on paper.
+   ========================================================================== */
+
+.consult-desk {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 16% 8%, rgba(196, 92, 58, 0.34), transparent 52%),
+    radial-gradient(ellipse at 86% 4%, rgba(201, 138, 43, 0.2), transparent 46%),
+    linear-gradient(165deg, #1a0e0a 0%, #0e1712 46%, #142018 100%);
+}
+
+/* The pointer-tracked wash, borrowed from the landing hero so the ground is lit
+   rather than flat. Fixed and behind everything, so it never intercepts a
+   click on the sheet above it. */
+.consult-desk-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    38vmax 38vmax at calc(var(--mxp, 0.5) * 100%) calc(var(--myp, 0.3) * 100%),
+    rgba(201, 138, 43, 0.16),
+    transparent 62%
+  );
+  transition: background-position 200ms linear;
+}
+
+/* The ruled paper texture belongs to the sheet, not to the desk. */
+.consult-desk .ruled {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+/* The sheet. Paper, ruled, lifted off the desk by a real shadow. */
+.consult-desk main {
+  margin-top: 1.1rem;
+  margin-bottom: 1.1rem;
+  border: 1px solid rgba(221, 206, 172, 0.35);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      rgba(221, 206, 172, 0.38) 31px,
+      rgba(221, 206, 172, 0.38) 32px
+    ),
+    var(--paper);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.5) inset,
+    0 18px 44px rgba(0, 0, 0, 0.45),
+    0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Header and composer sit ON the desk, so they take the desk's colouring.
+   Both are sticky and translucent, which is why they need an explicit dark
+   ground rather than inheriting one. */
+.consult-desk > .ruled > header {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(14, 23, 18, 0.82);
+}
+
+.consult-desk > .ruled > div:last-child {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(14, 23, 18, 0.86);
+}
+
+/* Chrome text on the desk. Scoped to the header and composer only — anything
+   inside the sheet keeps its paper colours. */
+.consult-desk > .ruled > header .eyebrow,
+.consult-desk > .ruled > div:last-child .eyebrow,
+.consult-desk > .ruled > div:last-child .consult-pill-label {
+  color: rgba(245, 238, 221, 0.62);
+}
+
+.consult-desk > .ruled > header button,
+.consult-desk > .ruled > div:last-child button {
+  color: rgba(245, 238, 221, 0.78);
+}
+
+.consult-desk > .ruled > header button {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.consult-desk > .ruled > div:last-child .consult-pill-track {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.consult-desk > .ruled > div:last-child .consult-pill.is-on {
+  color: var(--ink);
+}
+
+/* The composer's own input card stays paper — you are writing onto the sheet. */
+.consult-desk > .ruled > div:last-child .card {
+  background: #fffdf8;
+}
+
+.consult-desk > .ruled > div:last-child .card button {
+  color: inherit;
+}
+
+.consult-desk > .ruled > div:last-child .send-btn {
+  color: var(--paper);
+}
+
+/* The empty state is the only page content that lives outside a card, so it is
+   the one thing inside the sheet that would otherwise look unconsidered. It
+   stays on paper with everything else — no override needed — but the leaf mark
+   gets a touch more presence against the framed sheet. */
+.consult-desk .consult-leaf {
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .consult-desk-glow {
+    background: radial-gradient(
+      38vmax 38vmax at 50% 30%,
+      rgba(201, 138, 43, 0.14),
+      transparent 62%
+    );
+  }
+}
+
+@media print {
+  .consult-desk {
+    background: none;
+  }
+  .consult-desk-glow {
+    display: none;
+  }
+  .consult-desk main {
+    border: none;
+    box-shadow: none;
+    margin: 0;
+  }
+}
+
+/* ---- the switch itself ---- */
+
+.ground-switch {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.consult-desk .ground-switch {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.ground-switch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.6rem;
+  color: var(--ink-faint);
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.ground-switch-btn svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.ground-switch-btn:hover {
+  color: var(--ink);
+}
+
+.ground-switch-btn.is-on {
+  background: var(--haldi);
+  color: var(--ink);
+}
+
+.consult-desk .ground-switch-btn {
+  color: rgba(245, 238, 221, 0.6);
+}
+
+.consult-desk .ground-switch-btn:hover {
+  color: var(--paper);
+}
+
+.consult-desk .ground-switch-btn.is-on {
+  background: var(--haldi);
+  color: var(--ink);
+}
+
+/* Export readiness -> treaty routes. A pointer to a sibling page, not a
+   section: the two answer different questions. */
+.readiness-crosslink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3.5rem;
+  padding: 1rem 1.15rem;
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+}
+
+.readiness-crosslink-cta {
+  flex: none;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: #fffdf8;
+  font-size: 13px;
+  color: var(--indigo);
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+
+.readiness-crosslink-cta:hover {
+  border-color: var(--indigo);
+  background: var(--indigo-wash);
+}
+
+/* Enough desk showing for the metaphor to land. At full sheet width the dark
+   ground reads as a border rather than a surface, so the sheet is inset once
+   there is room to spare — never on narrow screens, where every pixel of
+   reading width matters more than the effect. */
+@media (min-width: 1180px) {
+  .consult-desk > .ruled > main {
+    max-width: min(72rem, calc(100% - 7rem));
   }
 }

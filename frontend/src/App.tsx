@@ -30,6 +30,11 @@ type Mode = "ask" | "compare";
 // transcript per named consultation rather than a single anonymous blob that
 // "End session" destroyed.
 const STYLE_KEY = "ipsakti.style.v1";
+// The workspace ground. "paper" is the printed-sheet default; "desk" puts
+// that sheet on the landing page's dark ground. Remembered per browser
+// because it is a viewing preference, not a property of any one answer.
+const GROUND_KEY = "ipsakti.ground.v1";
+type Ground = "paper" | "desk";
 
 /** `lockedMode` is the mode this route opens in. It is a starting point, not a
  *  lock: the rail can still switch, because a user who lands on /compare and
@@ -57,6 +62,13 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
       return (localStorage.getItem(STYLE_KEY) as ResponseStyle) || "legal";
     } catch {
       return "legal";
+    }
+  });
+  const [ground, setGround] = useState<Ground>(() => {
+    try {
+      return (localStorage.getItem(GROUND_KEY) as Ground) || "paper";
+    } catch {
+      return "paper";
     }
   });
   // Next steps are fetched per turn, on request. Keyed by turn id so each
@@ -101,6 +113,14 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
       /* same */
     }
   }, [style]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUND_KEY, ground);
+    } catch {
+      /* a remembered preference is a convenience, never a requirement */
+    }
+  }, [ground]);
 
   useEffect(() => {
     setMode(lockedMode);
@@ -308,7 +328,12 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
   const askPlaceholder = pendingClarification ? t.placeholderClarify : t.placeholderAsk;
 
   return (
-    <div className="min-h-[calc(100vh-56px)]">
+    <div
+      className={`min-h-[calc(100vh-56px)] ${ground === "desk" ? "consult-desk" : ""}`}
+    >
+      {/* The pointer-tracked wash from the landing page, so the dark ground
+          is lit rather than flat. Inert in paper mode. */}
+      {ground === "desk" && <div className="consult-desk-glow" aria-hidden />}
       {/* One column, no rail.
           The controls that lived in a permanent sidebar now sit where the
           decision is actually made - mode, jurisdiction and wording as pills
@@ -355,6 +380,37 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                 </button>
               </>
             )}
+
+            {/* Ground, not theme: this changes what the sheet sits ON, and
+                the sheet itself stays paper in both. The answer is a printed
+                legal opinion either way - inverting it into dark type would
+                cost the readability the whole layout is built around. */}
+            <div className="ground-switch" role="radiogroup" aria-label="Workspace ground">
+              {(["paper", "desk"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  role="radio"
+                  aria-checked={ground === g}
+                  onClick={() => setGround(g)}
+                  title={g === "paper" ? "Paper — plain sheet" : "Desk — sheet on a dark ground"}
+                  className={`ground-switch-btn ${ground === g ? "is-on" : ""}`}
+                >
+                  {g === "paper" ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M6 3h8l4 4v14H6z" strokeLinejoin="round" />
+                      <path d="M14 3v4h4" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M3 17h18" strokeLinecap="round" />
+                      <path d="M8 6h11v8H8z" strokeLinejoin="round" />
+                      <path d="M5 21v-4M19 21v-4" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
 
             {/* Everything that used to be permanently open in the rail but is
                 set once per session rather than per question. Kept behind one

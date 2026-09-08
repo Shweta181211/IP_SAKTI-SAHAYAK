@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ConfidenceLevel } from "../types";
 
 interface Props {
@@ -9,9 +9,9 @@ interface Props {
 }
 
 /**
- * How well the cited sources support this answer, as a semicircular gauge.
+ * How well the cited sources support this answer, as a dimensional gauge.
  *
- * Three deliberate constraints:
+ * Four constraints, three of them substantive:
  *
  * **It is called "Evidence support", not confidence and not certainty.** The
  * number behind it is a weighted blend of citation survival, provision
@@ -25,16 +25,15 @@ interface Props {
  * showing it, just only to screen-reader users, complete with a two-decimal
  * false precision. It now sits behind a dev flag.
  *
- * **The needle rests on a band, not on a value.** The gauge has four arc
- * segments and the needle points at the middle of the band that was reached —
- * it never lands between two, because the underlying score is ordinal and
- * uncalibrated, and a needle at an arbitrary angle would imply a resolution
- * this measurement does not have.
+ * **The needle rests on a band, not on a value.** Four arc segments, and the
+ * needle points at the middle of the band reached — never between two, because
+ * the underlying score is ordinal and uncalibrated, and a needle at an
+ * arbitrary angle would imply a resolution this measurement does not have.
  *
- * Colour stays semantic: filled arc in neem, which already means
- * grounded/verified here; the bottom band in clay, which means a limit. Haldi
- * is deliberately absent — it names the classification verdict and nothing
- * else.
+ * **No card around it.** The white panel made a measuring instrument look like
+ * a form field. The gauge now sits directly on the sheet and carries itself
+ * through depth — a recessed track, a lit arc, and a needle with a real
+ * shadow — so it reads as an instrument set into the page.
  */
 
 const BANDS: ConfidenceLevel[] = ["limited", "moderate", "high", "strong"];
@@ -46,9 +45,9 @@ const TICK: Record<ConfidenceLevel, string> = {
 };
 
 // Gauge geometry. A half turn, 180° on the left to 0° on the right.
-const CX = 74;
-const CY = 68;
-const R = 54;
+const CX = 78;
+const CY = 74;
+const R = 58;
 const GAP_DEG = 5;
 const SWEEP = (180 - GAP_DEG * (BANDS.length - 1)) / BANDS.length;
 const STEP = SWEEP + GAP_DEG;
@@ -67,10 +66,7 @@ function arc(index: number, radius: number) {
   return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${radius} ${radius} 0 0 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
 }
 
-/** The middle of a band — where the needle rests. */
-function bandCentre(index: number) {
-  return 180 - index * STEP - SWEEP / 2;
-}
+const bandCentre = (index: number) => 180 - index * STEP - SWEEP / 2;
 
 function devMode(): boolean {
   try {
@@ -83,9 +79,9 @@ function devMode(): boolean {
 
 export function Confidence({ level, label, score, reasons }: Props) {
   const [open, setOpen] = useState(false);
-  // The needle swings up from rest rather than appearing in place, so the gauge
-  // reads as a measurement being taken rather than a badge that was always
-  // there. One animation frame's delay is enough to make the transition run.
+  // Several answers share a page, so the gradient/filter ids must be unique or
+  // the first gauge on the page captures every later reference to them.
+  const uid = useId().replace(/:/g, "");
   const [settled, setSettled] = useState(false);
   useEffect(() => {
     const raf = requestAnimationFrame(() => setSettled(true));
@@ -94,81 +90,132 @@ export function Confidence({ level, label, score, reasons }: Props) {
 
   const reached = BANDS.indexOf(level);
   const isLimited = level === "limited";
-  const tone = isLimited ? "var(--clay)" : "var(--neem)";
-  // At rest the needle sits at the far left; settled, it points at the middle
-  // of the band actually reached.
   const angle = settled ? bandCentre(reached) : 180;
+
+  const lit = isLimited ? `#c0553d` : `#5f9270`;
+  const litDeep = isLimited ? `#8d3324` : `#3d6547`;
 
   return (
     <section className="support" aria-label={`Evidence support: ${label}`}>
       <div className="support-gauge">
-        <svg viewBox="0 0 148 92" className="support-dial" role="img" aria-hidden>
-          {/* Engraved ground: every band drawn faint, so the unreached ones are
-              still legible as part of the scale. */}
+        <svg viewBox="0 0 156 100" className="support-dial" role="img" aria-hidden>
+          <defs>
+            {/* Lit from the upper left, so every arc shares one light source
+                and the dial reads as a solid object rather than flat strokes. */}
+            <linearGradient id={`lit-${uid}`} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={lit} />
+              <stop offset="100%" stopColor={litDeep} />
+            </linearGradient>
+            <linearGradient id={`track-${uid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#d8caa8" />
+              <stop offset="100%" stopColor="#efe6cd" />
+            </linearGradient>
+            <linearGradient id={`needle-${uid}`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#3d5147" />
+              <stop offset="100%" stopColor="#16241e" />
+            </linearGradient>
+            <radialGradient id={`hub-${uid}`} cx="35%" cy="30%" r="75%">
+              <stop offset="0%" stopColor="#fffdf8" />
+              <stop offset="100%" stopColor="#cdbf9d" />
+            </radialGradient>
+            <filter id={`cast-${uid}`} x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="1.6" stdDeviation="1.6" floodColor="#16241e" floodOpacity="0.28" />
+            </filter>
+            <filter id={`glow-${uid}`} x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="0" stdDeviation="2.6" floodColor={lit} floodOpacity="0.45" />
+            </filter>
+          </defs>
+
+          {/* Recessed channel: a dark rim under the track is what makes the
+              groove look cut into the sheet rather than drawn on it. */}
           {BANDS.map((band, i) => (
             <path
-              key={`bg-${band}`}
+              key={`groove-${band}`}
               d={arc(i, R)}
               fill="none"
-              stroke="var(--paper-deep)"
-              strokeWidth="9"
-              strokeLinecap="butt"
+              stroke="#b9a882"
+              strokeOpacity="0.55"
+              strokeWidth="13"
+              strokeLinecap="round"
             />
           ))}
-          {/* Reached bands, filled in order. */}
+          {BANDS.map((band, i) => (
+            <path
+              key={`track-${band}`}
+              d={arc(i, R)}
+              fill="none"
+              stroke={`url(#track-${uid})`}
+              strokeWidth="10.5"
+              strokeLinecap="round"
+            />
+          ))}
+
+          {/* Reached bands, lit in order. */}
           {BANDS.map((band, i) =>
             i <= reached ? (
               <path
                 key={`on-${band}`}
                 d={arc(i, R)}
                 fill="none"
-                stroke={tone}
-                strokeWidth="9"
-                strokeLinecap="butt"
+                stroke={`url(#lit-${uid})`}
+                strokeWidth="10.5"
+                strokeLinecap="round"
+                filter={`url(#glow-${uid})`}
                 style={{
                   opacity: settled ? 1 : 0,
-                  transition: `opacity 260ms ease-out ${i * 90}ms`,
+                  transition: `opacity 300ms ease-out ${i * 95}ms`,
                 }}
               />
             ) : null,
           )}
+          {/* Specular highlight along the top of the lit arcs. */}
+          {BANDS.map((band, i) =>
+            i <= reached ? (
+              <path
+                key={`gloss-${band}`}
+                d={arc(i, R + 2.6)}
+                fill="none"
+                stroke="#ffffff"
+                strokeOpacity={settled ? 0.3 : 0}
+                strokeWidth="2"
+                strokeLinecap="round"
+                style={{ transition: `stroke-opacity 300ms ease-out ${i * 95 + 120}ms` }}
+              />
+            ) : null,
+          )}
 
-          {/* Tick marks between bands — the engraving that makes this read as
-              an instrument rather than a progress bar. */}
+          {/* Engraved band marks. */}
           {BANDS.map((band, i) => {
-            const a = polar(180 - i * STEP - SWEEP / 2, R + 9);
+            const a = polar(bandCentre(i), R + 11);
             return (
               <circle
                 key={`tick-${band}`}
                 cx={a.x}
                 cy={a.y}
-                r={i === reached ? 1.9 : 1.1}
-                fill={i === reached ? tone : "var(--rule)"}
+                r={i === reached ? 2.1 : 1.2}
+                fill={i === reached ? lit : "#c3b291"}
               />
             );
           })}
 
           {/* Needle. Drawn pointing left at 180°, then rotated clockwise into
-              place, so the transform is a single rotation about the pivot. */}
+              place, so the whole motion is one rotation about the hub. */}
           <g
+            filter={`url(#cast-${uid})`}
             style={{
               transformOrigin: `${CX}px ${CY}px`,
               transform: `rotate(${180 - angle}deg)`,
-              transition: "transform 760ms cubic-bezier(0.22, 1, 0.36, 1)",
+              transition: "transform 820ms cubic-bezier(0.22, 1, 0.36, 1)",
             }}
           >
-            <line
-              x1={CX}
-              y1={CY}
-              x2={CX - (R - 13)}
-              y2={CY}
-              stroke="var(--ink)"
-              strokeWidth="1.6"
-              strokeLinecap="round"
+            <path
+              d={`M ${CX - (R - 12)} ${CY} L ${CX + 4} ${CY - 3.1} L ${CX + 4} ${CY + 3.1} Z`}
+              fill={`url(#needle-${uid})`}
             />
           </g>
-          <circle cx={CX} cy={CY} r="4.5" fill="#fffdf8" stroke="var(--ink)" strokeWidth="1.4" />
-          <circle cx={CX} cy={CY} r="1.4" fill="var(--ink)" />
+          <circle cx={CX} cy={CY} r="6.4" fill={`url(#hub-${uid})`} filter={`url(#cast-${uid})`} />
+          <circle cx={CX} cy={CY} r="6.4" fill="none" stroke="#16241e" strokeOpacity="0.5" strokeWidth="1" />
+          <circle cx={CX} cy={CY} r="1.7" fill="#16241e" />
         </svg>
 
         <div className="support-readout">
@@ -181,20 +228,18 @@ export function Confidence({ level, label, score, reasons }: Props) {
               </span>
             ))}
           </p>
+          <p className="support-caption">
+            How well the cited sources support this answer — not a judgment of legal
+            certainty or outcome.
+            {devMode() && score !== null && (
+              <span className="ref ml-1.5 text-ink-faint">[dev {score.toFixed(2)}]</span>
+            )}
+          </p>
+          <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="support-why">
+            {open ? "Hide how this was measured" : "How was this measured?"}
+          </button>
         </div>
       </div>
-
-      <p className="support-caption">
-        Reflects how well the cited sources support this specific answer — not a judgment
-        of legal certainty or outcome.
-        {devMode() && score !== null && (
-          <span className="ref ml-1.5 text-ink-faint">[dev {score.toFixed(2)}]</span>
-        )}
-      </p>
-
-      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="support-why">
-        {open ? "Hide how this was measured" : "How was this measured?"}
-      </button>
 
       <div className="reveal" data-open={open} aria-hidden={!open}>
         <div>

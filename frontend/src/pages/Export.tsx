@@ -1,13 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import { EXPORT_LANES } from "../data/exportMarkets";
+import { Link } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CancelledError, fetchExportReadiness } from "../api";
 import { ReadinessReport } from "../components/ReadinessReport";
 import { loadLastAnswer, printBriefing } from "../printBriefing";
@@ -47,7 +39,6 @@ const CATEGORIES: { value: Category; label: string }[] = [
 export function ExportPage() {
   const { uiLang, logConsent } = useShell();
   const t = STRINGS[uiLang];
-  const navigate = useNavigate();
   const [last, setLast] = useState<Answer | null>(null);
 
   const [product, setProduct] = useState("");
@@ -234,35 +225,21 @@ export function ExportPage() {
 
       <div ref={resultRef}>{report && <ReadinessReport report={report} />}</div>
 
-      {/* --------------------------- treaty lanes --------------------------- */}
-      <section className="mt-16">
-        <p className="explore-kicker explore-kicker--ink">Read one instrument directly</p>
-        <h2 className="mt-2 font-display text-[26px] leading-tight text-ink">
-          Treaty and regional pathways
-        </h2>
-        <p className="mt-3 max-w-2xl text-[14.5px] leading-relaxed text-ink-soft">
-          Each route opens a question against the international corpus — TRIPS, CBD, Nagoya,
-          GRATK, PCT, Madrid, Hague, Budapest, the European Patent Convention, EU Directive
-          2004/24/EC, and the FDA botanical-drug guidance. These answer what an instrument
-          says; the report above assesses a product against it.
-        </p>
-
-        <div className="export-grid mt-8">
-          {EXPORT_LANES.map((lane, i) => (
-            <TiltCard
-              key={lane.id}
-              onClick={() =>
-                navigate(`/ask?j=international&q=${encodeURIComponent(lane.question)}`)
-              }
-            >
-              <p className="eyebrow text-haldi">{String(i + 1).padStart(2, "0")}</p>
-              <h3 className="mt-2 font-serif text-[20px] text-ink">{lane.treaty}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">{lane.use}</p>
-              <p className="mt-3 font-mono text-[11px] text-ink-faint">{lane.file}</p>
-              <p className="mt-5 text-[12.5px] font-medium text-clay">Open in Consult →</p>
-            </TiltCard>
-          ))}
+      {/* The treaty lanes have their own route again — they answer what an
+          instrument SAYS, which is a different job from assessing a product
+          against one, and stacking them here made this form read as a preamble
+          to a link list. */}
+      <section className="readiness-crosslink">
+        <div className="min-w-0">
+          <p className="eyebrow text-ink-faint">Reading an instrument directly</p>
+          <p className="mt-1 text-[14px] leading-relaxed text-ink-soft">
+            To ask what a single treaty or regional instrument says, rather than assessing a
+            product against it, open the treaty routes.
+          </p>
         </div>
+        <Link to="/treaties" className="readiness-crosslink-cta">
+          Treaty routes <span aria-hidden>→</span>
+        </Link>
       </section>
 
       <section className="card mt-14 p-6">
@@ -298,32 +275,5 @@ export function ExportPage() {
         )}
       </section>
     </main>
-  );
-}
-
-function TiltCard({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const move = (e: MouseEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width - 0.5;
-    const y = (e.clientY - r.top) / r.height - 0.5;
-    el.style.transform = `rotateX(${-y * 10}deg) rotateY(${x * 12}deg) translateY(-6px)`;
-  };
-  const leave = () => {
-    if (ref.current) ref.current.style.transform = "";
-  };
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={onClick}
-      onMouseMove={move}
-      onMouseLeave={leave}
-      className="tilt-card p-6 text-left"
-    >
-      {children}
-    </button>
   );
 }
