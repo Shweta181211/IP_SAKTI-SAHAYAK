@@ -4769,39 +4769,3 @@ html.reveal-armed .reveal-in:not(.is-in) {
     display: none;
   }
 }
-
-/* ---- the reading rule ----------------------------------------------------
-   Page position, in the left margin, as the same drawn vertical rule the
-   reasoning trail uses to join its stations. A hairline track with a filled
-   length inside it - no numbers, no percentage, because the useful question
-   is "how much of this is left", not "what fraction". */
-.reading-rule {
-  position: fixed;
-  /* Just inside the sheet's own left gutter. 78rem is `max-w-sheet`; the
-     pages add 1.5rem of padding inside that, so this sits about 20px clear
-     of the first character. The component does not render below 1330px,
-     where that gutter stops existing. */
-  left: calc((100vw - 78rem) / 2 + 0.15rem);
-  top: 22vh;
-  bottom: 12vh;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--rule);
-  z-index: 20;
-  opacity: 0.85;
-}
-
-.reading-rule span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--neem);
-  transform-origin: top;
-  /* Follows the scroll directly. The short transition only smooths a jump -
-     a wheel notch or a keyboard page - it does not lag the pointer. */
-  transition: transform 90ms linear;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reading-rule span { transition: none; }
-}

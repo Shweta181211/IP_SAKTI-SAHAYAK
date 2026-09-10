@@ -1,7 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PointerAura } from "./components/PointerAura";
-import { ReadingRule } from "./components/ReadingRule";
 import { STRINGS, type UiLang } from "./i18n";
 import type { Health } from "./types";
 
@@ -53,9 +52,6 @@ export function Shell({
   return (
     <ShellContext.Provider value={value}>
       <PointerAura />
-      {/* Not on the landing page: that is a composition of full-height
-          sections you move THROUGH, not a sheet you read down. */}
-      {!onExplore && <ReadingRule />}
       <div
         // The landing page is a fixed composition, not a switchable surface:
         // its hero is dark and its garden section is deliberately light, with
