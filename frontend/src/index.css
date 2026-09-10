@@ -46,7 +46,7 @@
      Anything that needs a size picks one of these. Nothing invents an eighth.
      ---------------------------------------------------------------------- */
   --t-display: clamp(2.8rem, 6vw, 5.6rem);     /* the hero sentence, once per site */
-  --t-title:   clamp(2rem, 3.8vw, 3.3rem);     /* page and section titles */
+  --t-title:   clamp(2.2rem, 4.6vw, 4rem);     /* page and section titles */
   --t-head:    1.4375rem;                      /* card titles, answer headline */
   --t-sub:     1.1875rem;                      /* leads and standfirsts */
   --t-body:    1.0313rem;                      /* prose */
@@ -898,10 +898,11 @@
   font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  /* No `balance`. It was evening the lines by pulling the heading in, which is
-     exactly the compactness that left these pages looking half-used. Let it
-     run to its measure. */
-  max-width: 24ch;
+  /* No `balance` and no cap. Balance evened the lines by pulling the heading
+     inward, and the cap held it to half the page - between them they are what
+     made every heading on the site look compact. A heading runs the width of
+     the column it is in. */
+  max-width: none;
 }
 .explore-page-title em {
   font-style: normal;
@@ -1171,42 +1172,29 @@
   color: var(--indigo);
 }
 
-/* The page header, across the full width.
+/* The page header.
 
-   Title and standfirst were stacked, each capped at its own measure, so on a
-   wide page the right half of the header was empty above a grid that used all
-   of it. Side by side they use the width the page already has, and neither has
-   to be stretched past a readable line length to do it - which is what makes
-   this different from simply widening the paragraph.
+   An earlier pass put the standfirst BESIDE the title to fill the empty right
+   half. That solved the gap and broke the reading order: a standfirst belongs
+   under the heading it stands first of, not in a column next to it.
 
-   The standfirst sits on the title's baseline block rather than the top, so the
-   two read as one header and not as a heading with a floating note. */
+   The gap was never the paragraph's job to fill. It was the title's - it was
+   capped at 24ch and sitting in half the page. So the title runs the full
+   content width at a size that fills it, and the standfirst goes back
+   underneath at a length that is still comfortable to read. */
 .page-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  column-gap: clamp(2rem, 5vw, 5rem);
-  align-items: end;
   padding-bottom: 1.75rem;
   border-bottom: 1px solid var(--rule);
 }
 
 .page-head .explore-page-title {
-  max-width: 18ch;
+  /* No cap. The container is the measure; at this size a page title fills one
+     or two lines across it. */
+  max-width: none;
 }
 
 .page-head .page-lead {
-  margin-top: 0;
-  max-width: 52ch;
-  padding-bottom: 0.35rem;
-}
-
-@media (max-width: 860px) {
-  .page-head {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 1rem;
-    align-items: start;
-  }
-  .page-head .explore-page-title { max-width: 24ch; }
+  margin-top: 1rem;
 }
 
 /* The standfirst under a page title. One size, every page. */
@@ -1578,12 +1566,22 @@
 }
 
 .support-leaf {
-  width: 34px;
-  height: 44px;
+  /* Bigger than the first attempt. At 34x44 the shape and its fill level were
+     both guesswork at a glance, which is the whole job of the mark. */
+  width: 50px;
+  height: 65px;
   flex: none;
 }
 
-/* The filled part. Clipped from the base, so it reads as a level. */
+/* The unfilled part. Near-white rather than the cream tint it was: against a
+   cream page, `--paper-deep` left the empty portion almost the same value as
+   the ground, so the leaf read as a dark blob with a vague top instead of a
+   shape that is part full. The contrast between empty and filled IS the
+   reading, so it has to be the strongest thing in the mark. */
+.support-leaf-well {
+  fill: #fffdf8;
+}
+
 .support-leaf-body {
   fill: var(--neem);
 }
@@ -1592,18 +1590,26 @@
   fill: var(--clay);
 }
 
-/* The whole outline is always drawn, so the unfilled part still reads as a
-   leaf rather than as a fragment. */
+/* A real outline, in ink rather than the hairline rule colour - the mark has to
+   read as a leaf before it reads as a measurement. */
 .support-leaf-edge {
   fill: none;
-  stroke: var(--rule);
-  stroke-width: 1.6;
+  stroke: var(--ink);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+
+.support-leaf-level {
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  opacity: 0.85;
 }
 
 .support-leaf-rib {
   fill: none;
-  stroke: var(--rule);
+  stroke: var(--ink);
   stroke-width: 1.1;
+  opacity: 0.28;
 }
 
 .support-head {
@@ -3549,6 +3555,21 @@ html[data-surface="dark"] {
 .surface-dark .export-stage {
   background: transparent;
   color: var(--ink);
+}
+
+/* The leaf readout: its well is a cream tint on paper, which on the dark
+   surface would be a bright slab. Sunk instead, and the outline lifts. */
+.surface-dark .support-leaf-well {
+  fill: rgba(245, 238, 221, 0.16);
+}
+.surface-dark .support-leaf-edge {
+  stroke: rgba(245, 238, 221, 0.75);
+}
+.surface-dark .support-leaf-level {
+  stroke: rgba(245, 238, 221, 0.8);
+}
+.surface-dark .support-leaf-rib {
+  stroke: rgba(245, 238, 221, 0.45);
 }
 
 /* The em in a page title is clay, which is a limit on paper and would read as a

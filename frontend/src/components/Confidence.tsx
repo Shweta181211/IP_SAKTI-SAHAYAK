@@ -53,6 +53,10 @@ function devMode(): boolean {
 /* The logo's leaf, at readout size. Same two mirrored curves meeting at a
    point, so the mark on an answer and the mark in the header are one shape. */
 const LEAF = "M20 4 C7 19 7 34 20 48 C33 34 33 19 20 4 Z";
+/* The leaf's own extent inside the 52-unit box - levels are measured
+   against this, not the box, so a full leaf is full to its tip. */
+const TOP = 4;
+const SPAN = 44;
 
 export function Confidence({ level, label, score, reasons }: Props) {
   const [open, setOpen] = useState(false);
@@ -60,10 +64,24 @@ export function Confidence({ level, label, score, reasons }: Props) {
   // needle, so there is nothing to settle.
   const reached = BANDS.indexOf(level);
   const isLimited = level === "limited";
-  /* Four bands, four heights. Deliberately not a continuous mapping of the raw
-     score: the score is uncalibrated, and a leaf filled to 61% would claim a
-     resolution the measurement does not have. */
-  const fill = (reached + 1) / BANDS.length;
+  /* Four bands, four levels - but the levels are spaced by AREA, not by height.
+
+     A leaf is pointed at both ends, so its width varies down its length: the
+     top quarter of the box is a narrow tip carrying almost no area. Filling to
+     three quarters of the HEIGHT therefore covered about nine tenths of the
+     visible leaf, and a "well supported" reading looked indistinguishable from
+     a full one - the mark was lying about its own value.
+
+     Treating the leaf as a symmetric taper (width proportional to the distance
+     from the nearer point), the area below height h is 2h^2 up to the midpoint
+     and its mirror above. Solving that for the quarter marks gives 0.354 and
+     0.646 either side of the middle, which is what these numbers are.
+
+     Still a function of the BAND, not of the raw score: the score is
+     uncalibrated, and a leaf filled to 61% would claim a resolution the
+     measurement does not have. */
+  const LEVELS = [0.354, 0.5, 0.646, 1];
+  const fill = LEVELS[reached] ?? LEVELS[0];
   /* Several answers share a page, so each clip path needs its own id or the
      first leaf on the page captures every later reference to it. */
   const uid = useId().replace(/:/g, "");
@@ -95,12 +113,30 @@ export function Confidence({ level, label, score, reasons }: Props) {
             <clipPath id={`fill-${uid}`}>
               {/* Fills from the base upward, so a fuller leaf is more support
                   the way a filled vessel is more of something. */}
-              <rect x="0" y={52 - fill * 52} width="40" height={fill * 52} />
+              <rect x="0" y={TOP + (1 - fill) * SPAN} width="40" height={fill * SPAN + 4} />
+            </clipPath>
+            <clipPath id={`leaf-${uid}`}>
+              <path d={LEAF} />
             </clipPath>
           </defs>
+          {/* The empty part is tinted rather than left blank, so the whole
+              leaf is legible as a leaf and the fill reads as a level inside a
+              known shape - not as a shard floating on the page. */}
+          <path className="support-leaf-well" d={LEAF} />
           <path className="support-leaf-body" d={LEAF} clipPath={`url(#fill-${uid})`} />
+          {/* A rule at the level, clipped to the leaf. The boundary between
+              tint and solid is legible on paper but thin on the dark surface;
+              a line makes "how full" readable at a glance on both. */}
+          <line
+            className="support-leaf-level"
+            x1="0"
+            x2="40"
+            y1={TOP + (1 - fill) * SPAN}
+            y2={TOP + (1 - fill) * SPAN}
+            clipPath={`url(#leaf-${uid})`}
+          />
+          <path className="support-leaf-rib" d="M20 9 V45" clipPath={`url(#leaf-${uid})`} />
           <path className="support-leaf-edge" d={LEAF} />
-          <path className="support-leaf-rib" d="M20 8 V44" />
         </svg>
 
         <div className="min-w-0">
