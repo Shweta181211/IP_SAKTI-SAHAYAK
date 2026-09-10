@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { ConfidenceLevel } from "../types";
 
 interface Props {
@@ -37,12 +37,6 @@ interface Props {
  */
 
 const BANDS: ConfidenceLevel[] = ["limited", "moderate", "high", "strong"];
-const TICK: Record<ConfidenceLevel, string> = {
-  limited: "Thin",
-  moderate: "Some",
-  high: "Well",
-  strong: "Strong",
-};
 
 // Gauge geometry. A half turn, 180° on the left to 0° on the right.
 function devMode(): boolean {
@@ -55,65 +49,63 @@ function devMode(): boolean {
 }
 
 
+
+/* The logo's leaf, at readout size. Same two mirrored curves meeting at a
+   point, so the mark on an answer and the mark in the header are one shape. */
+const LEAF = "M20 4 C7 19 7 34 20 48 C33 34 33 19 20 4 Z";
+
 export function Confidence({ level, label, score, reasons }: Props) {
   const [open, setOpen] = useState(false);
   // The needle used to swing to its band on the first frame; there is no
   // needle, so there is nothing to settle.
   const reached = BANDS.indexOf(level);
   const isLimited = level === "limited";
+  /* Four bands, four heights. Deliberately not a continuous mapping of the raw
+     score: the score is uncalibrated, and a leaf filled to 61% would claim a
+     resolution the measurement does not have. */
+  const fill = (reached + 1) / BANDS.length;
+  /* Several answers share a page, so each clip path needs its own id or the
+     first leaf on the page captures every later reference to it. */
+  const uid = useId().replace(/:/g, "");
 
 
   return (
     <section className="support" aria-label={`Evidence support: ${label}`}>
-      {/* A SEAL, not a meter.
+      {/* A LEAF THAT FILLS.
 
-          Two earlier attempts were both instruments: a needle on a gauge face,
-          then a four-step bar. Both borrowed the visual language of continuous
-          measurement for something that is four ordinal bands over an
-          uncalibrated score, and both looked like a widget bolted to a legal
-          document.
+          Three earlier attempts all failed the same way. A needle on a gauge
+          face, a four-step bar, and a quartered seal with the band number in it
+          were each borrowing the language of measurement - and the last one put
+          a figure on the page ("3 of 4") that invites exactly the arithmetic
+          this score cannot support. There is no denominator worth showing when
+          the scale is ordinal and uncalibrated.
 
-          This page already has a seal: the little mark on a citation card that
-          says the provision was found in the source text. Authentication is the
-          gesture this product is actually making, so the support reading is a
-          seal too - one ring, quartered, filled as far as the evidence reaches.
-          It reads as a stamp on a document rather than a dial on a dashboard,
-          and it cannot be mistaken for a percentage. */}
+          So: the mark this product is already built around, filled from the
+          stem to one of four heights. It carries no number, it cannot be read
+          as a percentage, and it is the one shape on the page that belongs to
+          nothing else. How full it is says how far the evidence reached; the
+          words beside it say the rest. */}
       <div className="support-mark">
-        <svg viewBox="0 0 44 44" className={`support-seal ${isLimited ? "is-thin" : ""}`} aria-hidden>
-          {/* Four arcs of 90deg less a gap, drawn from the top clockwise, so
-              "more filled" reads the way a clock does. */}
-          {BANDS.map((band, i) => {
-            const R = 18;
-            const C = 2 * Math.PI * R;
-            const seg = C / 4;
-            return (
-              <circle
-                key={band}
-                cx="22"
-                cy="22"
-                r={R}
-                fill="none"
-                strokeWidth="3.5"
-                strokeLinecap="butt"
-                className={i <= reached ? "is-lit" : "is-track"}
-                strokeDasharray={`${seg - 4} ${C - seg + 4}`}
-                strokeDashoffset={-i * seg}
-                transform="rotate(-90 22 22)"
-              />
-            );
-          })}
-          {/* The centre carries the count reached, not a number out of ten -
-              four bands, and you are on the nth. */}
-          <text x="22" y="22" className="support-seal-n">
-            {reached + 1}
-          </text>
+        <svg
+          viewBox="0 0 40 52"
+          className={`support-leaf ${isLimited ? "is-thin" : ""}`}
+          aria-hidden
+        >
+          <defs>
+            <clipPath id={`fill-${uid}`}>
+              {/* Fills from the base upward, so a fuller leaf is more support
+                  the way a filled vessel is more of something. */}
+              <rect x="0" y={52 - fill * 52} width="40" height={fill * 52} />
+            </clipPath>
+          </defs>
+          <path className="support-leaf-body" d={LEAF} clipPath={`url(#fill-${uid})`} />
+          <path className="support-leaf-edge" d={LEAF} />
+          <path className="support-leaf-rib" d="M20 8 V44" />
         </svg>
 
         <div className="min-w-0">
           <p className="support-head">Evidence support</p>
           <p className={`support-label ${isLimited ? "is-thin" : ""}`}>{label}</p>
-          <p className="support-of">{TICK[BANDS[reached]]} · {reached + 1} of 4</p>
         </div>
       </div>
 

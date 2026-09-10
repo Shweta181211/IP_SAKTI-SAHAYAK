@@ -18,11 +18,13 @@ import { OrchestrationPanel } from "../components/OrchestrationPanel";
 export function SourcesPage() {
   return (
     <main className="export-stage mx-auto min-h-[calc(100vh-4rem)] max-w-sheet px-6 py-12 text-ink">
-      <h1 className="explore-page-title">Primary sources, open to the public.</h1>
-      <p className="page-lead">
-        These open free official databases. This build connects to no paid subscription
-        and will not do so without explicit, logged permission.
-      </p>
+      <header className="page-head">
+        <h1 className="explore-page-title">Primary sources, open to the public.</h1>
+        <p className="page-lead">
+          These open free official databases. This build connects to no paid
+          subscription and will not do so without explicit, logged permission.
+        </p>
+      </header>
 
       <div className="export-grid mt-10">
         {OFFICIAL_SOURCES.map((src, i) => (

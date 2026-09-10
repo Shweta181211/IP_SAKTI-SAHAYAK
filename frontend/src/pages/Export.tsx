@@ -95,17 +95,17 @@ export function ExportPage() {
 
   return (
     <main className="export-stage mx-auto min-h-[calc(100vh-4rem)] max-w-sheet px-6 py-12 text-ink">
-      <p className="explore-kicker explore-kicker--ink">Export readiness</p>
-      <h1 className="explore-page-title mt-3">
-        What India requires, and what the market requires.
-        <em> Each cited, and kept apart.</em>
-      </h1>
-      <p className="mt-4 max-w-2xl text-[length:var(--t-sub)] leading-relaxed text-ink-soft">
-        Describe the product and name the market. The India-side position is answered from
-        Indian statutes and rules; the target-market position from the treaty and regional
-        corpus only. Where that corpus does not reach a market, the report says so rather
-        than filling the gap.
-      </p>
+      <header className="page-head">
+        <h1 className="explore-page-title">
+          What India requires, and what the market requires.
+        </h1>
+        <p className="page-lead">
+          Describe the product and name the market. The India-side position is answered
+          from Indian statutes and rules; the target-market position from the treaty and
+          regional corpus only. Where that corpus does not reach a market, the report says
+          so rather than filling the gap.
+        </p>
+      </header>
 
       {/* ------------------------------- the form ------------------------------- */}
       <form onSubmit={submit} className="readiness-form">

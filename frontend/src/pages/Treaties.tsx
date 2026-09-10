@@ -19,10 +19,11 @@ export function TreatiesPage() {
 
   return (
     <main className="export-stage mx-auto min-h-[calc(100vh-4rem)] max-w-sheet px-6 py-12 text-ink">
-      <h1 className="explore-page-title">
-        Treaty and regional pathways, indexed apart from Indian law.
-      </h1>
-      <p className="page-lead">
+      <header className="page-head">
+        <h1 className="explore-page-title">
+          Treaty and regional pathways, indexed apart from Indian law.
+        </h1>
+        <p className="page-lead">
         Each route opens a question against the international corpus — TRIPS, CBD, Nagoya,
         GRATK, PCT, Madrid, Hague, Budapest, the European Patent Convention, EU Directive
         2004/24/EC, and the FDA botanical-drug guidance. These answer what an instrument
@@ -34,8 +35,9 @@ export function TreatiesPage() {
         >
           Export readiness
         </button>
-        .
-      </p>
+          .
+        </p>
+      </header>
 
       <div className="export-grid mt-10">
         {EXPORT_LANES.map((lane, i) => (
