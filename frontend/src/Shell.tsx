@@ -79,7 +79,7 @@ export function Shell({
                 <path d="M16 26 C10 18 10 10 16 8 C22 10 22 18 16 26 Z" fill="currentColor" opacity="0.85" />
                 <path d="M16 26 V8" fill="none" stroke="#f5eedd" strokeWidth="0.7" />
               </svg>
-              <span className="font-display text-[17px] leading-none text-paper">
+              <span className="font-display text-[length:var(--t-sub)] leading-none text-paper">
                 IP-SAKTI <span className="text-haldi">Sahayak</span>
               </span>
             </NavLink>
@@ -91,7 +91,7 @@ export function Shell({
                   to={link.to}
                   end={link.end}
                   className={({ isActive }) =>
-                    `rounded-full px-3 py-1.5 text-[12.5px] tracking-wide transition-colors ${
+                    `rounded-full px-3 py-1.5 text-[length:var(--t-micro)] tracking-wide transition-colors ${
                       isActive
                         ? "bg-haldi text-ink"
                         : "text-paper/60 hover:bg-white/5 hover:text-paper"
@@ -159,7 +159,7 @@ export function Shell({
                     key={lang}
                     type="button"
                     onClick={() => value.setUiLang(lang)}
-                    className={`px-2.5 py-1 text-[11px] font-semibold ${
+                    className={`px-2.5 py-1 text-[length:var(--t-micro)] font-semibold ${
                       value.uiLang === lang ? "bg-haldi text-ink" : "text-paper/50"
                     }`}
                   >
@@ -176,7 +176,7 @@ export function Shell({
                 to={link.to}
                 end={link.end}
                 className={({ isActive }) =>
-                  `shrink-0 rounded-full px-3 py-1 text-[12px] ${
+                  `shrink-0 rounded-full px-3 py-1 text-[length:var(--t-micro)] ${
                     isActive ? "bg-haldi text-ink" : "bg-white/5 text-paper/70"
                   }`
                 }

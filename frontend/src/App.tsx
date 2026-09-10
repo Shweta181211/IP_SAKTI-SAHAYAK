@@ -46,6 +46,62 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
   const { uiLang, logConsent, setLogConsent, health, healthChecked } = useShell();
   const [jurisdiction, setJurisdiction] = useState<Jurisdiction>("india");
   const [menuOpen, setMenuOpen] = useState(false);
+
+  /* The rail is resizable and can be put away, the way a chat tool's sidebar
+     is. Both are remembered: a reader who has set the rail to their liking
+     should not have to set it again on the next question.
+
+     Width is clamped in the setter rather than only in CSS, so a corrupted or
+     hand-edited stored value cannot leave the rail off-screen with no way to
+     drag it back. */
+  const RAIL_MIN = 200;
+  const RAIL_MAX = 460;
+  const [railWidth, setRailWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("ipsakti.rail.w"));
+      return v >= RAIL_MIN && v <= RAIL_MAX ? v : 272;
+    } catch {
+      return 272;
+    }
+  });
+  const [railHidden, setRailHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("ipsakti.rail.hidden") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ipsakti.rail.w", String(railWidth));
+      localStorage.setItem("ipsakti.rail.hidden", railHidden ? "1" : "0");
+    } catch {
+      /* a private window just means the rail resets next time */
+    }
+  }, [railWidth, railHidden]);
+
+  /* Listeners go on the window, not the handle: a fast drag outruns the
+     handle's own box and the rail would stop following the pointer. */
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      e.preventDefault();
+      setRailWidth(Math.min(RAIL_MAX, Math.max(RAIL_MIN, e.clientX)));
+    };
+    const up = () => {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
   // Consent to retain the QUESTION TEXT in the server's audit log. Off by
   // default and remembered per browser: the operational record that makes the
   // system auditable holds no user content either way, so this is a genuine
@@ -308,7 +364,11 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
   const askPlaceholder = pendingClarification ? t.placeholderClarify : t.placeholderAsk;
 
   return (
-    <div className="consult-page min-h-[calc(100vh-56px)]">
+    <div
+      className="consult-page min-h-[calc(100vh-56px)]"
+      data-rail={railHidden ? "hidden" : "shown"}
+      style={{ ["--rail-w" as string]: `${railWidth}px` }}
+    >
       {/* Outside <header> on purpose. The header carries backdrop-blur,
           and a backdrop-filter makes an element the containing block for
           its position:fixed descendants - which pinned the rail inside the
@@ -319,7 +379,47 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
       {/* Always rendered. On a wide screen CSS makes this the standing
           rail; below that breakpoint `data-open` turns it back into the
           overlay the `⋯` button controls. One list, not two. */}
+      {/* Shown only when the rail is away: without it there is no way back. */}
+      <button
+        type="button"
+        onClick={() => setRailHidden(false)}
+        className="rail-restore"
+        aria-label={t.consultations}
+        title={t.consultations}
+      >
+        <span aria-hidden>›</span>
+      </button>
+
+      {/* A sibling of the panel, not a child: the panel scrolls with
+          overflow-x hidden, which clipped a grip hanging off its edge and left
+          nothing to grab. Positioned against the same --rail-w. */}
+      <div
+        className="rail-grip"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the panel"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragging.current = true;
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+        onDoubleClick={() => setRailWidth(272)}
+      />
+
       <div className="consult-menu" data-open={menuOpen} aria-label={t.menu}>
+        <div className="rail-head">
+          <button
+            type="button"
+            onClick={() => setRailHidden(true)}
+            className="rail-hide"
+            aria-label={t.menu}
+            title={t.menu}
+          >
+            <span aria-hidden>‹</span>
+          </button>
+        </div>
+
             <SessionList
               sessions={sessions}
               activeId={activeId}
@@ -354,8 +454,8 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
             {/* Cream on the dark panel, matching SessionList above it -
                 this menu deliberately keeps the old rail's ground. */}
             <div className="mt-3 border-t border-paper/10 pt-3">
-              <p className="mb-1.5 text-[12.5px] font-medium text-paper">{t.sectionPrivacy}</p>
-              <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-paper/75">
+              <p className="mb-1.5 text-[length:var(--t-micro)] font-medium text-paper">{t.sectionPrivacy}</p>
+              <label className="flex cursor-pointer items-start gap-2 text-[length:var(--t-micro)] text-paper/75">
                 <input
                   type="checkbox"
                   checked={logConsent}
@@ -364,10 +464,10 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                 />
                 <span>{t.saveQuestion}</span>
               </label>
-              <p className="mt-1 text-[11px] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
+              <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
             </div>
 
-        <p className="mt-3 border-t border-paper/10 pt-3 text-[11px] leading-relaxed text-paper/45">
+        <p className="mt-3 border-t border-paper/10 pt-3 text-[length:var(--t-micro)] leading-relaxed text-paper/45">
           {t.disclaimer}
         </p>
       </div>
@@ -386,7 +486,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
               type="button"
               onClick={() => printBriefing(last)}
               title={t.exportBriefingHint}
-              className="rounded-[3px] border border-rule px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors duration-150 hover:border-indigo-dye hover:bg-indigo-wash hover:text-indigo-dye focus-visible:focus-ring"
+              className="rounded-[3px] border border-rule px-2.5 py-1 text-[length:var(--t-meta)] font-medium text-ink-faint transition-colors duration-150 hover:border-indigo-dye hover:bg-indigo-wash hover:text-indigo-dye focus-visible:focus-ring"
             >
               {t.exportBriefing}
             </button>
@@ -411,7 +511,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                 <button
                   onClick={newConsultation}
                   title="File this consultation and start a fresh one"
-                  className="rounded-[3px] border border-rule px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors duration-150 hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
+                  className="rounded-[3px] border border-rule px-2.5 py-1 text-[length:var(--t-meta)] font-medium text-ink-faint transition-colors duration-150 hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
                 >
                   {t.newConsultation}
                 </button>
@@ -467,7 +567,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                   {t.emptyTitle}
                 </h2>
               </div>
-              <p className="mx-auto mt-3 max-w-[66ch] text-[15.5px] leading-[1.65] text-ink-soft">
+              <p className="mx-auto mt-3 max-w-[66ch] text-[length:var(--t-body)] leading-[1.65] text-ink-soft">
                 {t.emptySubtitle}
               </p>
 
@@ -475,7 +575,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                 {FEATURE_CHIPS.map((chip) => (
                   <span
                     key={chip.en}
-                    className="inline-flex items-center gap-2 rounded-full border border-rule bg-white/60 px-3.5 py-1.5 text-[12.5px] text-ink-soft"
+                    className="inline-flex items-center gap-2 rounded-full border border-rule bg-white/60 px-3.5 py-1.5 text-[length:var(--t-micro)] text-ink-soft"
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-neem" aria-hidden />
                     {uiLang === "hi" ? chip.hi : chip.en}
@@ -497,7 +597,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                     <span className="eyebrow block text-haldi">
                       {uiLang === "hi" ? ex.labelHi : ex.labelEn}
                     </span>
-                    <span className="mt-1.5 block text-[14px] leading-snug text-ink-soft">
+                    <span className="mt-1.5 block text-[length:var(--t-meta)] leading-snug text-ink-soft">
                       {uiLang === "hi" ? ex.questionHi : ex.questionEn}
                     </span>
                   </button>
@@ -625,7 +725,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                     className="trail-line trail-sweep relative pl-11"
                     style={{ "--i": i } as React.CSSProperties}
                   >
-                    <span className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full border border-rule bg-paper text-[13px] font-semibold text-ink-faint/50">
+                    <span className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full border border-rule bg-paper text-[length:var(--t-meta)] font-semibold text-ink-faint/50">
                       {i + 1}
                     </span>
                     <div className="h-2.5 w-24 rounded-[2px] bg-paper-deep" />
@@ -643,7 +743,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                 <button
                   type="button"
                   onClick={cancelRequest}
-                  className="shrink-0 rounded-[3px] border border-rule px-2.5 py-1 text-[12px] text-ink-soft transition-colors duration-150 hover:border-clay/60 hover:bg-clay-wash hover:text-clay focus-visible:focus-ring"
+                  className="shrink-0 rounded-[3px] border border-rule px-2.5 py-1 text-[length:var(--t-micro)] text-ink-soft transition-colors duration-150 hover:border-clay/60 hover:bg-clay-wash hover:text-clay focus-visible:focus-ring"
                 >
                   {t.stop}
                 </button>
@@ -654,7 +754,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
           {error && (
             <div className="card mt-8 max-w-3xl border-clay/40 bg-clay-wash p-4">
               <p className="eyebrow text-clay">{t.couldNotComplete}</p>
-              <p className="mt-1 text-[14px] text-ink">{error}</p>
+              <p className="mt-1 text-[length:var(--t-meta)] text-ink">{error}</p>
               <button onClick={() => setError(null)} className="eyebrow mt-2 text-clay hover:underline">
                 {t.dismiss}
               </button>
@@ -670,7 +770,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
             {pendingClarification && mode === "ask" && (
               <div className="mb-2 flex items-start gap-2 border-l-2 border-haldi bg-haldi-wash px-3 py-1.5">
                 <span className="eyebrow shrink-0 text-haldi">{t.replyingTo}</span>
-                <p className="text-[12.5px] leading-snug text-ink-soft">{pendingClarification}</p>
+                <p className="text-[length:var(--t-micro)] leading-snug text-ink-soft">{pendingClarification}</p>
               </div>
             )}
 
@@ -745,7 +845,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                   }
                 }}
                 placeholder={mode === "compare" ? t.placeholderCompare : askPlaceholder}
-                className="min-h-[2.75rem] w-full resize-none bg-transparent px-3 py-2 font-serif text-[15px] leading-relaxed text-ink placeholder:text-ink-faint/70 focus:outline-none"
+                className="min-h-[2.75rem] w-full resize-none bg-transparent px-3 py-2 font-serif text-[length:var(--t-body)] leading-relaxed text-ink placeholder:text-ink-faint/70 focus:outline-none"
               />
 
               {voice.supported && (
@@ -769,7 +869,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                     onClick={voice.toggleLang}
                     title={t.micLangTooltip}
                     aria-label={t.micLangTooltip}
-                    className="mic-btn flex h-10 shrink-0 items-center justify-center rounded-[3px] border border-rule px-2 text-[11.5px] font-semibold tracking-wide text-ink-faint hover:bg-paper-deep hover:text-ink"
+                    className="mic-btn flex h-10 shrink-0 items-center justify-center rounded-[3px] border border-rule px-2 text-[length:var(--t-micro)] font-semibold tracking-wide text-ink-faint hover:bg-paper-deep hover:text-ink"
                   >
                     {voice.lang === "hi-IN" ? "हिं" : "EN"}
                   </button>
@@ -779,7 +879,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
               <button
                 onClick={() => submit(input)}
                 disabled={loading || !input.trim()}
-                className="send-btn shrink-0 rounded-[3px] bg-ink px-4 py-2.5 text-[13px] font-medium text-paper transition-all duration-150 hover:bg-ink-soft focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-ink"
+                className="send-btn shrink-0 rounded-[3px] bg-ink px-4 py-2.5 text-[length:var(--t-meta)] font-medium text-paper transition-all duration-150 hover:bg-ink-soft focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-ink"
               >
                 {loading ? t.sendLoading : mode === "compare" ? t.sendCompare : t.sendAsk}
               </button>

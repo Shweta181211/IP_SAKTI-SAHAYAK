@@ -79,7 +79,7 @@ export function OrchestrationPanel() {
         One question,
         <em> seven decisions.</em>
       </h2>
-      <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+      <p className="mt-4 max-w-2xl text-[length:var(--t-body)] leading-relaxed text-ink-soft">
         A question is not one call to a model. Each stage below has its own prompt, its
         own output contract and its own way of failing, and the answer you read is what
         came through all of them. Open “How this answer was assembled” under any answer
@@ -104,7 +104,7 @@ export function OrchestrationPanel() {
           <h3 className="orch-sub mt-10">
             The endpoint chain — {chain.length} endpoints across {providers.size} providers
           </h3>
-          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-soft">
+          <p className="mt-2 max-w-2xl text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
             Tried best-first. A per-minute limit is waited out; a daily cap is recognised
             as unwaitable and the whole provider is skipped, because retrying it would
             only add dead air. The order is configuration, not code.
@@ -126,7 +126,7 @@ export function OrchestrationPanel() {
       {observed.length > 0 && (
         <div className="audit-note mt-6">
           <p className="eyebrow text-indigo-dye">Observed, not asserted</p>
-          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">
+          <p className="mt-1.5 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
             {observed.length === 1 ? (
               <>
                 Every model call since this server started was answered by{" "}

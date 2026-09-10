@@ -36,7 +36,7 @@ export function AuditPanel() {
     return (
       <section className="audit mt-14">
         <p className="explore-kicker explore-kicker--ink">Audit trail</p>
-        <p className="mt-3 text-[13.5px] text-ink-faint">Reading the log…</p>
+        <p className="mt-3 text-[length:var(--t-meta)] text-ink-faint">Reading the log…</p>
       </section>
     );
   }
@@ -45,7 +45,7 @@ export function AuditPanel() {
     return (
       <section className="audit mt-14">
         <p className="explore-kicker explore-kicker--ink">Audit trail</p>
-        <p className="mt-3 text-[13.5px] text-ink-soft">
+        <p className="mt-3 text-[length:var(--t-meta)] text-ink-soft">
           The server is not reachable, so its log cannot be read. This panel never
           shows a cached or example figure — an unreadable log reads as unreadable.
         </p>
@@ -70,7 +70,7 @@ export function AuditPanel() {
         What this system
         <em> did, on the record.</em>
       </h2>
-      <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+      <p className="mt-4 max-w-2xl text-[length:var(--t-body)] leading-relaxed text-ink-soft">
         Every question, refusal and export report is written to an append-only log on
         the machine running this build. The log records what was <em>decided</em> — it
         does not record what was asked unless the asker opts in, and even then the
@@ -93,8 +93,8 @@ export function AuditPanel() {
       {/* The privacy claim, stated next to the number that would falsify it. */}
       <div className="audit-note mt-6">
         <p className="eyebrow text-indigo-dye">Retention</p>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">{trail.retention}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-faint">
+        <p className="mt-1.5 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">{trail.retention}</p>
+        <p className="mt-2 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
           Removed before serving:{" "}
           {trail.redacted_fields.map((f) => (
             <code key={f} className="audit-field">

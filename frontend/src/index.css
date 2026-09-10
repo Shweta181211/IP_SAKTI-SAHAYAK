@@ -45,13 +45,13 @@
 
      Anything that needs a size picks one of these. Nothing invents an eighth.
      ---------------------------------------------------------------------- */
-  --t-display: clamp(2.35rem, 4.6vw, 3.9rem);  /* the hero sentence, once per site */
-  --t-title:   clamp(1.6rem, 2.6vw, 2.2rem);   /* page and section titles */
-  --t-head:    1.3125rem;                      /* card titles, answer headline */
-  --t-sub:     1.0625rem;                      /* leads and standfirsts */
-  --t-body:    0.9375rem;                      /* prose */
-  --t-meta:    0.8125rem;                      /* secondary, captions */
-  --t-micro:   0.6875rem;                      /* statute references, counts */
+  --t-display: clamp(2.6rem, 5vw, 4.4rem);     /* the hero sentence, once per site */
+  --t-title:   clamp(1.8rem, 3vw, 2.6rem);     /* page and section titles */
+  --t-head:    1.4375rem;                      /* card titles, answer headline */
+  --t-sub:     1.1875rem;                      /* leads and standfirsts */
+  --t-body:    1.0313rem;                      /* prose */
+  --t-meta:    0.875rem;                       /* secondary, captions */
+  --t-micro:   0.75rem;                        /* statute references, counts */
 
   /* Measure. Serif prose gets the longer line and the looser leading. */
   --measure: 68ch;
@@ -90,7 +90,8 @@
 
   .prose-legal {
     font-family: "IBM Plex Serif", ui-serif, Georgia, "Times New Roman", serif;
-    @apply text-[15.5px] leading-[1.72];
+    font-size: var(--t-body);
+    @apply leading-[1.7];
     color: var(--ink);
   }
 
@@ -649,7 +650,8 @@
      screen and then fall to the bottom of it. */
   padding: clamp(3.5rem, 8vh, 6rem) 6vw clamp(3rem, 7vh, 5rem);
   display: grid;
-  grid-template-columns: minmax(0, 36rem) 1fr;
+  grid-template-columns: minmax(0, 46rem) minmax(0, auto);
+  justify-content: space-between;
   align-items: center;
   column-gap: 4vw;
   /* One flat ground in the ink family, not three stacked radial gradients.
@@ -662,7 +664,7 @@
   grid-column: 1;
   /* The column, not the headline. 22ch here squeezed the whole block into a
      ribbon and broke the sentence over seven lines. */
-  max-width: 36rem;
+  max-width: 46rem;
 }
 
 .explore-mark {
@@ -671,7 +673,7 @@
   /* Big enough to hold the right half of the composition. At 200px it read as
      a stray icon in a large empty area rather than the counterweight to the
      sentence. */
-  width: clamp(150px, 22vw, 320px);
+  width: clamp(150px, 20vw, 290px);
   height: auto;
   color: #d9b45f;
   opacity: 0.9;
@@ -704,7 +706,7 @@
   line-height: 1.04;
   letter-spacing: -0.021em;
   color: #f4ecdc;
-  max-width: 15ch;
+  max-width: 17ch;
   text-wrap: balance;
 }
 
@@ -1084,10 +1086,11 @@
   color: rgba(245, 238, 221, 0.7);
 }
 
+/* No corner glow. A warm radial bloom in the top-left of every page is
+   decoration that reads as a lens flare, and it sat under the heading it was
+   meant to flatter. The ground is flat. */
 .export-stage {
-  background:
-    radial-gradient(ellipse at 0% 0%, rgba(201, 138, 43, 0.14), transparent 40%),
-    var(--paper);
+  background: var(--paper);
 }
 .export-grid {
   display: grid;
@@ -1506,44 +1509,57 @@
    the classification verdict and nothing else.
    ========================================================================== */
 
-/* The gauge is an instrument reading, not part of the argument, so it sits out
-   of the reading column rather than in the middle of it. It was centred in the
-   answer's own measure, which put a dial between the takeaway and the reasoning
-   and made the eye stop at it on the way down.
+/* Evidence support, as four ordinal steps.
 
-   `margin-left: auto` pushes the whole block to the right edge of whatever
-   column holds it, and the text stays left-aligned inside so the label and the
-   scale still read normally. */
+   It lives in the sources column now, directly above the citations it is
+   describing - it is a statement ABOUT that list, and it was sitting in the
+   middle of the prose where the eye had to step over it on the way down. */
 .support {
-  padding: 0.2rem 0 0.1rem;
-  max-width: 25rem;
-  margin-left: auto;
+  padding: 0 0 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 0.9rem;
 }
 
-.support-gauge {
-  display: flex;
-  align-items: center;
-  gap: 1.15rem;
+.support-head {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  color: var(--ink-faint);
 }
 
-/* Below the two-column breakpoint the answer has the full width and there is
-   no right edge to sit against, so it returns to the flow. */
-@media (max-width: 1024px) {
-  .support {
-    max-width: none;
-    margin-left: 0;
-  }
+.support-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 0.55rem;
+  list-style: none;
+  padding: 0;
 }
 
-.support-dial {
-  flex: none;
-  width: 132px;
-  height: 85px;
-  overflow: visible;
+.support-step-bar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--rule);
 }
 
-.support-readout {
-  min-width: 0;
+/* Filled up to the band reached, so the strip reads left to right as an
+   amount rather than as four separate lamps. */
+.support-step.is-lit .support-step-bar { background: var(--neem); }
+.support-step.is-lit.is-thin .support-step-bar { background: var(--clay); }
+
+.support-step-name {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+/* The band actually reached is the only one named in full strength; the rest
+   are the scale it sits on. */
+.support-step.is-current .support-step-name {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .support-label {
@@ -1561,23 +1577,9 @@
 }
 
 /* The scale printed as words, so the dial is readable without decoding it. */
-.support-scale {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.3rem;
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  opacity: 0.6;
-}
 
-.support-scale .is-current {
-  color: var(--ink);
-  font-weight: 600;
-  opacity: 1;
-}
+
+
 
 .support-caption {
   max-width: 46ch;
@@ -1589,9 +1591,7 @@
 
 .support-why {
   margin-top: 0.3rem;
-  font-size: 10.5px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: var(--t-meta);
   color: var(--indigo);
   transition: color 150ms ease-out;
 }
@@ -1639,13 +1639,8 @@
 }
 
 @media (max-width: 460px) {
-  .support-gauge {
-    gap: 0.75rem;
-  }
-  .support-dial {
-    width: 104px;
-    height: 68px;
-  }
+  
+  
 }
 
 /* ============================================================================
@@ -2371,10 +2366,9 @@
 
 .readiness-field label {
   display: block;
-  font-size: 11px;
+  font-size: var(--t-meta);
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-faint);
 }
 
@@ -2413,9 +2407,11 @@
   color: var(--ink-faint);
 }
 
-.readiness-check {
-  /* Resets the .readiness-field label treatment above. This is a sentence the
-     user reads, not a field name, and it was rendering in letterspaced caps. */
+/* Written as `.readiness-field label.readiness-check`, not `.readiness-check`.
+   The rule above is (0,2,0) and a bare class is (0,1,0), so the reset LOST and
+   this sentence went back to letterspaced caps - which also ran it into its own
+   checkbox. Fixed once in 6o and silently undone by specificity ever since. */
+.readiness-field label.readiness-check {
   text-transform: none;
   letter-spacing: normal;
   font-weight: 400;
@@ -2423,7 +2419,7 @@
   align-items: flex-start;
   gap: 0.55rem;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--t-body);
   color: var(--ink);
 }
 
@@ -3514,9 +3510,7 @@ html[data-surface="dark"] {
 }
 
 .surface-dark .export-stage {
-  background:
-    radial-gradient(60vmax 40vmax at 0% -10%, rgba(201, 138, 43, 0.11), transparent 55%),
-    transparent;
+  background: transparent;
   color: var(--ink);
 }
 
@@ -3526,8 +3520,12 @@ html[data-surface="dark"] {
   color: var(--ink);
 }
 
+/* The page titles are one sentence, not a roman half and a gold half. The
+   split-phrase accent is the commonest generated-page tell and it broke the
+   sentence at a place that carried no meaning. */
 .surface-dark .explore-page-title em {
-  color: var(--haldi);
+  font-style: normal;
+  color: inherit;
 }
 
 .surface-dark .explore-kicker--ink {
@@ -4463,37 +4461,121 @@ html[data-surface="dark"] {
     right: auto;
     left: 0;
     bottom: 0;
-    width: 17rem;
+    /* Width is the reader's, dragged from the grip and remembered. */
+    width: var(--rail-w, 272px);
     max-height: none;
     z-index: 20;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.9rem;
     border: 0;
     border-right: 1px solid rgba(245, 238, 221, 0.1);
     border-radius: 0;
     box-shadow: none;
     animation: none;
-    /* The rail keeps the dark ground SessionList is drawn for: the component
-       is styled cream-on-dark, and on a light panel it renders cream on cream
-       and disappears. Matching the ground reuses it unchanged. */
-    background: #16241e;
+    transition: transform 200ms cubic-bezier(0.16, 0.84, 0.44, 1);
   }
 
-  /* The rail is permanent here, so the control that opened it is noise. */
+  /* Only the PAGE clears the rail. The topbar and the composer are inside it
+     and sticky, so they already sit inside its padding box - padding them too
+     offset them a second time, which is why the composer and the header sat
+     ~270px right of the answer column they belong to. */
+  .consult-page {
+    padding-left: var(--rail-w, 272px);
+    transition: padding-left 200ms cubic-bezier(0.16, 0.84, 0.44, 1);
+  }
+
+  /* Put away: the rail slides out rather than vanishing, so it is obvious
+     where it went and where it will come back from. */
+  .consult-page[data-rail="hidden"] .consult-menu {
+    transform: translateX(-100%);
+  }
+  .consult-page[data-rail="hidden"] {
+    padding-left: 0;
+  }
+
+  .consult-page[data-rail="shown"] .rail-restore { display: none; }
+  .consult-page[data-rail="hidden"] .rail-restore { display: grid; }
+
   .consult-menu-btn,
   .consult-scrim {
     display: none;
   }
+}
 
-  /* Everything else clears the rail rather than sliding under it. */
-  .consult-page,
-  .consult-topbar,
-  .consult-composer {
-    padding-left: 17rem;
-  }
+/* ---- the rail's own controls ------------------------------------------- */
 
-  .consult-topbar {
-    left: 0;
+.rail-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.4rem;
+}
+
+.rail-hide,
+.rail-restore {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  border: 1px solid rgba(245, 238, 221, 0.16);
+  color: rgba(245, 238, 221, 0.6);
+  font-size: 15px;
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.rail-hide:hover,
+.rail-restore:hover {
+  background: rgba(245, 238, 221, 0.1);
+  color: var(--paper);
+}
+
+/* Hidden by default and revealed only when the rail is away - see the
+   data-rail rules above. Below the rail breakpoint it never applies. */
+.rail-restore {
+  display: none;
+  position: fixed;
+  top: 68px;
+  left: 10px;
+  z-index: 22;
+  background: #16241e;
+}
+
+/* The grip is a wide invisible target over a hairline: 4px is accurate to hit
+   with a mouse and impossible with a trackpad. Fixed to the viewport at the
+   rail's own edge, so it moves as the rail is dragged. */
+.rail-grip {
+  display: none;
+  position: fixed;
+  top: 56px;
+  bottom: 0;
+  left: calc(var(--rail-w, 272px) - 5px);
+  width: 10px;
+  cursor: col-resize;
+  z-index: 23;
+}
+
+@media (min-width: 1100px) {
+  .consult-page[data-rail="shown"] .rail-grip { display: block; }
+}
+
+.rail-grip::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: transparent;
+  transition: background-color 140ms ease;
+}
+
+.rail-grip:hover::after {
+  background: var(--haldi);
+}
+
+@media (max-width: 1099px) {
+  .rail-head,
+  .rail-restore {
+    display: none;
   }
 }
 

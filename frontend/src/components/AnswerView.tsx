@@ -82,14 +82,14 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
   if (answer.abstention_kind === "conversational") {
     return (
       <article className="border-t border-rule pt-5 first:border-t-0 first:pt-0">
-        <p className="mb-3 border-l-2 border-haldi pl-3 font-serif text-[15px] italic text-ink-soft">
+        <p className="mb-3 border-l-2 border-haldi pl-3 font-serif text-[length:var(--t-body)] italic text-ink-soft">
           {answer.question}
         </p>
         <p className="prose-legal max-w-2xl">{answer.abstention_message}</p>
         {answer.example_questions.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {answer.example_questions.map((q) => (
-              <span key={q} className="card px-2.5 py-1.5 text-[12.5px] text-ink-soft">
+              <span key={q} className="card px-2.5 py-1.5 text-[length:var(--t-micro)] text-ink-soft">
                 {q}
               </span>
             ))}
@@ -174,7 +174,7 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                 {answer.search_degraded && answer.degraded_reason && (
                   <div className="border-l-[3px] border-clay bg-clay-wash px-4 py-3">
                     <p className="eyebrow text-clay">Search was narrowed</p>
-                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    <p className="mt-1 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
                       {answer.degraded_reason}
                     </p>
                   </div>
@@ -212,14 +212,6 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                     )}
                   </div>
                 )}
-                {answer.confidence && (
-                  <Confidence
-                    level={answer.confidence}
-                    label={answer.confidence_label ?? ""}
-                    score={answer.confidence_score}
-                    reasons={answer.confidence_reasons}
-                  />
-                )}
                 {answer.classification && <Verdict classification={answer.classification} />}
                 <ReasoningTrail
                   answer={answer}
@@ -235,6 +227,16 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
               </div>
 
               <aside className="lg:sticky lg:top-20 lg:self-start">
+                {/* Above the list, because it is a reading of that list. */}
+                {answer.confidence && (
+                  <Confidence
+                    level={answer.confidence}
+                    label={answer.confidence_label ?? ""}
+                    score={answer.confidence_score}
+                    reasons={answer.confidence_reasons}
+                  />
+                )}
+
                 <div className="mb-2.5 flex items-baseline justify-between">
                   <h2 className="eyebrow">Sources cited</h2>
                   <span className="ref text-ink-faint">{answer.citations.length}</span>
@@ -279,14 +281,14 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                   <div className="mt-3 border-l-2 border-neem bg-neem-wash px-3 py-2">
                     <p className="eyebrow text-neem">Citation guard</p>
                     {answer.rejected_citation_ids.length > 0 && (
-                      <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+                      <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
                         {answer.rejected_citation_ids.length} unverifiable reference
                         {answer.rejected_citation_ids.length > 1 ? "s were" : " was"} rejected
                         before this answer was shown.
                       </p>
                     )}
                     {(answer.unsupported_provisions ?? []).length > 0 && (
-                      <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+                      <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
                         {answer.unsupported_provisions.join(", ")} was named without a source
                         in the retrieved text, so that sentence was removed.
                       </p>
@@ -313,8 +315,8 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
           {!answer.abstained && answer.clarifying_question && (
             <div className="mt-6 border-l-2 border-haldi bg-haldi-wash px-3 py-2.5">
               <p className="eyebrow text-haldi">To narrow this further</p>
-              <p className="prose-legal mt-1 text-[14px]">{answer.clarifying_question}</p>
-              <p className="mt-1.5 text-[12px] text-ink-faint">
+              <p className="prose-legal mt-1 text-[length:var(--t-meta)]">{answer.clarifying_question}</p>
+              <p className="mt-1.5 text-[length:var(--t-micro)] text-ink-faint">
                 Answer in the box below and I will refine the response.
               </p>
             </div>
@@ -326,7 +328,7 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
               declining. */}
           <TracePanel trace={answer.trace ?? []} />
 
-          <p className="mt-8 border-t border-rule pt-3 text-[12px] leading-relaxed text-ink-faint">
+          <p className="mt-8 border-t border-rule pt-3 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
             {answer.disclaimer}
           </p>
         </div>

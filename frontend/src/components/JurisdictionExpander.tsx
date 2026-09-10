@@ -66,7 +66,7 @@ export function JurisdictionExpander({
         <button
           type="button"
           onClick={onReveal}
-          className={`rounded-[3px] border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors focus-visible:focus-ring ${
+          className={`rounded-[3px] border px-3 py-1.5 text-[length:var(--t-micro)] font-semibold uppercase tracking-[0.1em] transition-colors focus-visible:focus-ring ${
             otherIsInternational
               ? "border-indigo-dye/40 text-indigo-dye hover:border-indigo-dye"
               : "border-haldi/40 text-haldi hover:border-haldi"
@@ -77,7 +77,7 @@ export function JurisdictionExpander({
       )}
 
       {loadingOther && (
-        <p className="text-[12px] italic text-ink-faint">
+        <p className="text-[length:var(--t-micro)] italic text-ink-faint">
           {labels.revealing.replace("{side}", otherLabel)}
         </p>
       )}
@@ -87,7 +87,7 @@ export function JurisdictionExpander({
           {/* Its own heading and accent: a reader should never have to work out
               which legal system a paragraph belongs to. */}
           <div className={`mb-3 flex items-baseline justify-between border-b-2 pb-1.5 ${accent}`}>
-            <h3 className="font-serif text-[15px] font-medium">{otherLabel}</h3>
+            <h3 className="font-serif text-[length:var(--t-body)] font-medium">{otherLabel}</h3>
             <span className="eyebrow text-ink-faint">
               {otherAnswer.citations.length}{" "}
               {otherAnswer.citations.length === 1 ? "source" : "sources"}
@@ -99,20 +99,20 @@ export function JurisdictionExpander({
             <button
               type="button"
               onClick={onCompare}
-              className="mt-4 rounded-[3px] border border-rule px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
+              className="mt-4 rounded-[3px] border border-rule px-3 py-1.5 text-[length:var(--t-micro)] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
             >
               {labels.compare}
             </button>
           )}
           {loadingComparison && (
-            <p className="mt-4 text-[12px] italic text-ink-faint">{labels.comparing}</p>
+            <p className="mt-4 text-[length:var(--t-micro)] italic text-ink-faint">{labels.comparing}</p>
           )}
         </section>
       )}
 
       {comparison && (
         <section className="mt-6 border-t border-rule pt-4">
-          <h3 className="mb-3 font-serif text-[15px] font-medium text-ink">
+          <h3 className="mb-3 font-serif text-[length:var(--t-body)] font-medium text-ink">
             {labels.comparisonHeading}
           </h3>
           {/* Same renderer as the side-by-side view: one place a claim can

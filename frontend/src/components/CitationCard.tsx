@@ -74,13 +74,13 @@ export function CitationCard({
       }`}
     >
       <div className="flex gap-2.5">
-        <span className="ref mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] bg-indigo-dye text-[11px] font-medium text-paper">
+        <span className="ref mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] bg-indigo-dye text-[length:var(--t-micro)] font-medium text-paper">
           {index}
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-serif text-[13.5px] font-medium leading-snug text-ink">
+            <p className="font-serif text-[length:var(--t-meta)] font-medium leading-snug text-ink">
               {citation.act_name}
             </p>
             {/* Appears on hover or keyboard focus; always reachable by tab, so
@@ -159,7 +159,7 @@ export function CitationCard({
           <div className="reveal" data-open={open} aria-hidden={!open}>
             <div>
               <div className="mt-2 border-l-2 border-rule pl-2.5">
-                <p className="font-serif text-[12.5px] leading-relaxed text-ink-soft">
+                <p className="font-serif text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
                   {citation.excerpt}
                 </p>
                 {citation.source_file && (

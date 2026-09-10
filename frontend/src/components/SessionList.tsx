@@ -70,9 +70,9 @@ export function SessionList({
       <button
         type="button"
         onClick={onNew}
-        className="group flex w-full items-center gap-2 rounded-[3px] border border-haldi/40 bg-haldi/10 px-3 py-2.5 text-left text-[12.5px] font-medium text-paper transition-colors hover:border-haldi/70 hover:bg-haldi/20"
+        className="group flex w-full items-center gap-2 rounded-[3px] border border-haldi/40 bg-haldi/10 px-3 py-2.5 text-left text-[length:var(--t-micro)] font-medium text-paper transition-colors hover:border-haldi/70 hover:bg-haldi/20"
       >
-        <span className="font-serif text-[15px] leading-none text-haldi">+</span>
+        <span className="font-serif text-[length:var(--t-body)] leading-none text-haldi">+</span>
         <span>{labels.newConsultation}</span>
       </button>
 
@@ -80,7 +80,7 @@ export function SessionList({
         <>
           <div className="mb-1.5 mt-5 flex items-baseline justify-between">
             <span className="eyebrow text-paper/45">{labels.consultations}</span>
-            <span className="text-[11px] tabular-nums text-paper/35">{withContent.length}</span>
+            <span className="text-[length:var(--t-micro)] tabular-nums text-paper/35">{withContent.length}</span>
           </div>
 
           <ul className="-mx-1 max-h-[34vh] overflow-y-auto">
@@ -100,13 +100,13 @@ export function SessionList({
                     }`}
                   >
                     <span
-                      className={`line-clamp-2 text-[12.5px] leading-snug ${
+                      className={`line-clamp-2 text-[length:var(--t-micro)] leading-snug ${
                         isActive ? "text-paper" : "text-paper/70"
                       }`}
                     >
                       {titleFor(session) || labels.untitledSession}
                     </span>
-                    <span className="text-[11px] tabular-nums text-paper/35">
+                    <span className="text-[length:var(--t-micro)] tabular-nums text-paper/35">
                       {count} {count === 1 ? labels.questionCount : labels.questionsCount} ·{" "}
                       {relativeDay(session.updatedAt, lang)}
                     </span>
@@ -122,7 +122,7 @@ export function SessionList({
                       event.stopPropagation();
                       onRemove(session.id);
                     }}
-                    className="absolute right-1 top-2 rounded-[2px] px-1.5 py-0.5 text-[12px] leading-none text-paper/30 opacity-0 transition-opacity hover:bg-clay/25 hover:text-paper/80 focus:opacity-100 group-hover/item:opacity-100"
+                    className="absolute right-1 top-2 rounded-[2px] px-1.5 py-0.5 text-[length:var(--t-micro)] leading-none text-paper/30 opacity-0 transition-opacity hover:bg-clay/25 hover:text-paper/80 focus:opacity-100 group-hover/item:opacity-100"
                   >
                     ✕
                   </button>
@@ -136,14 +136,14 @@ export function SessionList({
               <button
                 type="button"
                 onClick={() => setArming(true)}
-                className="rounded-[2px] px-1.5 py-1 text-[11.5px] text-paper/40 transition-colors hover:bg-clay/20 hover:text-paper"
+                className="rounded-[2px] px-1.5 py-1 text-[length:var(--t-micro)] text-paper/40 transition-colors hover:bg-clay/20 hover:text-paper"
               >
                 {labels.deleteAll}
               </button>
             ) : (
               <div className="rounded-[3px] border border-clay/45 bg-clay/15 px-2.5 py-2">
-                <p className="text-[12px] leading-snug text-paper/85">{labels.deleteAllConfirm}</p>
-                <p className="mt-0.5 text-[11px] lowercase text-paper/45">
+                <p className="text-[length:var(--t-micro)] leading-snug text-paper/85">{labels.deleteAllConfirm}</p>
+                <p className="mt-0.5 text-[length:var(--t-micro)] lowercase text-paper/45">
                   {withContent.length} {labels.consultations}
                 </p>
                 <div className="mt-2 flex gap-2">
@@ -153,14 +153,14 @@ export function SessionList({
                       setArming(false);
                       onClearAll();
                     }}
-                    className="rounded-[2px] bg-clay px-2.5 py-1 text-[11.5px] font-medium text-paper transition-opacity hover:opacity-85"
+                    className="rounded-[2px] bg-clay px-2.5 py-1 text-[length:var(--t-micro)] font-medium text-paper transition-opacity hover:opacity-85"
                   >
                     {labels.deleteAllYes}
                   </button>
                   <button
                     type="button"
                     onClick={() => setArming(false)}
-                    className="rounded-[2px] px-2 py-1 text-[11.5px] text-paper/60 transition-colors hover:text-paper"
+                    className="rounded-[2px] px-2 py-1 text-[length:var(--t-micro)] text-paper/60 transition-colors hover:text-paper"
                   >
                     {labels.deleteAllNo}
                   </button>

@@ -30,7 +30,7 @@ export function ComparisonView({ result }: { result: ComparisonResult }) {
     <div>
       <p className="mb-4 border-l-2 border-haldi pl-3">
         <span className="eyebrow block">Comparing across categories</span>
-        <span className="font-serif text-[15px] italic text-ink-soft">{result.product}</span>
+        <span className="font-serif text-[length:var(--t-body)] italic text-ink-soft">{result.product}</span>
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -41,13 +41,13 @@ export function ComparisonView({ result }: { result: ComparisonResult }) {
               key={c.category}
               className={`card flex flex-col p-4 ${unsupported ? "opacity-70" : ""}`}
             >
-              <h3 className="font-serif text-[15px] font-medium leading-snug text-ink">
+              <h3 className="font-serif text-[length:var(--t-body)] font-medium leading-snug text-ink">
                 {c.label}
               </h3>
 
               {/* The verdict is the thing being compared, so it leads. */}
               <p
-                className={`mt-2 border-l-[3px] pl-2.5 text-[13px] font-medium leading-snug ${
+                className={`mt-2 border-l-[3px] pl-2.5 text-[length:var(--t-meta)] font-medium leading-snug ${
                   unsupported
                     ? "border-rule text-ink-faint"
                     : "border-haldi text-ink"
@@ -56,7 +56,7 @@ export function ComparisonView({ result }: { result: ComparisonResult }) {
                 {c.patentable}
               </p>
 
-              <p className="prose-legal mt-3 flex-1 text-[14px]">{c.posture}</p>
+              <p className="prose-legal mt-3 flex-1 text-[length:var(--t-meta)]">{c.posture}</p>
 
               {c.citation_ids.length > 0 ? (
                 <p className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-rule pt-2">
@@ -97,7 +97,7 @@ export function ComparisonView({ result }: { result: ComparisonResult }) {
         </div>
       )}
 
-      <p className="mt-6 border-t border-rule pt-3 text-[12px] leading-relaxed text-ink-faint">
+      <p className="mt-6 border-t border-rule pt-3 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
         {result.disclaimer}
       </p>
     </div>

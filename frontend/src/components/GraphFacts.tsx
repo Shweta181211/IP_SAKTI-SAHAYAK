@@ -47,7 +47,7 @@ export function GraphFacts() {
         The law
         <em> points at itself.</em>
       </h2>
-      <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+      <p className="mt-4 max-w-2xl text-[length:var(--t-body)] leading-relaxed text-ink-soft">
         Every source card in an answer carries the provisions that passage refers to,
         and the provisions that refer back to it. The links are read out of the
         statutory text itself — no model proposes a relationship, so none can invent
@@ -65,7 +65,7 @@ export function GraphFacts() {
           >
             <span className="audit-count-n">{f.n.toLocaleString()}</span>
             <span className="audit-count-label">{f.label}</span>
-            <span className="mt-2 block text-[11.5px] leading-snug text-ink-faint">
+            <span className="mt-2 block text-[length:var(--t-micro)] leading-snug text-ink-faint">
               {f.note}
             </span>
           </li>
@@ -73,7 +73,7 @@ export function GraphFacts() {
       </ul>
 
       {(health?.graph_problems ?? []).length > 0 && (
-        <p className="mt-4 border-l-2 border-clay bg-clay-wash px-3 py-2 text-[13px] text-ink-soft">
+        <p className="mt-4 border-l-2 border-clay bg-clay-wash px-3 py-2 text-[length:var(--t-meta)] text-ink-soft">
           {health!.graph_problems!.join(" · ")}
         </p>
       )}

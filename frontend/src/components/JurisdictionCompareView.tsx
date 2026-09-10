@@ -34,7 +34,7 @@ function SideHeading({
   const accent = tone === "india" ? "border-haldi text-haldi" : "border-indigo-dye text-indigo-dye";
   return (
     <div className={`mb-3 flex items-baseline justify-between border-b-2 pb-1.5 ${accent}`}>
-      <h3 className="font-serif text-[15px] font-medium">{label}</h3>
+      <h3 className="font-serif text-[length:var(--t-body)] font-medium">{label}</h3>
       <span className="eyebrow text-ink-faint">
         {sources} {sources === 1 ? "source" : "sources"}
       </span>
@@ -58,12 +58,12 @@ function PointRow({
         >
           {isDifference ? "Difference" : "Similarity"}
         </span>
-        <span className="text-[13px] leading-snug text-ink">{point.summary}</span>
+        <span className="text-[length:var(--t-meta)] leading-snug text-ink">{point.summary}</span>
       </div>
 
       {/* Each side on its own labelled row. A claim can never appear here
           without the jurisdiction that owns it. */}
-      <dl className="mt-1 space-y-1.5 text-[12.5px] leading-relaxed">
+      <dl className="mt-1 space-y-1.5 text-[length:var(--t-micro)] leading-relaxed">
         <div className="grid grid-cols-[auto_1fr] gap-x-2">
           <dt className="whitespace-nowrap font-semibold text-haldi">{labels.national}</dt>
           <dd className="text-ink-soft">
@@ -124,7 +124,7 @@ export function JurisdictionPoints({
       {comparison.synthesis_unavailable && comparison.synthesis_message && (
         <div className="mt-3 border-l-2 border-clay bg-clay-wash px-3 py-2">
           <p className="eyebrow text-clay">{labels.unavailable}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+          <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
             {comparison.synthesis_message}
           </p>
         </div>
@@ -133,7 +133,7 @@ export function JurisdictionPoints({
       {comparison.rejected_points.length > 0 && (
         <div className="mt-3 border-l-2 border-neem bg-neem-wash px-3 py-2">
           <p className="eyebrow text-neem">{labels.guard}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+          <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
             {comparison.rejected_points.length}{" "}
             {comparison.rejected_points.length === 1 ? "statement was" : "statements were"}{" "}
             dropped for citing the wrong jurisdiction's sources, or none at all.
@@ -163,10 +163,10 @@ export function JurisdictionCompareView({
 
   return (
     <section className="mb-10">
-      <h2 className="mb-1 font-serif text-[17px] leading-snug text-ink">
+      <h2 className="mb-1 font-serif text-[length:var(--t-sub)] leading-snug text-ink">
         {comparison.question}
       </h2>
-      <p className="mb-4 text-[12px] text-ink-faint">{labels.comparison}</p>
+      <p className="mb-4 text-[length:var(--t-micro)] text-ink-faint">{labels.comparison}</p>
 
       {/* The comparison sits BETWEEN the two answers, never merged into either,
           and never as a substitute for reading them. */}
@@ -181,7 +181,7 @@ export function JurisdictionCompareView({
       {comparison.synthesis_unavailable && comparison.synthesis_message && (
         <div className="mb-6 border-l-2 border-clay bg-clay-wash px-3 py-2">
           <p className="eyebrow text-clay">{labels.unavailable}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+          <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
             {comparison.synthesis_message}
           </p>
         </div>
@@ -190,7 +190,7 @@ export function JurisdictionCompareView({
       {comparison.rejected_points.length > 0 && (
         <div className="mb-6 border-l-2 border-neem bg-neem-wash px-3 py-2">
           <p className="eyebrow text-neem">{labels.guard}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+          <p className="mt-1 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
             {comparison.rejected_points.length}{" "}
             {comparison.rejected_points.length === 1 ? "statement was" : "statements were"}{" "}
             dropped for citing the wrong jurisdiction's sources, or none at all.
@@ -201,7 +201,7 @@ export function JurisdictionCompareView({
       <button
         type="button"
         onClick={() => setShowSides((v) => !v)}
-        className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint hover:text-ink"
+        className="mb-3 text-[length:var(--t-micro)] font-semibold uppercase tracking-[0.1em] text-ink-faint hover:text-ink"
       >
         {showSides ? "▾" : "▸"} {labels.national} / {labels.international}
       </button>
@@ -227,7 +227,7 @@ export function JurisdictionCompareView({
         </div>
       )}
 
-      <p className="mt-4 border-t border-rule pt-3 text-[11px] leading-relaxed text-ink-faint">
+      <p className="mt-4 border-t border-rule pt-3 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
         {comparison.disclaimer}
       </p>
     </section>

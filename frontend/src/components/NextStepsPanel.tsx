@@ -42,7 +42,7 @@ export function NextStepsPanel({
       <button
         type="button"
         onClick={onRequest}
-        className="mt-4 rounded-[3px] border border-rule px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
+        className="mt-4 rounded-[3px] border border-rule px-3 py-1.5 text-[length:var(--t-micro)] font-semibold uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-haldi hover:bg-haldi-wash hover:text-haldi focus-visible:focus-ring"
       >
         {labels.ask}
       </button>
@@ -51,7 +51,7 @@ export function NextStepsPanel({
 
   if (loading) {
     return (
-      <p className="mt-4 text-[12px] italic text-ink-faint">{labels.thinking}</p>
+      <p className="mt-4 text-[length:var(--t-micro)] italic text-ink-faint">{labels.thinking}</p>
     );
   }
 
@@ -62,7 +62,7 @@ export function NextStepsPanel({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint hover:text-ink"
+        className="flex items-baseline gap-1.5 text-[length:var(--t-micro)] font-semibold uppercase tracking-[0.1em] text-ink-faint hover:text-ink"
       >
         <span>{open ? "▾" : "▸"}</span>
         <span>{labels.title}</span>
@@ -73,8 +73,8 @@ export function NextStepsPanel({
           {data.applicable && data.steps.length > 0 ? (
             <ol className="space-y-2">
               {data.steps.map((step, i) => (
-                <li key={i} className="flex gap-2.5 text-[13px] leading-relaxed text-ink-soft">
-                  <span className="mt-[2px] font-serif text-[13px] text-haldi">{i + 1}</span>
+                <li key={i} className="flex gap-2.5 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
+                  <span className="mt-[2px] font-serif text-[length:var(--t-meta)] text-haldi">{i + 1}</span>
                   <span>
                     {step.text}
                     {/* Which legal system this follows from. A step drawn from
@@ -95,13 +95,13 @@ export function NextStepsPanel({
               ))}
             </ol>
           ) : (
-            <p className="text-[12.5px] leading-relaxed text-ink-faint">
+            <p className="text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
               {data.reason || labels.none}
             </p>
           )}
 
           {data.rejected.length > 0 && (
-            <p className="mt-2.5 border-l-2 border-neem bg-neem-wash px-2.5 py-1.5 text-[11.5px] leading-relaxed text-ink-soft">
+            <p className="mt-2.5 border-l-2 border-neem bg-neem-wash px-2.5 py-1.5 text-[length:var(--t-micro)] leading-relaxed text-ink-soft">
               <span className="eyebrow text-neem">{labels.guard}</span>{" "}
               {data.rejected.length}{" "}
               {data.rejected.length === 1 ? "suggestion was" : "suggestions were"} dropped
@@ -109,7 +109,7 @@ export function NextStepsPanel({
             </p>
           )}
 
-          <p className="mt-3 text-[11px] italic leading-relaxed text-ink-faint">
+          <p className="mt-3 text-[length:var(--t-micro)] italic leading-relaxed text-ink-faint">
             {data.disclaimer}
           </p>
         </div>

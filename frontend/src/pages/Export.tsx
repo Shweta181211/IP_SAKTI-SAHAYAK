@@ -100,7 +100,7 @@ export function ExportPage() {
         What India requires, and what the market requires.
         <em> Each cited, and kept apart.</em>
       </h1>
-      <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-ink-soft">
+      <p className="mt-4 max-w-2xl text-[length:var(--t-sub)] leading-relaxed text-ink-soft">
         Describe the product and name the market. The India-side position is answered from
         Indian statutes and rules; the target-market position from the treaty and regional
         corpus only. Where that corpus does not reach a market, the report says so rather
@@ -199,7 +199,7 @@ export function ExportPage() {
       {error && (
         <div className="card mt-6 max-w-3xl border-clay/40 bg-clay-wash p-4">
           <p className="eyebrow text-clay">Could not complete</p>
-          <p className="mt-1 text-[14px] text-ink">{error}</p>
+          <p className="mt-1 text-[length:var(--t-meta)] text-ink">{error}</p>
         </div>
       )}
 
@@ -232,7 +232,7 @@ export function ExportPage() {
       <section className="readiness-crosslink">
         <div className="min-w-0">
           <p className="eyebrow text-ink-faint">Reading an instrument directly</p>
-          <p className="mt-1 text-[14px] leading-relaxed text-ink-soft">
+          <p className="mt-1 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
             To ask what a single treaty or regional instrument says, rather than assessing a
             product against it, open the treaty routes.
           </p>
@@ -244,28 +244,28 @@ export function ExportPage() {
 
       <section className="card mt-14 p-6">
         <h2 className="font-serif text-[22px]">{t.exportBriefing}</h2>
-        <p className="mt-2 text-[14px] text-ink-soft">
+        <p className="mt-2 text-[length:var(--t-meta)] text-ink-soft">
           Print the last consultation as a one-page opinion sheet — question, trail, verbatim
           excerpts, disclaimer.
         </p>
         {last ? (
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p className="max-w-xl font-serif text-[15px] italic text-ink-soft">
+            <p className="max-w-xl font-serif text-[length:var(--t-body)] italic text-ink-soft">
               “{last.question}”
             </p>
             <button
               type="button"
               onClick={() => printBriefing(last)}
-              className="rounded-full bg-ink px-4 py-2 text-[13px] text-paper"
+              className="rounded-full bg-ink px-4 py-2 text-[length:var(--t-meta)] text-paper"
             >
               Print briefing
             </button>
-            <Link to="/ask" className="text-[13px] text-indigo-dye underline">
+            <Link to="/ask" className="text-[length:var(--t-meta)] text-indigo-dye underline">
               Return to Consult
             </Link>
           </div>
         ) : (
-          <p className="mt-4 text-[14px] text-ink-faint">
+          <p className="mt-4 text-[length:var(--t-meta)] text-ink-faint">
             No consultation in this session yet.{" "}
             <Link to="/ask" className="text-indigo-dye underline">
               Submit a question

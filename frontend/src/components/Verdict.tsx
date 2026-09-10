@@ -15,10 +15,10 @@ export function Verdict({ classification }: { classification: ClassificationResu
       <p className="eyebrow text-haldi">
         {isCategory ? "Classified as" : "Question type"}
       </p>
-      <p className="mt-0.5 font-serif text-[17px] font-medium leading-snug text-ink">
+      <p className="mt-0.5 font-serif text-[length:var(--t-sub)] font-medium leading-snug text-ink">
         {classification.label}
       </p>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+      <p className="mt-1.5 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
         {classification.rationale}
       </p>
       {classification.defining_source_name && (
@@ -68,7 +68,7 @@ export function AbstentionPanel({
         </div>
       )}
 
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+      <p className="mt-3 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
         Nothing was generated for this question. The assistant answers only from cited
         sources in its corpus, and says so when it cannot.
       </p>

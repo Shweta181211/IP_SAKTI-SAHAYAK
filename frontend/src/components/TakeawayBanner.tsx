@@ -112,7 +112,7 @@ export function TakeawayBanner({
             backend validates — a bare "yes, patentable" cannot reach here. */}
         <p className="takeaway-label">{takeaway.label}</p>
 
-        <p className="mt-1 max-w-[62ch] text-[14px] leading-relaxed text-ink-soft">
+        <p className="mt-1 max-w-[62ch] text-[length:var(--t-meta)] leading-relaxed text-ink-soft">
           {takeaway.reason}
         </p>
 

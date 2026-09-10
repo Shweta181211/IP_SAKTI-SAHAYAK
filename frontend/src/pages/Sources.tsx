@@ -41,7 +41,7 @@ export function SourcesPage() {
 
       <AuditPanel />
 
-      <p className="mt-12 text-[13px] leading-relaxed text-ink-faint">
+      <p className="mt-12 text-[length:var(--t-meta)] leading-relaxed text-ink-faint">
         Information, not legal advice. Always verify against the live official text.
       </p>
     </main>

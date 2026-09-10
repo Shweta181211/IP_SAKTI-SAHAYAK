@@ -88,18 +88,18 @@ export function Escalate({ reason, answer }: { reason: string | null; answer?: A
   return (
     <div className="mt-4 border-l-[3px] border-indigo-dye bg-indigo-wash px-4 py-3">
       <p className="eyebrow text-indigo-dye">Talk to a person</p>
-      {reason && <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{reason}</p>}
+      {reason && <p className="mt-1 text-[length:var(--t-meta)] leading-relaxed text-ink-soft">{reason}</p>}
 
       <button
         type="button"
         onClick={copy}
-        className="mt-2.5 inline-flex items-center gap-1.5 rounded-[3px] border border-indigo-dye/40 px-2.5 py-1.5 text-[13px] font-medium text-indigo-dye transition hover:bg-indigo-dye hover:text-paper"
+        className="mt-2.5 inline-flex items-center gap-1.5 rounded-[3px] border border-indigo-dye/40 px-2.5 py-1.5 text-[length:var(--t-meta)] font-medium text-indigo-dye transition hover:bg-indigo-dye hover:text-paper"
       >
         {copied ? "Brief copied" : "Copy a brief for a practitioner"}
         <span aria-hidden="true">{copied ? "✓" : "→"}</span>
       </button>
 
-      <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+      <p className="mt-2 text-[length:var(--t-micro)] leading-relaxed text-ink-faint">
         Copies your question, the reasoning and every source cited, ready to send to an
         IP practitioner of your choosing. Nothing is transmitted from this page.
       </p>
