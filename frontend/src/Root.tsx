@@ -7,6 +7,7 @@ import { Home } from "./pages/Home";
 import { SourcesPage } from "./pages/Sources";
 import { TreatiesPage } from "./pages/Treaties";
 import { Shell } from "./Shell";
+import { startReveal } from "./reveal";
 import type { UiLang } from "./i18n";
 import type { Surface } from "./Shell";
 import type { Health } from "./types";
@@ -58,6 +59,11 @@ export function Root() {
   });
   const [health, setHealth] = useState<Health | null>(null);
   const [healthChecked, setHealthChecked] = useState(false);
+
+  // Card entrances fire when the card is reached rather than on mount.
+  // Started here rather than in a page, because the observer is one per
+  // document and outlives every route change.
+  useEffect(startReveal, []);
 
   // One health call for the whole session. The workspace needs it to know
   // whether the international corpus is loaded; the header needs it for the

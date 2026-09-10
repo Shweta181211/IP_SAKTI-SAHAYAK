@@ -1183,18 +1183,116 @@
    content width at a size that fills it, and the standfirst goes back
    underneath at a length that is still comfortable to read. */
 .page-head {
+  position: relative;
   padding-bottom: 1.75rem;
-  border-bottom: 1px solid var(--rule);
+  /* The rule is a pseudo-element rather than a border because it is DRAWN -
+     a border cannot be animated from nothing to its full length, and being
+     ruled left to right is the whole point of it. */
+}
+
+.page-head::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--rule);
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: head-rule 640ms cubic-bezier(0.16, 0.84, 0.44, 1) 340ms forwards;
 }
 
 .page-head .explore-page-title {
   /* No cap. The container is the measure; at this size a page title fills one
      or two lines across it. */
   max-width: none;
+  /* Ink laid across the line, left to right. Not a rise from below: these
+     pages are a printed sheet, and a heading on a sheet is SET, not flown in.
+     `backwards` and not `forwards`, so the clip is gone the moment the
+     animation ends and the heading is an ordinary heading again. */
+  animation: head-set 760ms cubic-bezier(0.22, 0.75, 0.3, 1) backwards;
 }
 
 .page-head .page-lead {
   margin-top: 1rem;
+  /* The existing card-entrance keyframes, so the masthead and the grid below
+     it move in one vocabulary rather than two. */
+  animation: reveal-in 560ms cubic-bezier(0.16, 0.84, 0.44, 1) 460ms backwards;
+}
+
+/* ---- the letterhead mark -------------------------------------------------
+   The title runs the full width; the standfirst is held to 62 characters. The
+   space that leaves at the lower right of every masthead is what this fills.
+   Outline only, and faint: a watermark, not an ornament competing with the
+   heading. */
+.page-head-mark {
+  position: absolute;
+  right: 0;
+  /* Sits ON the drawn rule rather than floating above it: at the first size
+     it read as a sticker dropped in the corner. Anchored to the rule it is
+     the block's own lower-right corner, which is what a letterhead device
+     is. */
+  bottom: -0.55rem;
+  width: clamp(104px, 12.5vw, 168px);
+  height: auto;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.85;
+  stroke-linecap: round;
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.page-head-mark path {
+  stroke-dasharray: 100;
+  animation: mark-draw 1100ms cubic-bezier(0.3, 0.7, 0.3, 1) 600ms backwards;
+}
+/* Outline, then rib, then veins - the order it would be drawn by hand. */
+.page-head-mark path:nth-child(2) { animation-delay: 900ms; }
+.page-head-mark path:nth-child(3) { animation-delay: 1080ms; }
+
+@keyframes mark-draw {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes head-rule {
+  to { transform: scaleX(1); }
+}
+
+@keyframes head-set {
+  from {
+    /* A little past the left edge, so the first glyph is not sliced on the
+       opening frame. */
+    clip-path: inset(-0.3em 100% -0.3em -0.2em);
+    opacity: 0.25;
+  }
+  to {
+    clip-path: inset(-0.3em -0.35em -0.3em -0.2em);
+    opacity: 1;
+  }
+}
+
+/* The mark and the drawn rule are decoration on a printed page - the sheet
+   already has its own rules - and both are motion nobody asked for. */
+@media (prefers-reduced-motion: reduce) {
+  .page-head::after { animation: none; transform: scaleX(1); }
+  .page-head .explore-page-title,
+  .page-head .page-lead,
+  .page-head-mark path { animation: none; }
+}
+
+@media print {
+  .page-head::after { animation: none; transform: scaleX(1); }
+  .page-head .explore-page-title,
+  .page-head .page-lead,
+  .page-head-mark path { animation: none; }
+  .page-head-mark { display: none; }
+}
+
+@media (max-width: 700px) {
+  /* At this width the standfirst uses the whole column, so there is no gap
+     for the mark to fill and it would sit on top of the text. */
+  .page-head-mark { display: none; }
 }
 
 /* The standfirst under a page title. One size, every page. */
@@ -3725,6 +3823,23 @@ html[data-surface="dark"] {
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
+/* ---- and it fires where it can be seen ----------------------------------
+   This entrance used to run on mount, so on a ten-card grid the last card
+   finished about 700ms after load - several screens below anything the reader
+   could see. The animation was being paid for and thrown away.
+
+   `reveal-armed` is set by src/reveal.ts once its observer is actually
+   running. That is deliberate and it is the whole safety of this: if the
+   module never runs - an old browser, a script error, a print - the class is
+   absent, nothing is hidden, and the page renders exactly as it did before.
+   Content that stays invisible because an observer never fired is the one
+   failure mode a scroll reveal must not have. */
+html.reveal-armed .reveal-in:not(.is-in) {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: none;
+}
+
 @keyframes reveal-in {
   from {
     opacity: 0;
@@ -3803,11 +3918,21 @@ html[data-surface="dark"] {
   .reveal-in {
     animation: none;
   }
+  /* Suppressing the animation is not enough: the armed pre-state would leave
+     every card at zero opacity with nothing left to bring it back. */
+  html.reveal-armed .reveal-in:not(.is-in) {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media print {
   .reveal-in {
     animation: none;
+  }
+  html.reveal-armed .reveal-in:not(.is-in) {
+    opacity: 1;
+    transform: none;
   }
   .surface-dark .tilt-card::before,
   .surface-dark .tilt-card::after,
@@ -4643,4 +4768,40 @@ html[data-surface="dark"] {
   .consult-menu[data-open="false"] {
     display: none;
   }
+}
+
+/* ---- the reading rule ----------------------------------------------------
+   Page position, in the left margin, as the same drawn vertical rule the
+   reasoning trail uses to join its stations. A hairline track with a filled
+   length inside it - no numbers, no percentage, because the useful question
+   is "how much of this is left", not "what fraction". */
+.reading-rule {
+  position: fixed;
+  /* Just inside the sheet's own left gutter. 78rem is `max-w-sheet`; the
+     pages add 1.5rem of padding inside that, so this sits about 20px clear
+     of the first character. The component does not render below 1330px,
+     where that gutter stops existing. */
+  left: calc((100vw - 78rem) / 2 + 0.15rem);
+  top: 22vh;
+  bottom: 12vh;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--rule);
+  z-index: 20;
+  opacity: 0.85;
+}
+
+.reading-rule span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--neem);
+  transform-origin: top;
+  /* Follows the scroll directly. The short transition only smooths a jump -
+     a wheel notch or a keyboard page - it does not lag the pointer. */
+  transition: transform 90ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-rule span { transition: none; }
 }

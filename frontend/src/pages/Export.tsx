@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CancelledError, fetchExportReadiness } from "../api";
+import { PageHead } from "../components/PageHead";
 import { ReadinessReport } from "../components/ReadinessReport";
 import { loadLastAnswer, printBriefing } from "../printBriefing";
 import { useShell } from "../Shell";
@@ -95,17 +96,12 @@ export function ExportPage() {
 
   return (
     <main className="export-stage mx-auto min-h-[calc(100vh-4rem)] max-w-sheet px-6 py-12 text-ink">
-      <header className="page-head">
-        <h1 className="explore-page-title">
-          What India requires, and what the market requires.
-        </h1>
-        <p className="page-lead">
-          Describe the product and name the market. The India-side position is answered
-          from Indian statutes and rules; the target-market position from the treaty and
-          regional corpus only. Where that corpus does not reach a market, the report says
-          so rather than filling the gap.
-        </p>
-      </header>
+      <PageHead title="What India requires, and what the market requires.">
+        Describe the product and name the market. The India-side position is answered
+        from Indian statutes and rules; the target-market position from the treaty and
+        regional corpus only. Where that corpus does not reach a market, the report says
+        so rather than filling the gap.
+      </PageHead>
 
       {/* ------------------------------- the form ------------------------------- */}
       <form onSubmit={submit} className="readiness-form">

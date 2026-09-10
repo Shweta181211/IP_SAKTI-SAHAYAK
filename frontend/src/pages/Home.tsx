@@ -167,7 +167,7 @@ export function Home() {
             control that looks live and does nothing. They are links now: each
             opens Consult already set to its own corpus. */}
         <div className="explore-split">
-          <Link to="/ask?j=india" className="explore-pane">
+          <Link to="/ask?j=india" className="explore-pane reveal-in">
             <h3>{hi ? "भारत" : "India"}</h3>
             <p>
               {hi
@@ -178,7 +178,11 @@ export function Home() {
               {hi ? "भारतीय क़ानून में पूछें" : "Ask in Indian law"}
             </span>
           </Link>
-          <Link to="/ask?j=international" className="explore-pane explore-pane--clay">
+          <Link
+            to="/ask?j=international"
+            className="explore-pane explore-pane--clay reveal-in"
+            style={{ ["--i" as string]: 1 }}
+          >
             <h3>{hi ? "अंतरराष्ट्रीय" : "International"}</h3>
             <p>
               {hi
