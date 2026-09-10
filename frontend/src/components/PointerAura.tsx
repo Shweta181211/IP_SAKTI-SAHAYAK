@@ -1,25 +1,23 @@
 import { useEffect } from "react";
 
-/** Gold ring that follows the pointer. Hidden on touch / reduced motion. */
+/**
+ * Turns on the leaf pointer.
+ *
+ * It used to do two things: swap the cursor for the leaf, and track the mouse
+ * into `--mx/--my` so a gold radial wash could follow it around every page.
+ * The wash is gone - a glow chasing the cursor across a legal document is
+ * decoration that pulls the eye away from the thing being read, and it was
+ * repainting a full-viewport gradient on every pointermove.
+ *
+ * The class stays, because that is what the leaf cursor hangs off.
+ */
 export function PointerAura() {
   useEffect(() => {
     const fine = window.matchMedia("(pointer: fine)").matches;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!fine || reduce) return;
-
-    const move = (e: PointerEvent) => {
-      document.documentElement.style.setProperty("--mx", `${e.clientX}px`);
-      document.documentElement.style.setProperty("--my", `${e.clientY}px`);
-      document.documentElement.style.setProperty("--mxp", String(e.clientX / window.innerWidth));
-      document.documentElement.style.setProperty("--myp", String(e.clientY / window.innerHeight));
-    };
-    window.addEventListener("pointermove", move, { passive: true });
+    if (!fine) return;
     document.documentElement.classList.add("has-aura");
-    return () => {
-      window.removeEventListener("pointermove", move);
-      document.documentElement.classList.remove("has-aura");
-    };
+    return () => document.documentElement.classList.remove("has-aura");
   }, []);
 
-  return <div className="site-aura" aria-hidden />;
+  return null;
 }

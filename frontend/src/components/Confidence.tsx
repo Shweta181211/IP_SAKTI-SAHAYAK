@@ -65,35 +65,57 @@ export function Confidence({ level, label, score, reasons }: Props) {
 
   return (
     <section className="support" aria-label={`Evidence support: ${label}`}>
-      {/* The dial is gone.
+      {/* A SEAL, not a meter.
 
-          A needle on a semicircular face is a gauge, and a gauge implies a
-          continuous, calibrated reading. This measurement is neither: it is
-          four ordinal bands over an uncalibrated score, which is exactly why
-          the needle was already pinned to the middle of a band rather than
-          allowed to rest anywhere. Drawing it as an instrument face promised a
-          precision the number does not have, and it took a 156x100 block out
-          of the middle of the reading column to do it.
+          Two earlier attempts were both instruments: a needle on a gauge face,
+          then a four-step bar. Both borrowed the visual language of continuous
+          measurement for something that is four ordinal bands over an
+          uncalibrated score, and both looked like a widget bolted to a legal
+          document.
 
-          Four steps, the reached one filled. Same information, stated at the
-          resolution it actually has, in a strip that sits beside the sources
-          it is describing. */}
-      <p className="support-head">Evidence support</p>
-      <p className={`support-label ${isLimited ? "is-thin" : ""}`}>{label}</p>
+          This page already has a seal: the little mark on a citation card that
+          says the provision was found in the source text. Authentication is the
+          gesture this product is actually making, so the support reading is a
+          seal too - one ring, quartered, filled as far as the evidence reaches.
+          It reads as a stamp on a document rather than a dial on a dashboard,
+          and it cannot be mistaken for a percentage. */}
+      <div className="support-mark">
+        <svg viewBox="0 0 44 44" className={`support-seal ${isLimited ? "is-thin" : ""}`} aria-hidden>
+          {/* Four arcs of 90deg less a gap, drawn from the top clockwise, so
+              "more filled" reads the way a clock does. */}
+          {BANDS.map((band, i) => {
+            const R = 18;
+            const C = 2 * Math.PI * R;
+            const seg = C / 4;
+            return (
+              <circle
+                key={band}
+                cx="22"
+                cy="22"
+                r={R}
+                fill="none"
+                strokeWidth="3.5"
+                strokeLinecap="butt"
+                className={i <= reached ? "is-lit" : "is-track"}
+                strokeDasharray={`${seg - 4} ${C - seg + 4}`}
+                strokeDashoffset={-i * seg}
+                transform="rotate(-90 22 22)"
+              />
+            );
+          })}
+          {/* The centre carries the count reached, not a number out of ten -
+              four bands, and you are on the nth. */}
+          <text x="22" y="22" className="support-seal-n">
+            {reached + 1}
+          </text>
+        </svg>
 
-      <ol className="support-steps" aria-hidden>
-        {BANDS.map((band, i) => (
-          <li
-            key={band}
-            className={`support-step ${i <= reached ? "is-lit" : ""} ${
-              i === reached ? "is-current" : ""
-            } ${isLimited ? "is-thin" : ""}`}
-          >
-            <span className="support-step-bar" />
-            <span className="support-step-name">{TICK[band]}</span>
-          </li>
-        ))}
-      </ol>
+        <div className="min-w-0">
+          <p className="support-head">Evidence support</p>
+          <p className={`support-label ${isLimited ? "is-thin" : ""}`}>{label}</p>
+          <p className="support-of">{TICK[BANDS[reached]]} · {reached + 1} of 4</p>
+        </div>
+      </div>
 
       <p className="support-caption">
         How well the cited sources support this answer — not a judgment of legal

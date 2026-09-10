@@ -68,7 +68,6 @@ export function Shell({
         {dark && !onExplore && (
           <>
             <div className="surface-wash" aria-hidden />
-            <div className="surface-glow" aria-hidden />
           </>
         )}
         <header className="no-print sticky top-0 z-30 border-b border-white/5 bg-[#0e1712]/80 backdrop-blur-md">

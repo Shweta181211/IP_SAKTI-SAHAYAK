@@ -45,8 +45,8 @@
 
      Anything that needs a size picks one of these. Nothing invents an eighth.
      ---------------------------------------------------------------------- */
-  --t-display: clamp(2.6rem, 5vw, 4.4rem);     /* the hero sentence, once per site */
-  --t-title:   clamp(1.8rem, 3vw, 2.6rem);     /* page and section titles */
+  --t-display: clamp(2.8rem, 6vw, 5.6rem);     /* the hero sentence, once per site */
+  --t-title:   clamp(2rem, 3.8vw, 3.3rem);     /* page and section titles */
   --t-head:    1.4375rem;                      /* card titles, answer headline */
   --t-sub:     1.1875rem;                      /* leads and standfirsts */
   --t-body:    1.0313rem;                      /* prose */
@@ -650,21 +650,22 @@
      screen and then fall to the bottom of it. */
   padding: clamp(3.5rem, 8vh, 6rem) 6vw clamp(3rem, 7vh, 5rem);
   display: grid;
-  grid-template-columns: minmax(0, 46rem) minmax(0, auto);
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 3vw;
   align-items: center;
   column-gap: 4vw;
-  /* One flat ground in the ink family, not three stacked radial gradients.
-     The blurred blob and the leaf's drop-shadow are both gone - a glow behind
-     display type is decoration that makes the type harder to read. */
-  background: #101a14;
+  /* Warm earth falling into deep forest - the two ends of this identity's own
+     palette. Flat #101a14 read as plain black and drained the page; the answer
+     to a muddy three-layer glow was a better ground, not the absence of one.
+     One linear sweep, so nothing blooms behind the type. */
+  background: linear-gradient(158deg, #2b1c0d 0%, #1a2a20 46%, #0f1913 100%);
 }
 
 .explore-hero-copy {
   grid-column: 1;
-  /* The column, not the headline. 22ch here squeezed the whole block into a
-     ribbon and broke the sentence over seven lines. */
-  max-width: 46rem;
+  /* The column takes the page. It was capped at 46rem on a 1440 viewport,
+     which left a third of the hero empty beside a sentence that had room. */
+  max-width: none;
 }
 
 .explore-mark {
@@ -706,7 +707,7 @@
   line-height: 1.04;
   letter-spacing: -0.021em;
   color: #f4ecdc;
-  max-width: 17ch;
+  max-width: 21ch;
   text-wrap: balance;
 }
 
@@ -720,8 +721,8 @@
 }
 
 .explore-lead {
-  max-width: 46ch;
-  margin-top: 1.4rem;
+  max-width: 58ch;
+  margin-top: 1.5rem;
   font-family: Spectral, ui-serif, Georgia, serif;
   font-size: var(--t-sub);
   line-height: 1.62;
@@ -895,9 +896,12 @@
      the page with two things shouting. */
   font-size: var(--t-title);
   font-weight: 400;
-  line-height: 1.12;
-  letter-spacing: -0.018em;
-  text-wrap: balance;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  /* No `balance`. It was evening the lines by pulling the heading in, which is
+     exactly the compactness that left these pages looking half-used. Let it
+     run to its measure. */
+  max-width: 24ch;
 }
 .explore-page-title em {
   font-style: normal;
@@ -1162,7 +1166,7 @@
 /* The standfirst under a page title. One size, every page. */
 .page-lead {
   margin-top: 1rem;
-  max-width: var(--measure);
+  max-width: 62ch;
   font-family: Spectral, ui-serif, Georgia, serif;
   font-size: var(--t-sub);
   line-height: 1.62;
@@ -1509,15 +1513,48 @@
    the classification verdict and nothing else.
    ========================================================================== */
 
-/* Evidence support, as four ordinal steps.
+/* Evidence support, drawn as a seal.
 
-   It lives in the sources column now, directly above the citations it is
-   describing - it is a statement ABOUT that list, and it was sitting in the
-   middle of the prose where the eye had to step over it on the way down. */
+   It sits in the sources column, above the citations it is a reading of. The
+   ring is quartered because the measurement has four bands and no more
+   resolution than that - there is deliberately no way to render "62%" here. */
 .support {
   padding: 0 0 0.9rem;
   border-bottom: 1px solid var(--rule);
   margin-bottom: 0.9rem;
+}
+
+.support-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.support-seal {
+  width: 46px;
+  height: 46px;
+  flex: none;
+}
+
+.support-seal .is-track {
+  stroke: var(--rule);
+}
+
+.support-seal .is-lit {
+  stroke: var(--neem);
+}
+
+/* Clay is this palette's word for a limit, and thin evidence is one. */
+.support-seal.is-thin .is-lit {
+  stroke: var(--clay);
+}
+
+.support-seal-n {
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: 15px;
+  fill: var(--ink);
 }
 
 .support-head {
@@ -1526,40 +1563,12 @@
   color: var(--ink-faint);
 }
 
-.support-steps {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  margin-top: 0.55rem;
-  list-style: none;
-  padding: 0;
-}
-
-.support-step-bar {
-  display: block;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--rule);
-}
-
-/* Filled up to the band reached, so the strip reads left to right as an
-   amount rather than as four separate lamps. */
-.support-step.is-lit .support-step-bar { background: var(--neem); }
-.support-step.is-lit.is-thin .support-step-bar { background: var(--clay); }
-
-.support-step-name {
-  display: block;
-  margin-top: 4px;
+.support-of {
+  margin-top: 1px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
   color: var(--ink-faint);
-}
-
-/* The band actually reached is the only one named in full strength; the rest
-   are the scale it sits on. */
-.support-step.is-current .support-step-name {
-  color: var(--ink);
-  font-weight: 600;
 }
 
 .support-label {
@@ -2918,8 +2927,7 @@
 
 /* ---- the ground: lit and slowly moving, never a flat fill ---- */
 
-.surface-wash,
-.surface-glow {
+.surface-wash {
   position: fixed;
   inset: 0;
   z-index: -1;
@@ -2933,16 +2941,6 @@
     radial-gradient(52vmax 44vmax at 60% 108%, rgba(79, 125, 92, 0.16), transparent 62%),
     linear-gradient(168deg, #1a0f0a 0%, #0d1512 44%, #101b16 100%);
   animation: dark-drift 34s ease-in-out infinite alternate;
-}
-
-/* The pointer wash. Subtle on purpose - it should be felt at the edge of
-   attention, not followed. */
-.surface-glow {
-  background: radial-gradient(
-    30vmax 30vmax at calc(var(--mxp, 0.5) * 100%) calc(var(--myp, 0.35) * 100%),
-    rgba(227, 168, 68, 0.1),
-    transparent 60%
-  );
 }
 
 @keyframes dark-drift {
@@ -3260,8 +3258,7 @@
     --ink-soft: #24382f;
     --rule: #ddceac;
   }
-  .surface-wash,
-  .surface-glow {
+  .surface-wash {
     display: none;
   }
 }
@@ -3411,8 +3408,7 @@
     --ink-soft: #24382f;
     --rule: #ddceac;
   }
-  .surface-wash,
-  .surface-glow {
+  .surface-wash {
     display: none;
   }
 }
