@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useShell } from "../Shell";
-import { ACTS } from "../data/acts";
 
 
 const BLOOMS = [
@@ -59,60 +58,51 @@ export function Home() {
   const { uiLang } = useShell();
   const hi = uiLang === "hi";
   const [bloom, setBloom] = useState<(typeof BLOOMS)[number] | null>(BLOOMS[0]);
-  const [world, setWorld] = useState<"india" | "treaty" | null>(null);
 
   return (
     <div className="explore">
       {/* ---------- HERO ---------- */}
       <section className="explore-hero">
-        <div className="explore-blob" aria-hidden />
+        <div className="explore-hero-copy">
+          <h1 className="explore-title">
+            {hi
+              ? "प्रत्येक दावा उद्धृत प्रावधान पर टिके, अनुमान पर नहीं।"
+              : "Every claim rests on a cited provision, never on a guess."}
+          </h1>
+          <p className="explore-lead">
+            {hi
+              ? "आयुर्वेद के लिए स्रोत-उद्धृत आईपी व नियामक सहायक। निर्माण श्रेणी प्रश्न से निर्धारित होती है; क्षेत्राधिकार आप चुनते हैं, और दोनों कॉरपस अलग-अलग खोजे जाते हैं।"
+              : "A source-cited assistant for intellectual property and regulatory questions in Ayurveda. The formulation category is read from your question, the jurisdiction is yours to choose, and the two corpora are searched separately."}
+          </p>
+          <div className="explore-cta-row">
+            <Magnetic to="/ask">{hi ? "परामर्श शुरू करें" : "Begin consultation"}</Magnetic>
+            <a href="#garden" className="explore-ghost">
+              {hi ? "श्रेणियाँ देखें" : "Review the categories"}
+            </a>
+          </div>
+          {/* The number this audience actually weighs, stated as a fact rather
+              than dressed up as a badge. */}
+          <p className="explore-corpus">
+            {hi ? (
+              <>
+                <b>3,275</b> प्रावधान अनुक्रमित · <b>37</b> दस्तावेज़ · भारतीय और
+                अंतरराष्ट्रीय कॉर्पस अलग-अलग
+              </>
+            ) : (
+              <>
+                <b>3,275</b> provisions indexed across <b>37</b> instruments, in two
+                corpora that are searched apart.
+              </>
+            )}
+          </p>
+        </div>
+
         <svg className="explore-mark" viewBox="0 0 200 240" aria-hidden>
           <ellipse cx="100" cy="128" rx="54" ry="78" fill="none" stroke="currentColor" strokeWidth="1.1" />
           <path d="M100 28 C70 88 70 148 100 212 C130 148 130 88 100 28 Z" fill="currentColor" />
-          <path d="M100 28 V212" fill="none" stroke="#3a1f12" strokeWidth="1" opacity="0.35" />
+          <path d="M100 28 V212" fill="none" stroke="#101a14" strokeWidth="1" opacity="0.35" />
         </svg>
-
-        <p className="explore-kicker">
-          {hi ? "आयुर्वेद · बौद्धिक संपदा · नियामक मार्गदर्शन" : "Ayurveda · intellectual property · regulatory guidance"}
-        </p>
-        <h1 className="explore-title">
-          {hi ? (
-            <>
-              प्रत्येक दावा
-              <em> उद्धृत प्रावधान</em>
-              <br />
-              पर टिके।
-            </>
-          ) : (
-            <>
-              Every claim
-              <em> rests on a cited provision,</em>
-              <br />
-              never on a guess.
-            </>
-          )}
-        </h1>
-        <p className="explore-lead">
-          {hi
-            ? "IP-SAKTI Sahayak आयुर्वेद के लिए स्रोत-उद्धृत आईपी व नियामक सहायक है। निर्माण श्रेणी प्रश्न से निर्धारित होती है; क्षेत्राधिकार आप चुनते हैं, और दोनों कॉरपस अलग-अलग खोजे जाते हैं।"
-            : "IP-SAKTI Sahayak is a source-cited assistant for intellectual property and regulatory questions in Ayurveda. The formulation category is classified from your question; the jurisdiction is yours to choose, and the two corpora are searched separately."}
-        </p>
-        <div className="explore-cta-row">
-          <Magnetic to="/ask">{hi ? "परामर्श शुरू करें" : "Begin consultation"}</Magnetic>
-          <a href="#garden" className="explore-ghost">
-            {hi ? "श्रेणियाँ देखें" : "Review the categories"}
-          </a>
-        </div>
       </section>
-
-      {/* ---------- MARQUEE ---------- */}
-      <div className="explore-marquee" aria-hidden>
-        <div className="explore-marquee-track">
-          {[...ACTS, ...ACTS].map((act, i) => (
-            <span key={`${act}-${i}`}>{act}</span>
-          ))}
-        </div>
-      </div>
 
       {/* ---------- GARDEN ---------- */}
       <section id="garden" className="explore-garden">
@@ -163,48 +153,47 @@ export function Home() {
 
       {/* ---------- TWO WORLDS ---------- */}
       <section className="explore-worlds">
-        <p className="explore-kicker">{hi ? "दो परतें · मिश्रित नहीं" : "Two layers · never conflated"}</p>
-        <h2>{hi ? "भारतीय क़ानून और अंतरराष्ट्रीय संधियाँ अलग अनुक्रमित हैं।" : "Indian statutes and international treaties are indexed separately."}</h2>
+        <h2>
+          {hi
+            ? "भारतीय क़ानून और अंतरराष्ट्रीय संधियाँ अलग अनुक्रमित हैं।"
+            : "Indian statutes and international treaties are indexed separately."}
+        </h2>
+        <p className="explore-worlds-intro">
+          {hi
+            ? "एक परत चुनिए — परामर्श उसी क्षेत्राधिकार में खुलेगा।"
+            : "Choose a layer and the consultation opens in that jurisdiction."}
+        </p>
+        {/* These were buttons that only tinted themselves on hover, which is a
+            control that looks live and does nothing. They are links now: each
+            opens Consult already set to its own corpus. */}
         <div className="explore-split">
-          <button
-            type="button"
-            className={`explore-pane ${world === "india" ? "is-live" : ""}`}
-            onMouseEnter={() => setWorld("india")}
-            onFocus={() => setWorld("india")}
-            onClick={() => setWorld("india")}
-          >
-            <span className="explore-pane-no">01</span>
+          <Link to="/ask?j=india" className="explore-pane">
             <h3>{hi ? "भारत" : "India"}</h3>
             <p>
               {hi
                 ? "पेटेंट, भौगोलिक संकेत, व्यापार चिह्न, ABS, औषधि नियम और TKDL। धारा 3(p) इसी परत से प्राप्त होती है।"
                 : "Patents, geographical indications, trade marks, ABS, drug rules and TKDL. Section 3(p) is retrieved from this layer."}
             </p>
-          </button>
-          <button
-            type="button"
-            className={`explore-pane explore-pane--clay ${world === "treaty" ? "is-live" : ""}`}
-            onMouseEnter={() => setWorld("treaty")}
-            onFocus={() => setWorld("treaty")}
-            onClick={() => setWorld("treaty")}
-          >
-            <span className="explore-pane-no">02</span>
+            <span className="explore-pane-go">
+              {hi ? "भारतीय क़ानून में पूछें" : "Ask in Indian law"}
+            </span>
+          </Link>
+          <Link to="/ask?j=international" className="explore-pane explore-pane--clay">
             <h3>{hi ? "अंतरराष्ट्रीय" : "International"}</h3>
             <p>
               {hi
                 ? "TRIPS, नागोया, PCT, मैड्रिड, हेग, बुडापेस्ट और GRATK। अलग कॉर्पस, ताकि भारतीय क़ानून से मिश्रित न हों।"
-                : "TRIPS, Nagoya, PCT, Madrid, Hague, Budapest and GRATK. Held in a separate corpus so they are not mixed with Indian law."}
+                : "TRIPS, Nagoya, PCT, Madrid, Hague, Budapest and GRATK. Held in a separate corpus so they are never mixed with Indian law."}
             </p>
-          </button>
+            <span className="explore-pane-go">
+              {hi ? "संधि पाठ में पूछें" : "Ask in the treaty texts"}
+            </span>
+          </Link>
         </div>
         <p className="explore-worlds-note">
-          {world === "treaty"
-            ? hi
-              ? "भारत डिफ़ॉल्ट है। अंतरराष्ट्रीय स्थिति आपके माँगने पर ही आती है, और वह भारतीय उत्तर के साथ अलग दिखाई जाती है, मिलाई नहीं जाती।"
-              : "India is the default. The international position is fetched only when you ask for it, and it is shown beside the Indian one rather than merged into it."
-            : hi
-              ? "इस कॉर्पस में FDA या EMA के पाठ नहीं हैं। विदेशी घरेलू प्राधिकार के प्रश्नों को भारतीय क़ानून से उत्तर देने के बजाय अस्वीकार किया जाता है।"
-              : "This corpus does not include FDA or EMA texts. Questions on foreign domestic authorisation are declined rather than answered from Indian law."}
+          {hi
+            ? "भारत डिफ़ॉल्ट है। इस कॉर्पस में FDA या EMA के पाठ नहीं हैं; विदेशी घरेलू प्राधिकार के प्रश्न भारतीय क़ानून से उत्तर देने के बजाय अस्वीकार किए जाते हैं।"
+            : "India is the default. This corpus holds no FDA or EMA text, so questions on foreign domestic authorisation are declined rather than answered from Indian law."}
         </p>
       </section>
 

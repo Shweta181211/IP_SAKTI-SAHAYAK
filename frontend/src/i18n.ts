@@ -72,7 +72,7 @@ export const STRINGS: Record<UiLang, Dict> = {
     exportBriefing: "Print briefing",
     exportBriefingHint: "Open this consultation as a printable opinion sheet",
     tagline: "Source-cited IP & regulatory guidance for Ayurveda",
-    sectionMode: "What would you like to do?",
+    sectionMode: "I want to",
     modeAsk: "Ask a question",
     modeCompare: "Compare categories",
     modeCompareJurisdictions: "Compare jurisdictions",

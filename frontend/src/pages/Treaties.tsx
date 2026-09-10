@@ -19,12 +19,10 @@ export function TreatiesPage() {
 
   return (
     <main className="export-stage mx-auto min-h-[calc(100vh-4rem)] max-w-sheet px-6 py-12 text-ink">
-      <p className="explore-kicker explore-kicker--ink">International filing · treaty corpus</p>
-      <h1 className="explore-page-title mt-3">
-        Treaty and regional pathways.
-        <em> Indexed apart from Indian law.</em>
+      <h1 className="explore-page-title">
+        Treaty and regional pathways, indexed apart from Indian law.
       </h1>
-      <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-ink-soft">
+      <p className="page-lead">
         Each route opens a question against the international corpus — TRIPS, CBD, Nagoya,
         GRATK, PCT, Madrid, Hague, Budapest, the European Patent Convention, EU Directive
         2004/24/EC, and the FDA botanical-drug guidance. These answer what an instrument
@@ -48,11 +46,10 @@ export function TreatiesPage() {
               navigate(`/ask?j=international&q=${encodeURIComponent(lane.question)}`)
             }
           >
-            <p className="eyebrow text-haldi">{String(i + 1).padStart(2, "0")}</p>
-            <h2 className="mt-2 font-serif text-[20px] text-ink">{lane.treaty}</h2>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">{lane.use}</p>
-            <p className="mt-3 font-mono text-[11px] text-ink-faint">{lane.file}</p>
-            <p className="mt-5 text-[12.5px] font-medium text-indigo-dye">Open in Consult →</p>
+            <h2 className="card-title">{lane.treaty}</h2>
+            <p className="card-body">{lane.use}</p>
+            <p className="card-ref">{lane.file}</p>
+            <p className="card-go">Ask in the treaty texts</p>
           </TiltCard>
         ))}
       </div>

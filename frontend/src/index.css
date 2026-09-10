@@ -33,6 +33,29 @@
   --neem-wash: #e1ebe1;
   --clay: #a3402d;
   --clay-wash: #f1ddd3;
+
+  /* ----------------------------------------------------------------------
+     ONE TYPE SCALE, SEVEN STEPS, ONE JOB EACH.
+
+     Written because the pages had drifted into picking their own pixel sizes -
+     a hero at 6.2rem beside a 1.05rem lead with nothing between, pane titles
+     at 2.4rem, page titles at a third size - and a reader could no longer tell
+     a question from an answer from a footnote by size alone. Size IS the
+     hierarchy here; when every component invents its own, there is none.
+
+     Anything that needs a size picks one of these. Nothing invents an eighth.
+     ---------------------------------------------------------------------- */
+  --t-display: clamp(2.35rem, 4.6vw, 3.9rem);  /* the hero sentence, once per site */
+  --t-title:   clamp(1.6rem, 2.6vw, 2.2rem);   /* page and section titles */
+  --t-head:    1.3125rem;                      /* card titles, answer headline */
+  --t-sub:     1.0625rem;                      /* leads and standfirsts */
+  --t-body:    0.9375rem;                      /* prose */
+  --t-meta:    0.8125rem;                      /* secondary, captions */
+  --t-micro:   0.6875rem;                      /* statute references, counts */
+
+  /* Measure. Serif prose gets the longer line and the looser leading. */
+  --measure: 68ch;
+  --measure-tight: 34rem;
 }
 
 @layer base {
@@ -52,9 +75,16 @@
 }
 
 @layer components {
-  /* Small caps label used for metadata and section eyebrows. */
+  /* Small label for metadata.
+
+     Was 11px semibold UPPERCASE at 0.14em tracking, used above almost every
+     heading on every page. Tracked-out caps labels stacked over headings are
+     chrome: they cost a line, they read as shouting, and on this build they
+     usually repeated what the heading beneath already said. Sentence case at
+     the micro step keeps the label legible as a label without competing. */
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.14em];
+    font-size: var(--t-micro);
+    @apply font-semibold tracking-[0.02em];
     color: var(--ink-faint);
   }
 
@@ -533,9 +563,233 @@
   .mic-btn--active::after { animation: none; display: none; }
   .send-btn::after { display: none; }
   .has-aura .site-aura { display: none !important; }
-  .explore-blob { animation: none; left: 72%; top: 22%; }
+  /* The blob and the marquee are gone from the markup; the mark still sways. */
   .explore-mark { animation: none; }
-  .explore-marquee-track { animation: none; }
+  .tilt-card { transform: none !important; }
+  .explore-magnetic { transform: none !important; }
+}
+
+.hero {
+  background:
+    radial-gradient(720px 480px at 88% -10%, rgba(201, 138, 43, 0.22), transparent 55%),
+    radial-gradient(500px 360px at 8% 110%, rgba(79, 125, 92, 0.18), transparent 50%),
+    #132018;
+  color: var(--paper);
+}
+.hero-wash {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+.hero-vine {
+  position: absolute;
+  right: -8%;
+  top: -6%;
+  height: 120%;
+  width: min(48vw, 520px);
+  color: rgba(201, 138, 43, 0.35);
+  pointer-events: none;
+}
+
+.font-display {
+  font-family: Fraunces, ui-serif, Georgia, serif;
+}
+
+.chamber {
+  min-height: calc(100vh - 3.5rem);
+}
+.chamber-glow {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(232, 197, 107, 0.16), transparent 42%),
+    radial-gradient(circle at 18% 88%, rgba(79, 125, 92, 0.18), transparent 40%);
+}
+.yantra {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(92vmin, 640px);
+  height: min(92vmin, 640px);
+  transform: translate(-50%, -50%);
+  opacity: 0.95;
+}
+.yantra-ring {
+  transform-origin: 160px 160px;
+  animation: yantra-turn 64s linear infinite;
+}
+.yantra--spin .yantra-ring {
+  animation-duration: 9s;
+}
+@keyframes yantra-turn {
+  to { transform: rotate(360deg); }
+}
+.parchment {
+  background: #f5eedd;
+  border-radius: 1.5rem;
+  color: var(--ink);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- Exploratory brand surface (Dribbble Ayurveda energy) ---------- */
+.site-aura {
+  display: none;
+}
+
+.explore {
+  color: #f3e6c8;
+  overflow: hidden;
+}
+.explore-hero {
+  position: relative;
+  /* Was `min-height: calc(100vh - 4.2rem)` with `justify-content: flex-end`,
+     which pinned the sentence to the floor of a full viewport and left the top
+     40% empty. A hero earns its height from its content; it does not reserve a
+     screen and then fall to the bottom of it. */
+  padding: clamp(3.5rem, 8vh, 6rem) 6vw clamp(3rem, 7vh, 5rem);
+  display: grid;
+  grid-template-columns: minmax(0, 36rem) 1fr;
+  align-items: center;
+  column-gap: 4vw;
+  /* One flat ground in the ink family, not three stacked radial gradients.
+     The blurred blob and the leaf's drop-shadow are both gone - a glow behind
+     display type is decoration that makes the type harder to read. */
+  background: #101a14;
+}
+
+.explore-hero-copy {
+  grid-column: 1;
+  /* The column, not the headline. 22ch here squeezed the whole block into a
+     ribbon and broke the sentence over seven lines. */
+  max-width: 36rem;
+}
+
+.explore-mark {
+  grid-column: 2;
+  justify-self: center;
+  /* Big enough to hold the right half of the composition. At 200px it read as
+     a stray icon in a large empty area rather than the counterweight to the
+     sentence. */
+  width: clamp(150px, 22vw, 320px);
+  height: auto;
+  color: #d9b45f;
+  opacity: 0.9;
+  /* The mark is the brand, so it keeps a slow sway - one moving thing on the
+     page. The drop-shadow that made it glow is gone. */
+  animation: leaf-sway 9s ease-in-out infinite;
+}
+
+@keyframes leaf-sway {
+  50% { transform: rotate(-4deg) translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-mark { animation: none; }
+}
+
+/* The eyebrow is deleted rather than restyled. A tracked-out caps label joined
+   with middle dots, sitting above every heading on every page, is chrome that
+   tells the reader nothing they cannot see from the heading itself. The one
+   place a label survives is where it carries a fact - see .explore-corpus. */
+.explore-kicker,
+.explore-kicker--ink {
+  display: none;
+}
+
+.explore-title {
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: var(--t-display);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.021em;
+  color: #f4ecdc;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+/* No gold italic on one clause. Accenting a single phrase inside a headline is
+   the commonest generated-page tell, and here it also broke the sentence in the
+   wrong place - "rests on a cited provision" is not the claim, "every claim
+   rests on a cited provision, never on a guess" is. The sentence carries itself. */
+.explore-title em {
+  font-style: normal;
+  color: inherit;
+}
+
+.explore-lead {
+  max-width: 46ch;
+  margin-top: 1.4rem;
+  font-family: Spectral, ui-serif, Georgia, serif;
+  font-size: var(--t-sub);
+  line-height: 1.62;
+  color: rgba(244, 236, 220, 0.74);
+}
+
+.explore-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+/* The corpus size is the one number this audience actually weighs, so it is
+   stated plainly under the call to action rather than dressed as a label. */
+.explore-corpus {
+  margin-top: 2.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(217, 180, 95, 0.22);
+  font-size: var(--t-meta);
+  color: rgba(244, 236, 220, 0.5);
+}
+
+.explore-corpus b {
+  font-weight: 500;
+  color: rgba(244, 236, 220, 0.86);
+  font-variant-numeric: tabular-nums;
+}
+
+.explore-magnetic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 1.5rem;
+  border-radius: 2px;
+  background: #d9b45f;
+  color: #17130c;
+  font-weight: 500;
+  font-size: var(--t-body);
+  transition: background 160ms ease;
+}
+
+.explore-magnetic:hover {
+  background: #e6c87d;
+}
+
+.explore-ghost {
+  color: rgba(244, 236, 220, 0.68);
+  font-size: var(--t-body);
+  text-decoration: underline;
+  text-decoration-color: rgba(244, 236, 220, 0.3);
+  text-underline-offset: 5px;
+  transition: text-decoration-color 160ms ease;
+}
+
+.explore-ghost:hover {
+  text-decoration-color: rgba(244, 236, 220, 0.75);
+}
+
+@media (max-width: 820px) {
+  .explore-hero {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2rem;
+  }
+  .explore-hero-copy { max-width: none; }
+  .explore-mark { grid-column: 1; grid-row: 1; width: 96px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .explore-scroll { animation: none; }
   .tilt-card { transform: none !important; }
   .explore-magnetic { transform: none !important; }
@@ -598,15 +852,7 @@
   to { transform: rotate(360deg); }
 }
 .parchment {
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 31px,
-      rgba(221, 206, 172, 0.38) 31px,
-      rgba(221, 206, 172, 0.38) 32px
-    ),
-    #f5eedd;
+  background: #f5eedd;
   border-radius: 1.5rem;
   color: var(--ink);
   box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
@@ -621,146 +867,10 @@
   color: #f3e6c8;
   overflow: hidden;
 }
-.explore-hero {
-  position: relative;
-  min-height: calc(100vh - 4.2rem);
-  padding: 8vh 6vw 12vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  background:
-    radial-gradient(ellipse at 18% 20%, rgba(196, 92, 58, 0.45), transparent 50%),
-    radial-gradient(ellipse at 88% 10%, rgba(201, 138, 43, 0.28), transparent 42%),
-    linear-gradient(165deg, #1a0e0a 0%, #0e1712 48%, #142018 100%);
-}
-.explore-blob {
-  position: absolute;
-  width: 58vmax;
-  height: 58vmax;
-  left: calc(var(--mxp, 0.62) * 100%);
-  top: calc(var(--myp, 0.28) * 100%);
-  transform: translate(-50%, -50%);
-  border-radius: 46% 54% 48% 52%;
-  background: radial-gradient(circle, rgba(232, 164, 92, 0.38), transparent 68%);
-  filter: blur(28px);
-  pointer-events: none;
-  animation: none;
-}
-@keyframes blob-breathe {
-  50% { border-radius: 54% 46% 58% 42%; }
-}
-.explore-mark {
-  position: absolute;
-  right: 8vw;
-  top: 12vh;
-  width: min(28vw, 280px);
-  height: auto;
-  color: #e8c46b;
-  opacity: 0.88;
-  animation: leaf-sway 7s ease-in-out infinite;
-  filter: drop-shadow(0 20px 40px rgba(201, 138, 43, 0.25));
-}
-@keyframes leaf-sway {
-  50% { transform: rotate(-6deg) translateY(8px); }
-}
-.explore-kicker {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: #e8c46b;
-}
-.explore-kicker--ink {
-  color: #a3402d;
-}
-.explore-title {
-  font-family: Fraunces, ui-serif, Georgia, serif;
-  font-size: clamp(2.6rem, 7.2vw, 6.2rem);
-  font-weight: 500;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
-  max-width: 14ch;
-  margin-top: 1rem;
-  color: #f7efe0;
-}
-.explore-title em {
-  font-style: italic;
-  color: #e8c46b;
-}
-.explore-lead {
-  max-width: 38rem;
-  margin-top: 1.5rem;
-  font-size: 1.05rem;
-  line-height: 1.6;
-  color: rgba(245, 238, 221, 0.72);
-}
-.explore-cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.25rem;
-  margin-top: 2.2rem;
-}
-.explore-magnetic {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 11rem;
-  padding: 0.95rem 1.8rem;
-  border-radius: 2px;
-  background: #e8c46b;
-  color: #1a0e0a;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: 12px;
-  transition: background 160ms ease;
-}
-.explore-magnetic:hover {
-  background: #f3d78a;
-}
-.explore-ghost {
-  color: rgba(245, 238, 221, 0.7);
-  font-size: 0.95rem;
-  text-decoration: underline;
-  text-underline-offset: 6px;
-}
-.explore-scroll {
-  margin-top: 8vh;
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: rgba(245, 238, 221, 0.4);
-  animation: fade-up 1.8s ease-in-out infinite;
-}
-@keyframes fade-up {
-  50% { opacity: 0.25; transform: translateY(6px); }
-}
-
-.explore-marquee {
-  overflow: hidden;
-  border-block: 1px solid rgba(232, 197, 107, 0.18);
-  background: #120c09;
-  padding: 0.85rem 0;
-}
-.explore-marquee-track {
-  display: flex;
-  gap: 2.5rem;
-  width: max-content;
-  animation: marquee 38s linear infinite;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #e8c46b;
-}
-.explore-marquee-track span::before {
-  content: "· ";
-  opacity: 0.55;
-}
-@keyframes marquee {
-  to { transform: translateX(-50%); }
-}
+/* The hero, mark, kicker, title, lead, buttons and marquee were declared a
+   SECOND time here, after the block above, so the stale copies won: a
+   6.2rem hero beside a 2.2rem section heading, and the glow back on. The
+   duplicates are gone; the first block is the only definition. */
 
 .explore-garden {
   display: grid;
@@ -778,13 +888,18 @@
 .explore-dive h2,
 .explore-page-title {
   font-family: Fraunces, ui-serif, Georgia, serif;
-  font-size: clamp(2rem, 4.4vw, 3.4rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  /* One step below the hero, and the same on every page. These were 3.4rem,
+     which put a section heading within a hair of the hero sentence and left
+     the page with two things shouting. */
+  font-size: var(--t-title);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
 }
 .explore-page-title em {
-  font-style: italic;
-  color: #a3402d;
+  font-style: normal;
+  color: inherit;
 }
 .explore-garden-copy p {
   margin-top: 0.85rem;
@@ -866,59 +981,93 @@
 }
 
 .explore-worlds {
-  padding: 10vh 6vw;
-  background: #1a0e0a;
+  padding: clamp(4rem, 9vh, 7rem) 6vw;
+  background: #16100b;
   color: #f3e6c8;
 }
+
+.explore-worlds-intro {
+  margin-top: 0.75rem;
+  font-size: var(--t-sub);
+  color: rgba(243, 230, 200, 0.66);
+}
+
 .explore-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
   margin-top: 2rem;
 }
+
+@media (max-width: 780px) {
+  .explore-split { grid-template-columns: 1fr; }
+}
+
+/* A doorway, not a swatch. The 01/02 markers are gone: these two layers are
+   parallel, not a sequence, and numbering them implied an order that does not
+   exist - India is the default, but International is not "second". */
 .explore-pane {
-  min-height: 280px;
-  padding: 2rem;
-  text-align: left;
-  border: 0;
-  border-radius: 2px;
-  background: #24382f;
+  display: flex;
+  flex-direction: column;
+  padding: 1.75rem;
+  border-radius: 3px;
+  background: #22352c;
   color: #f5eedd;
-  transition: transform 320ms ease, background 320ms ease;
+  text-align: left;
+  transition:
+    background 220ms ease,
+    transform 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
 }
+
 .explore-pane--clay {
-  background: #5c2e24;
-  border-radius: 2px;
+  background: #4d281f;
 }
-.explore-pane.is-live,
+
 .explore-pane:hover,
 .explore-pane:focus-visible {
-  transform: none;
-  background: #2f4a3a;
+  background: #2b4438;
+  transform: translateY(-2px);
 }
-.explore-pane--clay.is-live,
+
 .explore-pane--clay:hover,
 .explore-pane--clay:focus-visible {
-  background: #c45c3a;
+  background: #6d3626;
 }
-.explore-pane-no {
-  font-family: "IBM Plex Mono", monospace;
-  opacity: 0.55;
-  font-size: 12px;
-}
+
 .explore-pane h3 {
-  font-family: Fraunces, serif;
-  font-size: 2.4rem;
-  margin-top: 0.6rem;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: var(--t-title);
+  font-weight: 400;
+  line-height: 1.1;
 }
+
 .explore-pane p {
-  margin-top: 0.8rem;
-  line-height: 1.55;
-  opacity: 0.88;
+  margin-top: 0.7rem;
+  font-family: Spectral, ui-serif, Georgia, serif;
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: rgba(245, 238, 221, 0.82);
 }
+
+/* Says what the click does, in the words the destination uses. */
+.explore-pane-go {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  font-size: var(--t-meta);
+  font-weight: 500;
+  color: #e8c46b;
+}
+
+.explore-pane--clay .explore-pane-go {
+  color: #f0b393;
+}
+
 .explore-worlds-note {
   margin-top: 1.5rem;
-  color: rgba(243, 230, 200, 0.6);
+  max-width: var(--measure);
+  font-size: var(--t-meta);
+  line-height: 1.6;
+  color: rgba(243, 230, 200, 0.55);
 }
 
 .explore-dive {
@@ -950,12 +1099,71 @@
   .export-grid { grid-template-columns: 1fr 1fr; }
 }
 .tilt-card {
+  /* Also used as an <a> on the Sources page, where the destination is an
+     external register and a button would swallow middle-click. Anchors are
+     inline by default, so the display is set here rather than at each site. */
+  display: flex;
+  flex-direction: column;
+  /* Every card in a grid is the same height. Sources cards were sizing to
+     their own text, so a one-line note produced a card half the height of its
+     neighbour and the grid read as broken rather than as content. */
+  height: 100%;
   background: #fffdf8;
   border: 1px solid var(--rule);
   border-radius: 4px;
   transform-style: preserve-3d;
   transition: transform 120ms ease, box-shadow 160ms ease;
   box-shadow: 0 10px 28px rgba(22, 36, 30, 0.06);
+}
+
+/* ---- one card, one set of parts -----------------------------------------
+   The treaty routes and the source registers are the same object: a title, a
+   line of what it is, a reference, and what clicking does. They were built
+   twice with different sizes; these four classes are the single description,
+   and both pages use them. */
+
+.card-title {
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: var(--t-head);
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.card-body {
+  margin-top: 0.5rem;
+  font-family: Spectral, ui-serif, Georgia, serif;
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* Mono earns its place here and nowhere decorative: these are references -
+   a domain or a file - and they are read character by character. */
+.card-ref {
+  margin-top: 0.75rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--t-micro);
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.card-go {
+  margin-top: auto;
+  padding-top: 1.25rem;
+  font-size: var(--t-meta);
+  font-weight: 500;
+  color: var(--indigo);
+}
+
+/* The standfirst under a page title. One size, every page. */
+.page-lead {
+  margin-top: 1rem;
+  max-width: var(--measure);
+  font-family: Spectral, ui-serif, Georgia, serif;
+  font-size: var(--t-sub);
+  line-height: 1.62;
+  color: var(--ink-soft);
 }
 .tilt-card:hover {
   box-shadow: 0 22px 40px rgba(22, 36, 30, 0.12);
@@ -1050,15 +1258,7 @@
    column rather than floating as a sheet, so it takes no radius or drop
    shadow — a full-height surface with a shadow reads as a stuck modal. */
 .ruled {
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 31px,
-      rgba(221, 206, 172, 0.38) 31px,
-      rgba(221, 206, 172, 0.38) 32px
-    ),
-    var(--paper);
+  background: var(--paper);
 }
 
 /* --------------------------------------------------------------------------
@@ -1116,12 +1316,13 @@
   gap: 0.4rem;
 }
 
+/* Was 9.5px mono, uppercase, 0.18em tracking - three separate ways of saying
+   "this is a label" stacked on one another, next to controls whose own text is
+   sentence case. The label is not the point; the control is. */
 .consult-pill-label {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #8b8375;
+  font-size: var(--t-meta);
+  letter-spacing: 0.01em;
+  color: var(--ink-faint);
 }
 
 .consult-pill-track {
@@ -1305,14 +1506,33 @@
    the classification verdict and nothing else.
    ========================================================================== */
 
+/* The gauge is an instrument reading, not part of the argument, so it sits out
+   of the reading column rather than in the middle of it. It was centred in the
+   answer's own measure, which put a dial between the takeaway and the reasoning
+   and made the eye stop at it on the way down.
+
+   `margin-left: auto` pushes the whole block to the right edge of whatever
+   column holds it, and the text stays left-aligned inside so the label and the
+   scale still read normally. */
 .support {
   padding: 0.2rem 0 0.1rem;
+  max-width: 25rem;
+  margin-left: auto;
 }
 
 .support-gauge {
   display: flex;
   align-items: center;
   gap: 1.15rem;
+}
+
+/* Below the two-column breakpoint the answer has the full width and there is
+   no right edge to sit against, so it returns to the flow. */
+@media (max-width: 1024px) {
+  .support {
+    max-width: none;
+    margin-left: 0;
+  }
 }
 
 .support-dial {
@@ -2834,6 +3054,31 @@
 .surface-dark .text-clay { color: var(--clay); }
 .surface-dark .text-neem { color: var(--neem); }
 .surface-dark .text-indigo-dye { color: var(--indigo); }
+
+/* The same tokens again, for the HOVER variants - and this is a real bug fix,
+   not tidying.
+
+   Tailwind's colours are compiled hex, not `var()`, so the block above is what
+   makes them follow the dark surface. But `group-hover:text-ink` compiles to
+   `.group:hover .group-hover\:text-ink`, which is specificity (0,3,0) and beats
+   `.surface-dark .text-ink` at (0,2,0). So on the dark surface, hovering a
+   question turned it #16241e - near-black on a near-black ground. The text was
+   still there, still selectable, and completely invisible. Reported as "on
+   hovering the question it disappears", and it affected six controls.
+
+   These selectors carry the surface class as well, so they outrank the utility
+   they are correcting. */
+.surface-dark .group:hover .group-hover\:text-ink,
+.surface-dark .hover\:text-ink:hover { color: var(--ink); }
+.surface-dark .group:hover .group-hover\:text-ink-soft,
+.surface-dark .hover\:text-ink-soft:hover { color: var(--ink-soft); }
+.surface-dark .hover\:text-clay:hover { color: var(--clay); }
+.surface-dark .hover\:text-indigo-dye:hover { color: var(--indigo); }
+
+/* Same class of failure on backgrounds: `hover:bg-paper-deep` is a cream
+   #ece2c8, which on the dark surface flashed a bright panel under a control. */
+.surface-dark .hover\:bg-paper-deep:hover { background-color: var(--paper-deep); }
+.surface-dark .hover\:bg-indigo-dye:hover { background-color: var(--indigo); }
 .surface-dark .border-rule { border-color: var(--rule); }
 .surface-dark .border-haldi { border-color: var(--haldi); }
 .surface-dark .border-clay { border-color: var(--clay); }
@@ -4135,4 +4380,127 @@ html[data-surface="dark"] {
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--neem);
+}
+
+/* ==========================================================================
+   ONE TURN: THE ASK, THE REPLY, AND EVERYTHING AROUND THEM
+
+   The complaint was that a reader could not tell which text was the question,
+   which was the answer, and which was supporting apparatus - and it was true.
+   The question was 15px italic soft ink, the answer's opening sentence 19px,
+   the step prose 14.5px, captions between 11px and 13.5px depending on which
+   component drew them. Four sizes with no order.
+
+   Three ranks, and nothing else on this screen may invent a fourth:
+
+     the ask      upright, --t-head, full ink, haldi rule down its left edge
+     the reply    --t-sub serif, full ink
+     apparatus    --t-meta / --t-micro, faint ink
+
+   Rank is carried by SIZE and WEIGHT, not by colour alone, so it survives both
+   surfaces and greyscale printing.
+   ========================================================================== */
+
+.turn-question {
+  display: block;
+  font-family: Fraunces, ui-serif, Georgia, serif;
+  font-size: var(--t-head);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+/* What the follow-up was resolved into. Apparatus: it explains the ask rather
+   than being it, so it sits a rank down and never competes. */
+.turn-resolved {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.turn-summary {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: var(--t-meta);
+  color: var(--ink-faint);
+}
+
+.turn-answer {
+  font-family: Spectral, ui-serif, Georgia, serif;
+  font-size: var(--t-sub);
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: var(--measure);
+}
+
+/* ==========================================================================
+   THE CONSULTATION HISTORY AS A STANDING RAIL
+
+   It was behind a `⋯` menu, which meant the one thing a returning reader wants
+   - "where is the question I asked ten minutes ago" - took a click to find and
+   covered the answer while they looked. It is a rail now, open by default on a
+   wide screen, in the shape people already know from chat tools: new
+   consultation at the top, the list under it, the session-level settings at the
+   foot.
+
+   Same markup in both cases. The panel is always in the DOM and CSS decides
+   whether it is a column or an overlay, so there is one history list rather
+   than a desktop one and a mobile one that drift apart.
+   ========================================================================== */
+
+@media (min-width: 1100px) {
+  .consult-menu {
+    position: fixed;
+    top: 56px;
+    /* The base rule is a dropdown: absolute, pinned to the header's right edge,
+       70vh tall, with a fade-up animation whose `both` fill mode holds its last
+       frame. Every one of those has to be undone here or the panel renders as a
+       floating card inside the header instead of a column beside the page. */
+    right: auto;
+    left: 0;
+    bottom: 0;
+    width: 17rem;
+    max-height: none;
+    z-index: 20;
+    overflow-y: auto;
+    padding: 0.9rem;
+    border: 0;
+    border-right: 1px solid rgba(245, 238, 221, 0.1);
+    border-radius: 0;
+    box-shadow: none;
+    animation: none;
+    /* The rail keeps the dark ground SessionList is drawn for: the component
+       is styled cream-on-dark, and on a light panel it renders cream on cream
+       and disappears. Matching the ground reuses it unchanged. */
+    background: #16241e;
+  }
+
+  /* The rail is permanent here, so the control that opened it is noise. */
+  .consult-menu-btn,
+  .consult-scrim {
+    display: none;
+  }
+
+  /* Everything else clears the rail rather than sliding under it. */
+  .consult-page,
+  .consult-topbar,
+  .consult-composer {
+    padding-left: 17rem;
+  }
+
+  .consult-topbar {
+    left: 0;
+  }
+}
+
+/* Below the rail breakpoint it is the overlay it always was, and `data-open`
+   is what shows it. */
+@media (max-width: 1099px) {
+  .consult-menu[data-open="false"] {
+    display: none;
+  }
 }

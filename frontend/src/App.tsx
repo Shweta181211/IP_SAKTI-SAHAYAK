@@ -309,6 +309,68 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
 
   return (
     <div className="consult-page min-h-[calc(100vh-56px)]">
+      {/* Outside <header> on purpose. The header carries backdrop-blur,
+          and a backdrop-filter makes an element the containing block for
+          its position:fixed descendants - which pinned the rail inside the
+          header instead of down the side of the page. */}
+      {menuOpen && (
+        <div className="consult-scrim" onClick={() => setMenuOpen(false)} aria-hidden />
+      )}
+      {/* Always rendered. On a wide screen CSS makes this the standing
+          rail; below that breakpoint `data-open` turns it back into the
+          overlay the `⋯` button controls. One list, not two. */}
+      <div className="consult-menu" data-open={menuOpen} aria-label={t.menu}>
+            <SessionList
+              sessions={sessions}
+              activeId={activeId}
+              lang={uiLang}
+              labels={{
+                newConsultation: t.newConsultation,
+                consultations: t.consultations,
+                questionsCount: t.questionsCount,
+                questionCount: t.questionCount,
+                untitledSession: t.untitledSession,
+                deleteSession: t.deleteSession,
+                deleteAll: t.deleteAll,
+                deleteAllConfirm: t.deleteAllConfirm,
+                deleteAllYes: t.deleteAllYes,
+                deleteAllNo: t.deleteAllNo,
+              }}
+              onNew={() => {
+                newConsultation();
+                setMenuOpen(false);
+              }}
+              onOpen={(id) => {
+                switchSession(id);
+                setMenuOpen(false);
+              }}
+              onRemove={removeSession}
+              onClearAll={() => {
+                clearSessions();
+                setMenuOpen(false);
+              }}
+            />
+
+            {/* Cream on the dark panel, matching SessionList above it -
+                this menu deliberately keeps the old rail's ground. */}
+            <div className="mt-3 border-t border-paper/10 pt-3">
+              <p className="mb-1.5 text-[12.5px] font-medium text-paper">{t.sectionPrivacy}</p>
+              <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-paper/75">
+                <input
+                  type="checkbox"
+                  checked={logConsent}
+                  onChange={(e) => setLogConsent(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 accent-haldi"
+                />
+                <span>{t.saveQuestion}</span>
+              </label>
+              <p className="mt-1 text-[11px] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
+            </div>
+
+        <p className="mt-3 border-t border-paper/10 pt-3 text-[11px] leading-relaxed text-paper/45">
+          {t.disclaimer}
+        </p>
+      </div>
       {/* One column, no rail.
           The controls that lived in a permanent sidebar now sit where the
           decision is actually made - mode, jurisdiction and wording as pills
@@ -370,63 +432,6 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
               <span aria-hidden>⋯</span>
             </button>
 
-            {menuOpen && (
-              <>
-                <div className="consult-scrim" onClick={() => setMenuOpen(false)} aria-hidden />
-                <div className="consult-menu" role="dialog" aria-label={t.menu}>
-                  <SessionList
-                    sessions={sessions}
-                    activeId={activeId}
-                    lang={uiLang}
-                    labels={{
-                      newConsultation: t.newConsultation,
-                      consultations: t.consultations,
-                      questionsCount: t.questionsCount,
-                      questionCount: t.questionCount,
-                      untitledSession: t.untitledSession,
-                      deleteSession: t.deleteSession,
-                      deleteAll: t.deleteAll,
-                      deleteAllConfirm: t.deleteAllConfirm,
-                      deleteAllYes: t.deleteAllYes,
-                      deleteAllNo: t.deleteAllNo,
-                    }}
-                    onNew={() => {
-                      newConsultation();
-                      setMenuOpen(false);
-                    }}
-                    onOpen={(id) => {
-                      switchSession(id);
-                      setMenuOpen(false);
-                    }}
-                    onRemove={removeSession}
-                    onClearAll={() => {
-                      clearSessions();
-                      setMenuOpen(false);
-                    }}
-                  />
-
-                  {/* Cream on the dark panel, matching SessionList above it -
-                      this menu deliberately keeps the old rail's ground. */}
-                  <div className="mt-3 border-t border-paper/10 pt-3">
-                    <p className="mb-1.5 text-[12.5px] font-medium text-paper">{t.sectionPrivacy}</p>
-                    <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-paper/75">
-                      <input
-                        type="checkbox"
-                        checked={logConsent}
-                        onChange={(e) => setLogConsent(e.target.checked)}
-                        className="mt-0.5 h-3.5 w-3.5 accent-haldi"
-                      />
-                      <span>{t.saveQuestion}</span>
-                    </label>
-                    <p className="mt-1 text-[11px] leading-relaxed text-paper/45">{t.saveQuestionHint}</p>
-                  </div>
-
-                  <p className="mt-3 border-t border-paper/10 pt-3 text-[11px] leading-relaxed text-paper/45">
-                    {t.disclaimer}
-                  </p>
-                </div>
-              </>
-            )}
           </div>
         </header>
 
@@ -458,7 +463,7 @@ export default function App({ lockedMode = "ask" }: { lockedMode?: Mode }) {
                   <path d="M100 28 C70 88 70 148 100 212 C130 148 130 88 100 28 Z" fill="currentColor" />
                   <path d="M100 28 V212" fill="none" stroke="#fdfaf2" strokeWidth="2" opacity="0.5" />
                 </svg>
-                <h2 className="max-w-[24ch] text-center font-display sm:max-w-[20ch] sm:text-left text-[clamp(1.95rem,4.4vw,3.4rem)] font-medium leading-[1.06] tracking-[-0.024em] text-ink">
+                <h2 className="max-w-[24ch] text-center font-display sm:max-w-[20ch] sm:text-left text-[length:var(--t-title)] font-normal leading-[1.12] tracking-[-0.018em] text-ink">
                   {t.emptyTitle}
                 </h2>
               </div>

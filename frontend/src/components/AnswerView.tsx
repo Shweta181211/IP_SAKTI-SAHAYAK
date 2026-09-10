@@ -117,17 +117,23 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
             ▸
           </span>
 
+          {/* The question is the loudest thing in a turn - it is what a reader
+              scrolling back through a transcript is looking for. It was 15px
+              italic in the SOFT ink, one step UNDER the answer's own prose, so
+              a returning reader could not tell an ask from a paragraph.
+
+              The hover colour change is also gone: `group-hover:text-ink`
+              resolved to near-black on the dark surface and made the question
+              disappear under the cursor. */}
           <span className="min-w-0 flex-1 border-l-2 border-haldi pl-3">
-            <span className="block font-serif text-[15px] italic text-ink-soft group-hover:text-ink">
-              {answer.question}
-            </span>
+            <span className="turn-question">{answer.question}</span>
             {answer.resolved_question && (
-              <span className="eyebrow mt-1 block normal-case tracking-normal text-ink-faint">
+              <span className="turn-resolved">
                 Understood as: {answer.resolved_question}
               </span>
             )}
             {!open && (
-              <span className="eyebrow mt-1 block">
+              <span className="turn-summary">
                 {answer.classification?.label ?? "—"} · {summary}
               </span>
             )}
@@ -193,9 +199,7 @@ export function AnswerView({ answer, defaultOpen = true, onRemove }: Props) {
                     who wants to check it. */}
                 {answer.headline && (
                   <div>
-                    <p className="font-serif text-[19px] font-medium leading-snug text-ink">
-                      {answer.headline}
-                    </p>
+                    <p className="turn-answer">{answer.headline}</p>
                     {/* The headline is the sentence most people read, and it
                         used to be the only model output that reached them with
                         no citation check. It is now validated like a step; when
